@@ -12,11 +12,6 @@ from typing import Literal, Optional
 # we need our config
 import config
 
-# cog imports
-from cogs.music import Music
-from cogs.chatgpt import ChatGPT
-from cogs.voice import Voice
-
 # get our special functions
 import func
 from func import FancyErrors, CheckPermissions, LoadSettings, SaveSettings
@@ -32,9 +27,18 @@ settings = LoadSettings()
 # initialize
 bot = commands.Bot(command_prefix=config.BOT_PREFIX, intents=intents, case_insensitive=True)
 
+# add voice category
+from cogs.voice import Voice
 asyncio.run(bot.add_cog(Voice(bot))) # voice
+
+# add music category
+from cogs.music import Music
 asyncio.run(bot.add_cog(Music(bot))) # music
-asyncio.run(bot.add_cog(ChatGPT(bot))) # chatgpt
+
+# add chatgpt category (if enabled)
+if config.BOT_OPENAI_KEY:
+    from cogs.chatgpt import ChatGPT
+    asyncio.run(bot.add_cog(ChatGPT(bot))) # chatgpt
 
 ########################################################################################################################################
 
