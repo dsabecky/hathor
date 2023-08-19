@@ -1,0 +1,18 @@
+# set your bot token here
+BOT_TOKEN = ''
+
+# set to True if bot is in maintenance mode
+MAINTENANCE = False
+
+# set your prefix
+BOT_PREFIX = '!'
+
+# set the bot administrator (your personal userID)
+BOT_ADMIN  = 
+
+# set your openai key here
+# BOT_OPENAI_KEY = ''
+# BOT_OPENAI_MODEL = 'gpt-3.5-turbo'
+
+# maximum song length
+MUSIC_MAX_DURATION = 1800
