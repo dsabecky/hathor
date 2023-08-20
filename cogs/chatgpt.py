@@ -87,7 +87,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
                     model=config.BOT_OPENAI_MODEL,
                     messages=conversation,
                     temperature=0.8,
-                    max_tokens=200
+                    max_tokens=1000
                 )
             except openai.error.ServiceUnavailableError:
                 reponse = "SERVICE_UNAVAILABLE"
@@ -109,7 +109,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
                     model=config.BOT_OPENAI_MODEL,
                     messages=conversation,
                     temperature=0.8,
-                    max_tokens=200
+                    max_tokens=1000
                 )
             except openai.error.ServiceUnavailableError:
                 reponse = "SERVICE_UNAVAILABLE"
