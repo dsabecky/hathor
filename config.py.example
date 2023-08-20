@@ -14,5 +14,8 @@ BOT_ADMIN  =
 # BOT_OPENAI_KEY = ''
 # BOT_OPENAI_MODEL = 'gpt-3.5-turbo'
 
+# youtube api key (required for playlists to process properly)
+BOT_YOUTUBE_KEY = ''
+
 # maximum song length
 MUSIC_MAX_DURATION = 1800
