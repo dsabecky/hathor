@@ -6,17 +6,11 @@ import random
 
 import config
 
-# colors!
-C_RST   = '\033[0m'
-C_GREY  = '\033[90m'
-C_BLUE  = '\033[94m'
-C_GREEN = '\033[92m'
-C_MINT  = '\033[38;2;152;255;152m'
-
-# fancy timestamps
-ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-# error messages
+####################################################################
+# variable: LoadSettings()
+# ----
+# Our database of errors and fun quotes.
+####################################################################
 err = {
     'quote': [
         "You must construct additional pylons.",
@@ -29,6 +23,7 @@ err = {
         "Mission failure, we'll get them next time."
     ],
     'code': {
+        "API_ERROR":            "An API error has occured. Sadge",
         'AUTHOR_NO_VOICE':      "You are not in a voice channel",
         'AUTHOR_PERMS':         "Insufficient permissions",
         'BUMP_SHORT':           "Bump failed: queue too short",
@@ -43,8 +38,10 @@ err = {
         'PERMISSIONS_EXIST':    "Those permissions already exist",
         'QUEUE_RANGE':          "Request is out of range",
         'SHORT':                "Message is too short",
+        "SHUFFLE_NO_PLAYLIST":  "Playlists are not allowed in playnext, don't be greedy.",
         'SONG_LENGTH':          "Requested song is too long!",
         'SYNTAX':               "Syntax error",
+        "VOICE_MISMATCH":       "You must be in the same voice channel to do this",
         'VOL_RANGE':            "Invalid! Volume range is 1-100",
         'YTMD':                 "You're the man now, dog!"
     }
