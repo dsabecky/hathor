@@ -158,6 +158,11 @@ class Music(commands.Cog, name="Music"):
         guild_id = ctx.guild.id
         is_playlist = '&list=' in args and True or False
 
+        # are you even allowed to use this command?
+        if not await CheckPermissions(self.bot, ctx.guild.id, ctx.author.id, ctx.author.roles):
+            await FancyErrors("AUTHOR_PERMS", ctx.channel)
+            return
+
         # author isn't in a voice channel
         if not ctx.author.voice:
             await FancyErrors("AUTHOR_NO_VOICE", ctx.channel)
