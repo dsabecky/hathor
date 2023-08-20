@@ -1,22 +1,27 @@
 import discord
 from discord.ext import commands
 
+# processing songs
+import asyncio
+import yt_dlp
+import requests
+
+# allow for extra bits
 import datetime
 import os
 import time
+import re
 import uuid
 import random
+import openai
+import json
 
-import asyncio
-import yt_dlp
-
-import requests
-import re
-
+# grab our important stuff
 import config
 import func
-
 from func import LoadSettings, FancyErrors, CheckPermissions
+
+# we need voice functions
 from cogs.voice import JoinVoice
 
 # load our settings from settings.json
@@ -104,6 +109,44 @@ class Music(commands.Cog, name="Music"):
             await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
 
     ####################################################################
+    # trigger: !clear
+    # ----
+    # Clears the playlist.
+    ####################################################################
+    @commands.command(name='clear')
+    async def clear_queue(self, ctx):
+        """
+        Clears the current playlist.
+
+        Syntax:
+            !clear
+        """
+        guild_id = ctx.guild.id
+
+        # are you even allowed to use this command?
+        if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
+            await FancyErrors("AUTHOR_PERMS", ctx.channel)
+            return
+        
+        if len(queue[guild_id]) == 0:
+            await FancyErrors("NO_QUEUE", ctx.channel)
+            return
+        
+        # author isn't in a voice channel
+        if not ctx.guild.voice_client:
+            await FancyErrors("BOT_NO_VOICE", ctx.channel)
+            return
+        
+        # author isn't in a voice channel
+        if not ctx.author.voice:
+            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel)
+            return
+        
+        info_embed = discord.Embed(description=f"Removed {len(queue[guild_id])} songs from queue.")
+        message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
+        queue[guild_id] = []
+
+    ####################################################################
     # trigger: !play
     # ----
     # Plays a song.
@@ -150,7 +193,7 @@ class Music(commands.Cog, name="Music"):
     @commands.command(name='playnext')
     async def prio_play(self, ctx, *, args=None):
         """
-        Adds a song to the top of the queue.
+        Adds a song to the top of the queue (no playlists).
 
         Syntax:
             !play [search | link]
@@ -190,7 +233,7 @@ class Music(commands.Cog, name="Music"):
         message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
 
         # send down the assembly line
-        await asyncio.create_task(QueueSong(self.bot, args, song_type, False, message, guild_id, ctx.guild.voice_client))
+        await asyncio.create_task(QueueSong(self.bot, args, song_type, True, message, guild_id, ctx.guild.voice_client))
 
     ####################################################################
     # trigger: !queue
@@ -207,6 +250,73 @@ class Music(commands.Cog, name="Music"):
             !queue
         """
         await GetQueue(ctx)
+
+    ####################################################################
+    # trigger: !radio
+    # ----
+    # Generates a ChatGPT 10 song playlist based off context.
+    ####################################################################
+    @commands.command(name="radio", aliases=['aiplaylist'])
+    async def ai_playlist(self, ctx, *, args):
+        """
+        Generates a ChatGPT 10 song playlist based off context.
+
+        Syntax:
+            !radio <theme>
+        """
+
+        # is chatgpt enabled?
+        if not config.BOT_OPENAI_KEY:
+            await FancyErrors("DISABLED_FEATURE", ctx.channel)
+            return
+        
+        # author isn't in a voice channel
+        if not ctx.author.voice:
+            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel)
+            return
+        
+        # we're not in voice, lets change that
+        if not ctx.guild.voice_client:
+            await JoinVoice(ctx)
+        
+        # what are you asking that's shorter, really
+        if len(args) < 3:
+            await FancyErrors("SHORT", ctx.channel)
+            return
+        
+        conversation = [
+            { "role": "system", "content": f"return only the information requested with no additional words or context" },
+            { "role": "user", "content": f"make a playlist, which can include other artists based off {args}" }
+        ]
+
+        try:
+            response = openai.ChatCompletion.create(
+                model=config.BOT_OPENAI_MODEL,
+                messages=conversation,
+                temperature=0.8,
+                max_tokens=1000
+            )
+
+            # filter out the goop
+            parsed_response = response['choices'][0].message.content.split('\n')
+            pattern = r'^\d+\.\s'
+
+            playlist = []
+            for item in parsed_response:
+                if re.match(pattern, item):
+                    parts = re.split(pattern, item, maxsplit=1)
+                    if len(parts) == 2:
+                        playlist.append(f"{parts[1].strip()} audio")
+
+            info_embed = discord.Embed(description=f"[1/3] Generating your ChatGPT playlist...")
+            message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
+            await QueueSong(self.bot, playlist, 'radio', False, message, ctx.guild.id, ctx.guild.voice_client)
+
+
+        except openai.error.ServiceUnavailableError:
+            await FancyErrors("API_ERROR", ctx.channel)
+            return
+        
 
     ####################################################################
     # trigger: !remove
@@ -530,6 +640,7 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
     global queue
 
     try:
+        # we've got a playlist
         is_playlist = (method == 'link' and '&list=' in args) and True or False
         if is_playlist:
             playlist_id = re.search(r'list=([a-zA-Z0-9_-]+)', args).group(1)
@@ -552,13 +663,39 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
             embed = discord.Embed(description=f"Added {playlist_length} tracks to queue.")
             await message.edit(content=None, embed=embed)
 
+        # it's chatgpt dude
+        if method == 'radio':
+            playlist = args
+            for i, item in enumerate(args, start=1):
+                embed = discord.Embed(description=f"[2/3] Preparing your ChatGPT playlist ({i}/{len(args)})...")
+                await message.edit(content=None, embed=embed)
 
+                try:
+                    song = await DownloadSong(item, 'search')
+                    queue[guild_id].append(song[0])
+
+                    if not voice_client.is_playing() and queue[guild_id]:
+                        await PlayNextSong(bot, guild_id, voice_client)
+
+                except Exception as e:
+                    print(f"Error: {e}")
+
+            embed = discord.Embed(description=f"[3/3] Your ChatGPT playlist has been added to queue!")
+            await message.edit(content=None, embed=embed)
+
+
+        # just an individial song
         else:
             try:
                 song = await DownloadSong(args, method)
 
+                if priority:
+                    position = 0
+
                 if shuffle[guild_id]:
-                    position = priority and 0 or random.randint(0, len(queue[guild_id]))
+                    if not priority:
+                        position = random.randint(0, len(queue[guild_id]))
+
                     queue[guild_id].insert(position, song[0])
                     embed = discord.Embed(description=f"Added {song[0]['title']} to queue in position {position+1} (🔀).")
                 else:
