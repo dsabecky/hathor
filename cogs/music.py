@@ -14,7 +14,6 @@ import re
 import uuid
 import random
 import openai
-import json
 
 # grab our important stuff
 import config
@@ -74,6 +73,8 @@ class Music(commands.Cog, name="Music"):
 
     ####################################################################
     # trigger: !bump
+    # ----
+    # song_number: song number to move to top of queue
     # ----
     # Bumps requested song to top of the queue.
     ####################################################################
@@ -149,6 +150,8 @@ class Music(commands.Cog, name="Music"):
     ####################################################################
     # trigger: !play
     # ----
+    # args: query or link to song/playlist
+    # ----
     # Plays a song.
     ####################################################################
     @commands.command(name='play')
@@ -187,6 +190,8 @@ class Music(commands.Cog, name="Music"):
 
     ####################################################################
     # trigger: !playnext
+    # ----
+    # args: query or link to song
     # ----
     # Plays a song.
     ####################################################################
@@ -254,6 +259,8 @@ class Music(commands.Cog, name="Music"):
     ####################################################################
     # trigger: !radio
     # ----
+    # args: theme of playlist
+    # ----
     # Generates a ChatGPT 10 song playlist based off context.
     ####################################################################
     @commands.command(name="radio", aliases=['aiplaylist'])
@@ -320,6 +327,8 @@ class Music(commands.Cog, name="Music"):
 
     ####################################################################
     # trigger: !remove
+    # ----
+    # args: number of song to remove
     # ----
     # Removes a song from queue.
     ####################################################################
@@ -434,7 +443,9 @@ class Music(commands.Cog, name="Music"):
                 await PlayNextSong(self.bot, guild_id, ctx.guild.voice_client)
 
 ####################################################################
-# function: CheckVoiceIdle()
+# function: CheckVoiceIdle(bot)
+# ----
+# bot: self
 # ----
 # Checks idle time when connected to voice channels to prevent
 # being connected forever.
@@ -462,11 +473,11 @@ async def CheckVoiceIdle(bot):
         await asyncio.sleep(1)
 
 ####################################################################
-# function: DownloadSong(args, type)
+# function: DownloadSong(args, type, item)
 # ----
 # args:       [search string | url]
 # type:       ['search' | 'link']
-# item:       int
+# item:       selects a specific item in the yt_dlp entry
 # ----
 # Returns prewritten errors.
 ####################################################################
@@ -523,7 +534,7 @@ async def DownloadSong(args, method, item=None):
     return await download()
 
 ####################################################################
-# function: GetQueue(ctx)
+# function: GetQueue(ctx, extra)
 # ----
 # ctx: context
 # extra: optional additional information (shuffle, etc)
@@ -585,7 +596,7 @@ async def NowPlaying(guild_id):
         return f"{currently_playing[guild_id]['title']}\n**[**{current} **/** {total}**]**\n"
 
 ####################################################################
-# function: PlayNextSong(channel)
+# function: PlayNextSong(bot, guild_id, channel)
 # ----
 # bot:      self.bot
 # guild_id: guildID of server processing command
@@ -632,9 +643,16 @@ async def PlayNextSong(bot, guild_id, channel):
 ####################################################################
 # function: QueueSong(bot, args, method, priority, message, guild_id, voice_client)
 # ----
-# TBD
+# bot:          self
+# args:         text passed by user
+# method:       [ search | link | radio ]
+# priority:     adds song to the top of the playlist
+# message:      message context for editing purposes
+# guild_id:     guildID
+# voice_client: active voice channel
 # ----
-# TBD
+# Brain of the music bot. Passes off data to DownloadSong and manages
+# adding the music to the queue.
 ####################################################################
 async def QueueSong(bot, args, method, priority, message, guild_id, voice_client):
     global queue
