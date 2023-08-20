@@ -10,6 +10,9 @@ import random
 import asyncio
 import yt_dlp
 
+import requests
+import re
+
 import config
 import func
 
@@ -137,7 +140,52 @@ class Music(commands.Cog, name="Music"):
         message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
 
         # send down the assembly line
-        await asyncio.create_task(QueueSong(self.bot, args, song_type, message, guild_id, ctx.guild.voice_client))
+        await asyncio.create_task(QueueSong(self.bot, args, song_type, False, message, guild_id, ctx.guild.voice_client))
+
+    ####################################################################
+    # trigger: !playnext
+    # ----
+    # Plays a song.
+    ####################################################################
+    @commands.command(name='playnext')
+    async def prio_play(self, ctx, *, args=None):
+        """
+        Adds a song to the top of the queue.
+
+        Syntax:
+            !play [search | link]
+        """
+        guild_id = ctx.guild.id
+        is_playlist = '&list=' in args and True or False
+
+        # author isn't in a voice channel
+        if not ctx.author.voice:
+            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel)
+            return
+        
+        # playlists not supported with playnext
+        if is_playlist:
+            await FancyErrors("SHUFFLE_NO_PLAYLIST", ctx.channel)
+            return
+
+        # we're not in voice, lets change that
+        if not ctx.guild.voice_client:
+            await JoinVoice(ctx)
+
+        # no data provided
+        if not args:
+            await FancyErrors("SYNTAX", ctx.channel)
+            return
+        
+        # what are we doin here?
+        song_type = args.startswith('https://') and 'link' or 'search'
+
+        # build our message
+        info_embed = discord.Embed(description=f"Searching for {args}")
+        message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
+
+        # send down the assembly line
+        await asyncio.create_task(QueueSong(self.bot, args, song_type, False, message, guild_id, ctx.guild.voice_client))
 
     ####################################################################
     # trigger: !queue
@@ -153,29 +201,7 @@ class Music(commands.Cog, name="Music"):
         Syntax:
             !queue
         """
-        guild_id = ctx.guild.id
-        output = discord.Embed(title="Song Queue")
-
-        # currently playing
-        output.add_field(name="Now Playing:", value="Nothing playing.")
-        if ctx.guild.voice_client and ctx.guild.voice_client.is_playing():
-            output.set_field_at(index=0, name="Now Playing:", value=f"{await NowPlaying(guild_id)}")
-            if currently_playing[guild_id]['thumbnail']:
-                output.set_thumbnail(url=currently_playing[guild_id]['thumbnail'])
-
-        # queue
-        output.add_field(name="Up Next:", value="No queue.", inline=False)
-
-        for i, song in enumerate(queue[guild_id], 1):
-            if output.fields[1].value == "No queue.":
-                output.set_field_at(index=1, name="Up Next:", value=f"[**{i}**] {song['title']}\n")
-            else:
-                output.set_field_at(index=1, name="Up Next:", value=f"{output.fields[1].value}**{i}**. {song['title']}\n")
-
-        # repeat status
-        output.add_field(name="Settings:", value=f"🔊: {settings[str(guild_id)]['volume']}%    🔁: {repeat[guild_id] and 'on' or 'off'}    🔀: {shuffle[guild_id] and 'on' or 'off'}", inline=False)
-
-        await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
+        await GetQueue(ctx)
 
     ####################################################################
     # trigger: !remove
@@ -260,6 +286,7 @@ class Music(commands.Cog, name="Music"):
             await FancyErrors("AUTHOR_PERMS", ctx.channel)
             return
         
+        random.shuffle(queue[guild_id])
         shuffle[guild_id] = not shuffle[guild_id]
         await ctx.send(f"🔀 Shuffle mode {shuffle[guild_id] and 'enabled' or 'disabled'}.")
 
@@ -324,19 +351,29 @@ async def CheckVoiceIdle(bot):
 # ----
 # args:       [search string | url]
 # type:       ['search' | 'link']
+# item:       int
 # ----
 # Returns prewritten errors.
 ####################################################################
-async def DownloadSong(args, method):
+async def DownloadSong(args, method, item=None):
     args = method == "search" and f"ytsearch:{args}" or args
     id = uuid.uuid4()
 
-    opts = {
-        "format": "bestaudio/best",
-        "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}],
-        "outtmpl": f'db/{id}',
-        #"playlist_items": f"1-{config.MUSIC_MAX_PLAYLIST}",
-    }
+    if item:
+        opts = {
+            "format": "bestaudio/best",
+            "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}],
+            "outtmpl": f'db/{id}',
+            "playlist_items": f"{item}",
+            "ignoreerrors": True,
+        }
+    else:
+        opts = {
+            "format": "bestaudio/best",
+            "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}],
+            "outtmpl": f'db/{id}',
+            "ignoreerrors": True,
+        }
 
     loop = asyncio.get_event_loop()
     
@@ -371,44 +408,51 @@ async def DownloadSong(args, method):
     return await download()
 
 ####################################################################
-# function: GetSongInfo()
+# function: GetQueue(ctx)
 # ----
-# args:       [search string | url]
-# method:     ['search' | 'link']
+# ctx: context
+# extra: optional additional information (shuffle, etc)
 # ----
-# Returns prewritten errors.
+# Returns currently playing and queue.
 ####################################################################
-async def GetSongInfo(args, method):
-    args = method == "search" and f"ytsearch:{args}" or args
+async def GetQueue(ctx, extra=None):
+    guild_id = ctx.guild.id
 
-    loop = asyncio.get_event_loop()
+    if not extra:
+        output = discord.Embed(title="Song Queue")
+    else:
+        output = discord.Embed(title="Song Queue", description=f"{extra}")
 
-    async def get_info():
-        with yt_dlp.YoutubeDL() as ydl:
-            info = await loop.run_in_executor(None, ydl.extract_info, args, False)
-            
-            if 'entries' in info:
-                song_list = []
-                for info in info['entries']:
-                    if info['duration'] <= config.MUSIC_MAX_DURATION:
-                        song_list.append({
-                            "title": info['title'],
-                            "duration": info['duration'],
-                            "thumbnail": info['thumbnail'],
-                            "url": info['webpage_url']
-                        })
-                return song_list
+    # currently playing
+    output.add_field(name="Now Playing:", value="Nothing playing.")
+    if ctx.guild.voice_client and ctx.guild.voice_client.is_playing():
+        output.set_field_at(index=0, name="Now Playing:", value=f"{await NowPlaying(guild_id)}")
+        if currently_playing[guild_id]['thumbnail']:
+            output.set_thumbnail(url=currently_playing[guild_id]['thumbnail'])
 
+    # queue
+    output.add_field(name="Up Next:", value="No queue.", inline=False)
+
+    if len(queue[guild_id]) > 10:
+        first_10 = queue[guild_id][:10]
+        for i, song in enumerate(first_10, 1):
+            if output.fields[1].value == "No queue.":
+                output.set_field_at(index=1, name="Up Next:", value=f"**{i}**. {song['title']}\n")
             else:
-                if info['duration'] <= config.MUSIC_MAX_DURATION:
-                    return [{
-                        "title": info['title'],
-                        "duration": info['duration'],
-                        "thumbnail": info['thumbnail'],
-                        "url": info['webpage_url']
-                    }]
-    
-    return await get_info()
+                output.set_field_at(index=1, name="Up Next:", value=f"{output.fields[1].value}**{i}**. {song['title']}\n")
+        output.set_field_at(index=1, name="Up Next:", value=f"{output.fields[1].value}And {len(queue[guild_id]) - 10} more...")
+
+    else:
+        for i, song in enumerate(queue[guild_id], 1):
+            if output.fields[1].value == "No queue.":
+                output.set_field_at(index=1, name="Up Next:", value=f"**{i}**. {song['title']}\n")
+            else:
+                output.set_field_at(index=1, name="Up Next:", value=f"{output.fields[1].value}**{i}**. {song['title']}\n")
+
+    # repeat status
+    output.add_field(name="Settings:", value=f"🔊: {settings[str(guild_id)]['volume']}%    🔁: {repeat[guild_id] and 'on' or 'off'}    🔀: {shuffle[guild_id] and 'on' or 'off'}", inline=False)
+
+    await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
 
 ####################################################################
 # function: NowPlaying(guild_id)
@@ -418,7 +462,6 @@ async def GetSongInfo(args, method):
 # Parses the currently playing song.
 ####################################################################
 async def NowPlaying(guild_id):
-    global currently_playing, start_time
     if currently_playing:
         progress = time.time() - start_time[guild_id]
         total_duration = currently_playing[guild_id]["duration"]
@@ -442,8 +485,7 @@ async def PlayNextSong(bot, guild_id, channel):
         return
 
     if queue[guild_id]:
-        index = shuffle[guild_id] and random.randint(0, len(queue[guild_id]) - 1) or 0
-        song = queue[guild_id].pop(index)
+        song = queue[guild_id].pop(0)
         path, title = song['path'], song['title']
         start_time[guild_id] = time.time()
         volume = settings[str(guild_id)]['volume'] / 100
@@ -473,28 +515,57 @@ async def PlayNextSong(bot, guild_id, channel):
         await bot.change_presence(activity=None)
     
 ####################################################################
-# function: QueueSong(bot, args, method, message, guild_id, voice_client)
+# function: QueueSong(bot, args, method, priority, message, guild_id, voice_client)
 # ----
 # TBD
 # ----
 # TBD
 ####################################################################
-async def QueueSong(bot, args, method, message, guild_id, voice_client):
+async def QueueSong(bot, args, method, priority, message, guild_id, voice_client):
     global queue
 
-    # give us a primer
-    entries = await GetSongInfo(args, method)
+    try:
+        is_playlist = (method == 'link' and '&list=' in args) and True or False
+        if is_playlist:
+            playlist_id = re.search(r'list=([a-zA-Z0-9_-]+)', args).group(1)
+            response = requests.get(f'https://www.googleapis.com/youtube/v3/playlists?key={config.BOT_YOUTUBE_KEY}&part=contentDetails&id={playlist_id}')
+            data = response.json()
+            playlist_length = data['items'][0]['contentDetails']['itemCount'] <= 20 and data['items'][0]['contentDetails']['itemCount'] or 20
 
-    if entries:
-        for entry in entries:
-            song = await DownloadSong(entry['url'], 'link')
-            queue[guild_id].append(song[0])
+            for i in range(1, playlist_length):
+                embed = discord.Embed(description=f"Loading {i} of {playlist_length} tracks...")
+                await message.edit(content=None, embed=embed)
+                try:
+                    song = await DownloadSong(args, 'link', i)
+                    queue[guild_id].append(song[0])
 
-            if not voice_client.is_playing() and queue[guild_id]:
-                await PlayNextSong(bot, guild_id, voice_client)
+                    if not voice_client.is_playing() and queue[guild_id]:
+                        await PlayNextSong(bot, guild_id, voice_client)
+                except Exception as e:
+                    print(f"Error: {e}")
 
-        if len(entries) == 1:
-            embed = discord.Embed(description=f"Queued {entries[0]['title']} [{datetime.timedelta(seconds=entries[0]['duration'])}]")
+            embed = discord.Embed(description=f"Added {playlist_length} tracks to queue.")
+            await message.edit(content=None, embed=embed)
+
+
         else:
-            embed = discord.Embed(description=f"Queued {len(entries)} tracks.")
-        await message.edit(content=None, embed=embed)
+            try:
+                song = await DownloadSong(args, method)
+
+                if shuffle[guild_id]:
+                    position = priority and 0 or random.randint(0, len(queue[guild_id]))
+                    queue[guild_id].insert(position, song[0])
+                    embed = discord.Embed(description=f"Added {song[0]['title']} to queue in position {position+1} (🔀).")
+                else:
+                    queue[guild_id].append(song[0])
+                    embed = discord.Embed(description=f"Added {song[0]['title']} to queue.")
+
+                
+                await message.edit(content=None, embed=embed)
+
+                if not voice_client.is_playing() and queue[guild_id]:
+                    await PlayNextSong(bot, guild_id, voice_client)
+            except Exception as e:
+                print(f"Error: {e}")
+    except Exception as e:
+        print(f"An error has occured: {e}")
