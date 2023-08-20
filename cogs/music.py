@@ -8,12 +8,15 @@ import requests
 
 # allow for extra bits
 import datetime
-import os
-import time
-import re
-import uuid
-import random
 import openai
+import os
+import random
+import re
+import time
+import uuid
+
+# logging
+from logs import log_music
 
 # grab our important stuff
 import config
@@ -492,6 +495,7 @@ async def DownloadSong(args, method, item=None):
             "outtmpl": f'db/{id}',
             "playlist_items": f"{item}",
             "ignoreerrors": True,
+            "quiet": True,
         }
     else:
         opts = {
@@ -499,6 +503,7 @@ async def DownloadSong(args, method, item=None):
             "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}],
             "outtmpl": f'db/{id}',
             "ignoreerrors": True,
+            "quiet": True,
         }
 
     loop = asyncio.get_event_loop()
@@ -564,7 +569,6 @@ async def GetQueue(ctx, extra=None):
         if currently_playing[guild_id]['thumbnail']:
             output.set_thumbnail(url=currently_playing[guild_id]['thumbnail'])
 
-    # queue
     output.add_field(name="Up Next:", value="No queue.", inline=False)
 
     if len(queue[guild_id]) > 10:
@@ -659,22 +663,25 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
             playlist_id = re.search(r'list=([a-zA-Z0-9_-]+)', args).group(1)
             response = requests.get(f'https://www.googleapis.com/youtube/v3/playlists?key={config.BOT_YOUTUBE_KEY}&part=contentDetails&id={playlist_id}')
             data = response.json()
-            playlist_length = data['items'][0]['contentDetails']['itemCount'] <= 20 and data['items'][0]['contentDetails']['itemCount'] or 20
+            playlist_length = data['items'][0]['contentDetails']['itemCount'] <= config.MUSIC_MAX_PLAYLIST and data['items'][0]['contentDetails']['itemCount'] or config.MUSIC_MAX_PLAYLIST
+            log_music.info(f"playlist ({playlist_id}) true length {data['items'][0]['contentDetails']['itemCount']}")
 
-            for i in range(1, playlist_length):
+            for i in range(1, config.MUSIC_MAX_PLAYLIST + 1):
                 embed = discord.Embed(description=f"Loading {i} of {playlist_length} tracks...")
                 await message.edit(content=None, embed=embed)
                 try:
+                    log_music.info(f"Downloading song {i} of playlist {playlist_id}")
                     song = await DownloadSong(args, 'link', i)
                     queue[guild_id].append(song[0])
 
                     if not voice_client.is_playing() and queue[guild_id]:
                         await PlayNextSong(bot, guild_id, voice_client)
                 except Exception as e:
-                    print(f"Error: {e}")
+                    log_music.error(e)
 
             embed = discord.Embed(description=f"Added {playlist_length} tracks to queue.")
             await message.edit(content=None, embed=embed)
+            return
 
         # it's chatgpt dude
         if method == 'radio':
@@ -684,6 +691,7 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
                 await message.edit(content=None, embed=embed)
 
                 try:
+                    log_music.info(f"Downloading song {i} of {len(playlist)} from chatgpt playlist")
                     song = await DownloadSong(item, 'search')
                     queue[guild_id].append(song[0])
 
@@ -691,15 +699,17 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
                         await PlayNextSong(bot, guild_id, voice_client)
 
                 except Exception as e:
-                    print(f"Error: {e}")
+                    log_music.error(e)
 
             embed = discord.Embed(description=f"[3/3] Your ChatGPT playlist has been added to queue!")
             await message.edit(content=None, embed=embed)
+            return
 
 
         # just an individial song
         else:
             try:
+                log_music.info(f"Downloading song {args}")
                 song = await DownloadSong(args, method)
 
                 if priority:
@@ -720,7 +730,10 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
 
                 if not voice_client.is_playing() and queue[guild_id]:
                     await PlayNextSong(bot, guild_id, voice_client)
+                    return
+
+
             except Exception as e:
-                print(f"Error: {e}")
+                log_music.error(e)
     except Exception as e:
-        print(f"An error has occured: {e}")
+        log_music.error(e)

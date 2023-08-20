@@ -9,6 +9,10 @@ import asyncio
 import os
 from typing import Literal, Optional
 
+# logging
+import logging
+from logs import log_sys, log_cogs, log_msg, log_voice
+
 # we need our config
 import config
 
@@ -24,23 +28,28 @@ intents.voice_states = True
 # load settings
 settings = LoadSettings()
 
-# initialize
+# intialize
+
 bot = commands.Bot(command_prefix=config.BOT_PREFIX, intents=intents, case_insensitive=True)
 
 # add voice category
+log_cogs.info("loading 'Voice' cog")
 from cogs.voice import Voice
 asyncio.run(bot.add_cog(Voice(bot)))
 
 # add music category
+log_cogs.info("loading 'Music' cog")
 from cogs.music import Music
 asyncio.run(bot.add_cog(Music(bot)))
 
 # add chatgpt category (if enabled)
 if config.BOT_OPENAI_KEY:
+    log_cogs.info("loading 'ChatGPT' cog")
     from cogs.chatgpt import ChatGPT
     asyncio.run(bot.add_cog(ChatGPT(bot)))
 
 # add raiderio category
+log_cogs.info("loading 'RaiderIO' cog")
 from cogs.raiderio import RaiderIO
 asyncio.run(bot.add_cog(RaiderIO(bot)))
 
@@ -58,9 +67,10 @@ async def on_ready():
         await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.competing, name="maintenance!!!1"), status=discord.Status.do_not_disturb)
 
     # log connection to console
-    print(f'{func.C_GREY}{func.ts} {func.C_BLUE}INFO     {func.C_RST}Connected as {func.C_MINT}{bot.user}{func.C_RST}.')
+    log_sys.info(f"connected as \033[38;2;152;255;152m{bot.user}\033[0m")
 
     # clean up temp folder
+    log_sys.info(f"removing \033[38;2;152;255;152m{len([f for f in os.listdir('db/')])}\033[0m stale song files")
     for filename in os.listdir("db/"):
         os.remove(f"db/{filename}")
 
@@ -85,11 +95,11 @@ async def on_ready():
 @bot.event
 async def on_voice_state_update(author, before, after):
     if before.channel is None and after.channel is not None: # joined
-        print(f'{func.C_GREY}{func.ts} {func.C_GREY}V_JN     {func.C_MINT}{author}{func.C_RST}: {after.channel}')
+        log_voice.info(f"\033[38;2;152;255;152m{author}\033[0m: joined {after.channel.guild.name}/{after.channel}")
     elif before.channel is not None and after.channel is None: # left
-        print(f'{func.C_GREY}{func.ts} {func.C_GREY}V_LV     {func.C_MINT}{author}{func.C_RST}: {before.channel}')
+        log_voice.info(f"\033[38;2;152;255;152m{author}\033[0m: left {before.channel.guild.name}/{before.channel}")
     elif before.channel != after.channel: # changed
-        print(f'{func.C_GREY}{func.ts} {func.C_GREY}V_CHG    {func.C_MINT}{author}{func.C_RST}: {before.channel} -> {after.channel}')
+        log_voice.info(f"\033[38;2;152;255;152m{author}\033[0m: moved in {before.channel.guild.name}: {before.channel} -> {after.channel}")
 
 ####################################################################
 # on_message()
@@ -102,9 +112,9 @@ async def on_message(ctx):
 
     # log messages to console
     if ctx.guild:
-        print(f'{func.C_GREY}{func.ts} {func.C_GREEN}MESSAGE  {func.C_MINT}{ctx.author}@{ctx.guild.name}#{ctx.channel.name}{func.C_RST}: {ctx.content}')
+        log_msg.info(f"\033[38;2;152;255;152m{ctx.author}@{ctx.guild.name}#{ctx.channel.name}\033[0m: {ctx.content}")
     else:
-        print(f'{func.C_GREY}{func.ts} {func.C_GREEN}MESSAGE  {func.C_MINT}{ctx.author}@dm{func.C_RST}: {ctx.content}')
+        log_msg.info(f"\033[38;2;152;255;152m{ctx.author}\033[0m: {ctx.content}")
     
     # new ignore
     if ctx.author == bot.user or not ctx.guild or (len(guild_settings['perms']['channels']) > 0 and ctx.channel.id not in guild_settings['perms']['channels']):
