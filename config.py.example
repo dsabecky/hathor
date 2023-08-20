@@ -17,5 +17,8 @@ BOT_ADMIN  =
 # youtube api key (required for playlists to process properly)
 BOT_YOUTUBE_KEY = ''
 
+# maximum playlist legnth
+MUSIC_MAX_PLAYLIST = 20
+
 # maximum song length
 MUSIC_MAX_DURATION = 1800
