@@ -29,16 +29,20 @@ bot = commands.Bot(command_prefix=config.BOT_PREFIX, intents=intents, case_insen
 
 # add voice category
 from cogs.voice import Voice
-asyncio.run(bot.add_cog(Voice(bot))) # voice
+asyncio.run(bot.add_cog(Voice(bot)))
 
 # add music category
 from cogs.music import Music
-asyncio.run(bot.add_cog(Music(bot))) # music
+asyncio.run(bot.add_cog(Music(bot)))
 
 # add chatgpt category (if enabled)
 if config.BOT_OPENAI_KEY:
     from cogs.chatgpt import ChatGPT
-    asyncio.run(bot.add_cog(ChatGPT(bot))) # chatgpt
+    asyncio.run(bot.add_cog(ChatGPT(bot)))
+
+# add raiderio category
+from cogs.raiderio import RaiderIO
+asyncio.run(bot.add_cog(RaiderIO(bot)))
 
 ########################################################################################################################################
 
@@ -115,44 +119,44 @@ async def on_message(ctx):
 
 ########################################################################################################################################
 
-# ####################################################################
-# # trigger: !sync
-# # ----
-# # Syncs /commands
-# ####################################################################
-# @bot.command()
-# async def sync(
-#   ctx: Context, guilds: Greedy[discord.Object], spec: Optional[Literal["~", "*", "^"]] = None) -> None:
+####################################################################
+# trigger: !sync
+# ----
+# Syncs /commands
+####################################################################
+@bot.command()
+async def sync(
+  ctx: Context, guilds: Greedy[discord.Object], spec: Optional[Literal["~", "*", "^"]] = None) -> None:
     
-#     if ctx.author.id != config.BOT_ADMIN:
-#         FancyErrors("AUTHOR_PERMS", ctx.channel)
+    if ctx.author.id != config.BOT_ADMIN:
+        FancyErrors("AUTHOR_PERMS", ctx.channel)
 
-#     if not guilds:
-#         if spec == "~":
-#             synced = await ctx.bot.tree.sync(guild=ctx.guild)
-#         elif spec == "*":
-#             ctx.bot.tree.copy_global_to(guild=ctx.guild)
-#             synced = await ctx.bot.tree.sync(guild=ctx.guild)
-#         elif spec == "^":
-#             ctx.bot.tree.clear_commands(guild=ctx.guild)
-#             await ctx.bot.tree.sync(guild=ctx.guild)
-#             synced = []
-#         else:
-#             synced = await ctx.bot.tree.sync()
+    if not guilds:
+        if spec == "~":
+            synced = await ctx.bot.tree.sync(guild=ctx.guild)
+        elif spec == "*":
+            ctx.bot.tree.copy_global_to(guild=ctx.guild)
+            synced = await ctx.bot.tree.sync(guild=ctx.guild)
+        elif spec == "^":
+            ctx.bot.tree.clear_commands(guild=ctx.guild)
+            await ctx.bot.tree.sync(guild=ctx.guild)
+            synced = []
+        else:
+            synced = await ctx.bot.tree.sync()
 
-#         await ctx.send(f"Synced {len(synced)} commands {'globally' if spec is None else 'to the current guild.'}")
-#         return
+        await ctx.send(f"Synced {len(synced)} commands {'globally' if spec is None else 'to the current guild.'}")
+        return
 
-#     ret = 0
-#     for guild in guilds:
-#         try:
-#             await ctx.bot.tree.sync(guild=guild)
-#         except discord.HTTPException:
-#             pass
-#         else:
-#             ret += 1
+    ret = 0
+    for guild in guilds:
+        try:
+            await ctx.bot.tree.sync(guild=guild)
+        except discord.HTTPException:
+            pass
+        else:
+            ret += 1
 
-#     await ctx.send(f"Synced the tree to {ret}/{len(guilds)}.")
+    await ctx.send(f"Synced the tree to {ret}/{len(guilds)}.")
 
 ####################################################################
 # trigger: !permissions
