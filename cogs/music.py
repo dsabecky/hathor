@@ -293,7 +293,7 @@ class Music(commands.Cog, name="Music"):
         
         conversation = [
             { "role": "system", "content": f"return only the information requested with no additional words or context" },
-            { "role": "user", "content": f"make a playlist, which can include other artists based off {args}" }
+            { "role": "user", "content": f"make a playlist of 10 songs, which can include other artists based off {args}" }
         ]
 
         try:
@@ -550,9 +550,17 @@ async def GetQueue(ctx, extra=None):
         output = discord.Embed(title="Song Queue", description=f"{extra}")
 
     # currently playing
-    output.add_field(name="Now Playing:", value="Nothing playing.")
-    if ctx.guild.voice_client and ctx.guild.voice_client.is_playing():
-        output.set_field_at(index=0, name="Now Playing:", value=f"{await NowPlaying(guild_id)}")
+    output.add_field(name="Now Playing:", value="Nothing playing.", inline=False)
+    if ctx.guild.voice_client and ctx.guild.voice_client.is_playing() and currently_playing:
+
+        title = currently_playing[guild_id]['title'].replace('*', r'\*')
+        progress = time.time() - start_time[guild_id]
+        total_duration = currently_playing[guild_id]["duration"]
+        current = str(datetime.timedelta(seconds=int(progress)))
+        total = str(datetime.timedelta(seconds=int(total_duration)))
+        progress_bar = f"▶ {'▬' * int(10 * (int(progress) / int(total_duration)))}🔘{'▬' * (10 - int(10 * (int(progress) / int(total_duration))))}🔈[{current} / {total}]"
+    
+        output.set_field_at(index=0, name="Now Playing:", value=f"{title}\n{progress_bar}", inline=False)
         if currently_playing[guild_id]['thumbnail']:
             output.set_thumbnail(url=currently_playing[guild_id]['thumbnail'])
 
@@ -562,38 +570,25 @@ async def GetQueue(ctx, extra=None):
     if len(queue[guild_id]) > 10:
         first_10 = queue[guild_id][:10]
         for i, song in enumerate(first_10, 1):
+            title = song['title'].replace('*', r'\*')
             if output.fields[1].value == "No queue.":
-                output.set_field_at(index=1, name="Up Next:", value=f"**{i}**. {song['title']}\n")
+                output.set_field_at(index=1, name="Up Next:", value=f"**{i}**. {title}\n", inline=False)
             else:
-                output.set_field_at(index=1, name="Up Next:", value=f"{output.fields[1].value}**{i}**. {song['title']}\n")
-        output.set_field_at(index=1, name="Up Next:", value=f"{output.fields[1].value}And {len(queue[guild_id]) - 10} more...")
+                output.set_field_at(index=1, name="Up Next:", value=f"{output.fields[1].value}**{i}**. {title}\n", inline=False)
+        output.set_field_at(index=1, name="Up Next:", value=f"{output.fields[1].value}And {len(queue[guild_id]) - 10} more...", inline=False)
 
     else:
         for i, song in enumerate(queue[guild_id], 1):
+            title = song['title'].replace('*', r'\*')
             if output.fields[1].value == "No queue.":
-                output.set_field_at(index=1, name="Up Next:", value=f"**{i}**. {song['title']}\n")
+                output.set_field_at(index=1, name="Up Next:", value=f"**{i}**. {title}\n", inline=False)
             else:
-                output.set_field_at(index=1, name="Up Next:", value=f"{output.fields[1].value}**{i}**. {song['title']}\n")
+                output.set_field_at(index=1, name="Up Next:", value=f"{output.fields[1].value}**{i}**. {title}\n", inline=False)
 
     # repeat status
     output.add_field(name="Settings:", value=f"🔊: {settings[str(guild_id)]['volume']}%    🔁: {repeat[guild_id] and 'on' or 'off'}    🔀: {shuffle[guild_id] and 'on' or 'off'}", inline=False)
 
     await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
-
-####################################################################
-# function: NowPlaying(guild_id)
-# ----
-# guild_id: specify which server you're checking
-# ----
-# Parses the currently playing song.
-####################################################################
-async def NowPlaying(guild_id):
-    if currently_playing:
-        progress = time.time() - start_time[guild_id]
-        total_duration = currently_playing[guild_id]["duration"]
-        current = str(datetime.timedelta(seconds=int(progress)))
-        total = str(datetime.timedelta(seconds=int(total_duration)))
-        return f"{currently_playing[guild_id]['title']}\n**[**{current} **/** {total}**]**\n"
 
 ####################################################################
 # function: PlayNextSong(bot, guild_id, channel)
