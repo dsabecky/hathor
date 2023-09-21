@@ -512,7 +512,6 @@ async def DownloadSong(args, method, item=None):
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = await loop.run_in_executor(None, ydl.extract_info, args, True)
             if info:
-
                 if '_type' in info and info['_type'] == "playlist":
                     song_list = []
                     for info in info['entries']:
@@ -658,7 +657,7 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
 
     try:
         # we've got a playlist
-        is_playlist = (method == 'link' and '&list=' in args) and True or False
+        is_playlist = method == 'link' and True or False
         if is_playlist:
             playlist_id = re.search(r'list=([a-zA-Z0-9_-]+)', args).group(1)
             response = requests.get(f'https://www.googleapis.com/youtube/v3/playlists?key={config.BOT_YOUTUBE_KEY}&part=contentDetails&id={playlist_id}')
@@ -666,7 +665,7 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
             playlist_length = data['items'][0]['contentDetails']['itemCount'] <= config.MUSIC_MAX_PLAYLIST and data['items'][0]['contentDetails']['itemCount'] or config.MUSIC_MAX_PLAYLIST
             log_music.info(f"playlist ({playlist_id}) true length {data['items'][0]['contentDetails']['itemCount']}")
 
-            for i in range(1, config.MUSIC_MAX_PLAYLIST + 1):
+            for i in range(1, playlist_length):
                 embed = discord.Embed(description=f"Loading {i} of {playlist_length} tracks...")
                 await message.edit(content=None, embed=embed)
                 try:
@@ -686,6 +685,7 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
         # it's chatgpt dude
         if method == 'radio':
             playlist = args
+
             for i, item in enumerate(args, start=1):
                 embed = discord.Embed(description=f"[2/3] Preparing your ChatGPT playlist ({i}/{len(args)})...")
                 await message.edit(content=None, embed=embed)
@@ -705,15 +705,11 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
             await message.edit(content=None, embed=embed)
             return
 
-
         # just an individial song
         else:
             try:
                 log_music.info(f"Downloading song {args}")
                 song = await DownloadSong(args, method)
-
-                if priority:
-                    position = 0
 
                 if shuffle[guild_id]:
                     if not priority:
@@ -721,10 +717,14 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
 
                     queue[guild_id].insert(position, song[0])
                     embed = discord.Embed(description=f"Added {song[0]['title']} to queue in position {position+1} (🔀).")
+                    
                 else:
-                    queue[guild_id].append(song[0])
-                    embed = discord.Embed(description=f"Added {song[0]['title']} to queue.")
+                    if priority:
+                        queue[guild_id].insert(0, song[0])
+                    else:
+                        queue[guild_id].append(song[0])
 
+                    embed = discord.Embed(description=f"Added {song[0]['title']} to queue.")
                 
                 await message.edit(content=None, embed=embed)
 
@@ -732,8 +732,8 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
                     await PlayNextSong(bot, guild_id, voice_client)
                     return
 
-
             except Exception as e:
                 log_music.error(e)
+
     except Exception as e:
         log_music.error(e)
