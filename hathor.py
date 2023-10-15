@@ -11,7 +11,7 @@ from typing import Literal, Optional
 
 # logging
 import logging
-from logs import log_sys, log_cogs, log_msg, log_voice
+from logs import log_sys, log_cogs, log_msg, log_voice, log_gamba
 
 # we need our config
 import config
@@ -53,6 +53,11 @@ log_cogs.info("loading 'RaiderIO' cog")
 from cogs.raiderio import RaiderIO
 asyncio.run(bot.add_cog(RaiderIO(bot)))
 
+# add raiderio category
+log_cogs.info("loading 'Gamba' cog")
+from cogs.gamba import Gamba
+asyncio.run(bot.add_cog(Gamba(bot)))
+
 ########################################################################################################################################
 
 ####################################################################
@@ -88,6 +93,25 @@ async def on_ready():
 
         SaveSettings()
 
+
+####################################################################
+# on_guild_join()
+####################################################################
+@bot.event
+async def on_guild_join(guild):
+    global settings
+
+    # build default settings into config if neccesary
+    guild_str = str(guild.id)
+    if guild_str not in settings:
+        settings[guild_str] = {}
+    if 'perms' not in settings[guild_str]:
+        settings[guild_str]['perms'] = {}
+        settings[guild_str]['perms']['user_id'] = []
+        settings[guild_str]['perms']['role_id'] = []
+        settings[guild_str]['perms']['channels'] = []
+
+        SaveSettings()
 
 ####################################################################
 # on_voice_state_update()

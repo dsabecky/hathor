@@ -43,6 +43,24 @@ class Voice(commands.Cog, name="Voice"):
             SaveSettings()
 
     ####################################################################
+    # on_guild_join()
+    ####################################################################
+    @commands.Cog.listener()
+    async def on_guild_join(self, guild):
+        global settings
+
+        # build default settings into config if neccesary
+        guild_str = str(guild.id)
+        if guild_str not in settings:
+            settings[guild_str] = {}
+        if 'volume' not in settings[guild_str]:
+            settings[guild_str]['volume'] = 20
+        if 'voice_idle' not in settings[guild_str]:
+            settings[guild_str]['voice_idle'] = 300
+
+        SaveSettings()
+
+    ####################################################################
     # trigger: !idle
     # ----
     # idle_time: time (in minutes) that the bot will idle before d/c.
@@ -156,7 +174,7 @@ class Voice(commands.Cog, name="Voice"):
                     settings[guild_str]['volume'] = int(args)
                     SaveSettings()
 
-                    if ctx.guild.voice_client:
+                    if voice:
                         voice.source.volume = settings[guild_str]["volume"] / 100
 
                     await ctx.channel.send(f'Server volume changed to: {settings[guild_str]["volume"]}%.')

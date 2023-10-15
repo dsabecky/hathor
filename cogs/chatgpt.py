@@ -120,6 +120,13 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             output.description = f"ERROR"
             await message.edit(content=None, embed=output)
         else:
-            output.add_field(name="Response:", value=response.choices[0].message.content, inline=False)
             output.description = f"Reponse was generated using the **{config.BOT_OPENAI_MODEL}** model."
-            await message.edit(content=None, embed=output)
+
+            response_content = response.choices[0].message.content
+            if len(response_content) > 1024:
+                output.add_field(name="Response:", value="Listed below due to length...", inline=False)
+                await message.edit(content=None, embed=output)
+                await ctx.channel.send(f"```{response_content[:1990]}```")
+            else:
+                output.add_field(name="Response:", value=response_content, inline=False)
+                await message.edit(content=None, embed=output)            

@@ -1,24 +1,19 @@
 # set your bot token here
 BOT_TOKEN = ''
 
-# set to True if bot is in maintenance mode
-MAINTENANCE = False
-
-# set your prefix
-BOT_PREFIX = '!'
+# set your openai key here
+# this is optional, leave commented out to disable feature
+#BOT_OPENAI_KEY = ''
+BOT_OPENAI_MODEL = 'gpt-3.5-turbo'
 
 # set the bot administrator (your personal userID)
 BOT_ADMIN  = 
 
-# set your openai key here
-# BOT_OPENAI_KEY = ''
-# BOT_OPENAI_MODEL = 'gpt-3.5-turbo'
-
-# youtube api key (required for playlists to process properly)
-BOT_YOUTUBE_KEY = ''
-
-# maximum playlist legnth
-MUSIC_MAX_PLAYLIST = 20
+# set your prefix
+BOT_PREFIX = '!'
 
 # maximum song length
 MUSIC_MAX_DURATION = 1800
+
+# set what text channels you want the bot to care about
+channels  = []

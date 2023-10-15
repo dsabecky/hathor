@@ -685,6 +685,7 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
         # it's chatgpt dude
         if method == 'radio':
             playlist = args
+            temp = ""
 
             for i, item in enumerate(args, start=1):
                 embed = discord.Embed(description=f"[2/3] Preparing your ChatGPT playlist ({i}/{len(args)})...")
@@ -694,6 +695,7 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
                     log_music.info(f"Downloading song {i} of {len(playlist)} from chatgpt playlist")
                     song = await DownloadSong(item, 'search')
                     queue[guild_id].append(song[0])
+                    temp += f"{i}. {song[0]['title']}\n"
 
                     if not voice_client.is_playing() and queue[guild_id]:
                         await PlayNextSong(bot, guild_id, voice_client)
@@ -702,6 +704,8 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
                     log_music.error(e)
 
             embed = discord.Embed(description=f"[3/3] Your ChatGPT playlist has been added to queue!")
+            embed.add_field(name="Added:", value=f"{temp}", inline=False)
+
             await message.edit(content=None, embed=embed)
             return
 
