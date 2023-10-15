@@ -36,6 +36,7 @@ queue = {}
 repeat = {}
 shuffle = {}
 start_time = {}
+endless_radio = {}
 
 # define the class
 class Music(commands.Cog, name="Music"):
@@ -59,6 +60,9 @@ class Music(commands.Cog, name="Music"):
             if not guild_id in currently_playing:
                 currently_playing[guild_id] = None
 
+            if not guild_id in endless_radio:
+                endless_radio[guild_id] = False
+
             if not guild_id in last_activity_time:
                 last_activity_time[guild_id] = None
 
@@ -70,9 +74,15 @@ class Music(commands.Cog, name="Music"):
 
             if not guild_id in start_time:
                 start_time[guild_id] = None
+
+        # check if the queue is broken
+        self.bot.loop.create_task(CheckBrokenPlaying(self.bot))
         
         # background task for voice idle checker
         self.bot.loop.create_task(CheckVoiceIdle(self.bot))
+
+        # background task for endless mix
+        self.bot.loop.create_task(CheckEndlessMix(self.bot))
 
     ####################################################################
     # trigger: !bump
@@ -149,6 +159,54 @@ class Music(commands.Cog, name="Music"):
         info_embed = discord.Embed(description=f"Removed {len(queue[guild_id])} songs from queue.")
         message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
         queue[guild_id] = []
+
+    ####################################################################
+    # trigger: !mix
+    # ----
+    # args: theme of the endless radio mix
+    # ----
+    # Endlessly adds new music to the queue when enabled and there is
+    # no queue.
+    ####################################################################
+    @commands.command(name='mix')
+    async def mix_radio(self, ctx, *, args=None):
+        """
+        Toggles endless mix mode.
+
+        Syntax:
+            !mix [<null>|<theme>]
+        """
+        global endless_radio
+        guild_id = ctx.guild.id
+
+        # are you even allowed to use this command?
+        if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
+            await FancyErrors("AUTHOR_PERMS", ctx.channel)
+            return
+
+        # is chatgpt enabled?
+        if not config.BOT_OPENAI_KEY:
+            await FancyErrors("DISABLED_FEATURE", ctx.channel)
+            return
+        
+        # author isn't in a voice channel
+        if not ctx.author.voice:
+            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel)
+            return
+        
+        # we're not in voice, lets change that
+        if not ctx.guild.voice_client:
+            await JoinVoice(ctx)
+
+        if args:
+            endless_radio[guild_id] = args
+            await ctx.send(f"♾️ Endless mix enabled, theme: **{args}**.")
+        elif endless_radio[guild_id] == False:
+            endless_radio[guild_id] = "anything, im not picky"
+            await ctx.send(f"♾️ Endless mix enabled, theme: anything, im not picky.")
+        else:
+            endless_radio[guild_id] = False
+            await ctx.send(f"♾️ Endless mix disabled.")
 
     ####################################################################
     # trigger: !play
@@ -446,6 +504,74 @@ class Music(commands.Cog, name="Music"):
                 await PlayNextSong(self.bot, guild_id, ctx.guild.voice_client)
 
 ####################################################################
+# function: CheckBrokenPlaying(bot)
+# ----
+# bot: self
+# ----
+# TBA
+####################################################################
+async def CheckBrokenPlaying(bot):
+    while True:
+        for guild in bot.guilds:
+            guild_id = guild.id
+            voice_client = bot.get_guild(guild_id).voice_client
+
+            if (voice_client and not voice_client.is_playing()) and (guild_id in queue and queue[guild_id]):
+                await PlayNextSong(bot, guild_id, voice_client)
+
+        await asyncio.sleep(5)
+
+
+####################################################################
+# function: CheckEndlessMix(bot)
+# ----
+# bot: self
+# ----
+# TBA
+####################################################################
+async def CheckEndlessMix(bot):
+    while True:
+        for guild in bot.guilds:
+            guild_id = guild.id
+            voice_client = bot.get_guild(guild_id).voice_client
+
+            if (guild_id in endless_radio and endless_radio[guild_id]) and (guild_id not in queue or not queue[guild_id]):
+                    if voice_client:
+
+                        conversation = [
+                            { "role": "system", "content": f"return only the information requested with no additional words or context" },
+                            { "role": "user", "content": f"make a playlist of 3 songs, with the following theme: {endless_radio[guild_id]}" }
+                        ]
+
+                        try:
+                            response = openai.ChatCompletion.create(
+                                model=config.BOT_OPENAI_MODEL,
+                                messages=conversation,
+                                temperature=0.8,
+                                max_tokens=1000
+                            )
+
+                            # filter out the goop
+                            parsed_response = response['choices'][0].message.content.split('\n')
+                            pattern = r'^\d+\.\s'
+
+                            playlist = []
+                            for item in parsed_response:
+                                if re.match(pattern, item):
+                                    parts = re.split(pattern, item, maxsplit=1)
+                                    if len(parts) == 2:
+                                        playlist.append(f"{parts[1].strip()} audio")
+
+                            await QueueSong(bot, playlist, 'endless', False, 'endless', guild_id, voice_client)
+
+
+                        except openai.error.ServiceUnavailableError:
+                            await FancyErrors("API_ERROR", ctx.channel)
+                            return
+        
+        await asyncio.sleep(15)
+
+####################################################################
 # function: CheckVoiceIdle(bot)
 # ----
 # bot: self
@@ -588,8 +714,8 @@ async def GetQueue(ctx, extra=None):
             else:
                 output.set_field_at(index=1, name="Up Next:", value=f"{output.fields[1].value}**{i}**. {title}\n", inline=False)
 
-    # repeat status
-    output.add_field(name="Settings:", value=f"🔊: {settings[str(guild_id)]['volume']}%    🔁: {repeat[guild_id] and 'on' or 'off'}    🔀: {shuffle[guild_id] and 'on' or 'off'}", inline=False)
+    # feature status
+    output.add_field(name="Settings:", value=f"🔊: {settings[str(guild_id)]['volume']}%\n🔁: {repeat[guild_id] and 'on' or 'off'}\n🔀: {shuffle[guild_id] and 'on' or 'off'}\n♾️: {endless_radio[guild_id] and endless_radio[guild_id] or 'off'}", inline=False)
 
     await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
 
@@ -683,7 +809,7 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
             return
 
         # it's chatgpt dude
-        if method == 'radio':
+        elif method == 'radio':
             playlist = args
             temp = ""
 
@@ -707,6 +833,27 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
             embed.add_field(name="Added:", value=f"{temp}", inline=False)
 
             await message.edit(content=None, embed=embed)
+            return
+
+        # endless!
+        elif method == 'endless':
+            playlist = args
+            temp = ""
+
+            for i, item in enumerate(args, start=1):
+
+                try:
+                    log_music.info(f"Downloading song {i} of {len(playlist)} from endless playlist")
+                    song = await DownloadSong(item, 'search')
+                    queue[guild_id].append(song[0])
+                    temp += f"{i}. {song[0]['title']}\n"
+
+                    if not voice_client.is_playing() and queue[guild_id]:
+                        await PlayNextSong(bot, guild_id, voice_client)
+
+                except Exception as e:
+                    log_music.error(e)
+
             return
 
         # just an individial song
