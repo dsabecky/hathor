@@ -14,6 +14,7 @@ import random
 import re
 import time
 import uuid
+import json
 
 # logging
 from logs import log_music
@@ -29,14 +30,32 @@ from cogs.voice import JoinVoice
 # load our settings from settings.json
 settings = LoadSettings()
 
+# build song history
+def LoadHistory():
+    try:
+        with open('song_history.json', 'r') as file:
+            return json.load(file)
+    except FileNotFoundError:
+        with open('song_history.json', 'w') as file:
+            default = {}
+            json.dump(default, file, indent=4)
+            return default
+        
+def SaveHistory():
+    with open('song_history.json', 'w') as file:
+        json.dump(song_history, file, indent=4)
+
 # build our temp variables
 currently_playing = {}
-last_activity_time = {}
 queue = {}
 repeat = {}
 shuffle = {}
-start_time = {}
 endless_radio = {}
+
+last_activity_time = {}
+start_time = {}
+
+song_history = LoadHistory()
 
 # define the class
 class Music(commands.Cog, name="Music"):
@@ -53,6 +72,7 @@ class Music(commands.Cog, name="Music"):
         # build all our temp variables
         for guild in self.bot.guilds:
             guild_id = guild.id
+            guild_str = str(guild.id)
 
             if not guild_id in queue:
                 queue[guild_id] = []
@@ -62,6 +82,10 @@ class Music(commands.Cog, name="Music"):
 
             if not guild_id in endless_radio:
                 endless_radio[guild_id] = False
+
+            if not guild_str in song_history:
+                song_history[guild_str] = []
+                SaveHistory()
 
             if not guild_id in last_activity_time:
                 last_activity_time[guild_id] = None
@@ -86,8 +110,6 @@ class Music(commands.Cog, name="Music"):
 
     ####################################################################
     # trigger: !bump
-    # ----
-    # song_number: song number to move to top of queue
     # ----
     # Bumps requested song to top of the queue.
     ####################################################################
@@ -163,8 +185,6 @@ class Music(commands.Cog, name="Music"):
     ####################################################################
     # trigger: !mix
     # ----
-    # args: theme of the endless radio mix
-    # ----
     # Endlessly adds new music to the queue when enabled and there is
     # no queue.
     ####################################################################
@@ -211,8 +231,6 @@ class Music(commands.Cog, name="Music"):
     ####################################################################
     # trigger: !play
     # ----
-    # args: query or link to song/playlist
-    # ----
     # Plays a song.
     ####################################################################
     @commands.command(name='play')
@@ -251,8 +269,6 @@ class Music(commands.Cog, name="Music"):
 
     ####################################################################
     # trigger: !playnext
-    # ----
-    # args: query or link to song
     # ----
     # Plays a song.
     ####################################################################
@@ -320,8 +336,6 @@ class Music(commands.Cog, name="Music"):
     ####################################################################
     # trigger: !radio
     # ----
-    # args: theme of playlist
-    # ----
     # Generates a ChatGPT 10 song playlist based off context.
     ####################################################################
     @commands.command(name="radio", aliases=['aiplaylist'])
@@ -388,8 +402,6 @@ class Music(commands.Cog, name="Music"):
 
     ####################################################################
     # trigger: !remove
-    # ----
-    # args: number of song to remove
     # ----
     # Removes a song from queue.
     ####################################################################
@@ -506,8 +518,6 @@ class Music(commands.Cog, name="Music"):
 ####################################################################
 # function: CheckBrokenPlaying(bot)
 # ----
-# bot: self
-# ----
 # TBA
 ####################################################################
 async def CheckBrokenPlaying(bot):
@@ -525,22 +535,28 @@ async def CheckBrokenPlaying(bot):
 ####################################################################
 # function: CheckEndlessMix(bot)
 # ----
-# bot: self
-# ----
 # TBA
 ####################################################################
 async def CheckEndlessMix(bot):
     while True:
         for guild in bot.guilds:
             guild_id = guild.id
+            guild_str = str(guild_id)
             voice_client = bot.get_guild(guild_id).voice_client
+
+            # build recently played songs list
+            last_hour = []
+            for entry in song_history[guild_str]:
+                if entry and float(entry["timestamp"]) > (time.time() - 3600) and entry["title"] not in last_hour:
+                    clean_title = re.sub(r'\s*\((?!Audio|Video|Lyric)[^)]*\)', '', entry["title"], flags=re.IGNORECASE)
+                    last_hour.append(clean_title)
 
             if (guild_id in endless_radio and endless_radio[guild_id]) and (guild_id not in queue or not queue[guild_id]):
                     if voice_client:
 
                         conversation = [
                             { "role": "system", "content": f"return only the information requested with no additional words or context" },
-                            { "role": "user", "content": f"make a playlist of 3 songs, with the following theme: {endless_radio[guild_id]}" }
+                            { "role": "user", "content": f"make a playlist of 3 songs, with the following theme: {endless_radio[guild_id]}. Do not include any of the following: {last_hour}" }
                         ]
 
                         try:
@@ -574,8 +590,6 @@ async def CheckEndlessMix(bot):
 ####################################################################
 # function: CheckVoiceIdle(bot)
 # ----
-# bot: self
-# ----
 # Checks idle time when connected to voice channels to prevent
 # being connected forever.
 ####################################################################
@@ -603,10 +617,6 @@ async def CheckVoiceIdle(bot):
 
 ####################################################################
 # function: DownloadSong(args, type, item)
-# ----
-# args:       [search string | url]
-# type:       ['search' | 'link']
-# item:       selects a specific item in the yt_dlp entry
 # ----
 # Returns prewritten errors.
 ####################################################################
@@ -666,9 +676,6 @@ async def DownloadSong(args, method, item=None):
 ####################################################################
 # function: GetQueue(ctx, extra)
 # ----
-# ctx: context
-# extra: optional additional information (shuffle, etc)
-# ----
 # Returns currently playing and queue.
 ####################################################################
 async def GetQueue(ctx, extra=None):
@@ -722,14 +729,11 @@ async def GetQueue(ctx, extra=None):
 ####################################################################
 # function: PlayNextSong(bot, guild_id, channel)
 # ----
-# bot:      self.bot
-# guild_id: guildID of server processing command
-# channel:  ctx.guild.voice_channel
-# ----
 # Bootstrapper for songs, manages queue and info db.
 ####################################################################
 async def PlayNextSong(bot, guild_id, channel):
-    global queue, currently_playing
+    global queue, currently_playing, song_history
+    guild_str = str(guild_id)
 
     if channel.is_playing():
         return
@@ -753,6 +757,10 @@ async def PlayNextSong(bot, guild_id, channel):
         # update status
         await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name=title))
 
+        # add to song history
+        song_history[guild_str].append({"timestamp": time.time(), "title": title})
+        SaveHistory()
+
         currently_playing[guild_id] = {
             "title": title,
             "duration": song["duration"],
@@ -766,14 +774,6 @@ async def PlayNextSong(bot, guild_id, channel):
     
 ####################################################################
 # function: QueueSong(bot, args, method, priority, message, guild_id, voice_client)
-# ----
-# bot:          self
-# args:         text passed by user
-# method:       [ search | link | radio ]
-# priority:     adds song to the top of the playlist
-# message:      message context for editing purposes
-# guild_id:     guildID
-# voice_client: active voice channel
 # ----
 # Brain of the music bot. Passes off data to DownloadSong and manages
 # adding the music to the queue.

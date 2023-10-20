@@ -75,7 +75,6 @@ def SaveSettings():
 # load settings
 settings = LoadSettings()
 
-
 ####################################################################
 # function: CheckPermissions(bot, guild_id, user_id, user_roles)
 # ----
