@@ -45,6 +45,21 @@ def SaveHistory():
     with open('song_history.json', 'w') as file:
         json.dump(song_history, file, indent=4)
 
+# radio setlists
+def LoadRadio():
+    try:
+        with open('radio_playlists.json', 'r') as file:
+            return json.load(file)
+    except FileNotFoundError:
+        with open('radio_playlists.json', 'w') as file:
+            default = {}
+            json.dump(default, file, indent=4)
+            return default
+        
+def SaveRadio():
+    with open('radio_playlists.json', 'w') as file:
+        json.dump(radio_playlists, file, indent=4)
+
 # build our temp variables
 currently_playing = {}
 queue = {}
@@ -56,6 +71,7 @@ last_activity_time = {}
 start_time = {}
 
 song_history = LoadHistory()
+radio_playlists = LoadRadio()
 
 # define the class
 class Music(commands.Cog, name="Music"):
@@ -107,6 +123,66 @@ class Music(commands.Cog, name="Music"):
 
         # background task for endless mix
         self.bot.loop.create_task(CheckEndlessMix(self.bot))
+
+    ####################################################################
+    # trigger: !aiplaylist
+    # ----
+    # Generates a ChatGPT 10 song playlist based off context.
+    ####################################################################
+    @commands.command(name="aiplaylist")
+    async def ai_playlist(self, ctx, *, args):
+        """
+        Generates a ChatGPT 10 song playlist based off context.
+
+        Syntax:
+            !aiplaylist <theme>
+        """
+
+        # is chatgpt enabled?
+        if not config.BOT_OPENAI_KEY:
+            await FancyErrors("DISABLED_FEATURE", ctx.channel)
+            return
+        
+        # author isn't in a voice channel
+        if not ctx.author.voice:
+            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel)
+            return
+        
+        # we're not in voice, lets change that
+        if not ctx.guild.voice_client:
+            await JoinVoice(ctx)
+        
+        # what are you asking that's shorter, really
+        if len(args) < 3:
+            await FancyErrors("SHORT", ctx.channel)
+            return
+        
+        try:
+            response = await ChatGPT(
+                self,
+                "Return only the information requested with no additional words or context.",
+                f"make a playlist of 10 songs, which can include other artists based off {args}"
+            )
+
+            # filter out the goop
+            parsed_response = response['choices'][0].message.content.split('\n')
+            pattern = r'^\d+\.\s'
+
+            playlist = []
+            for item in parsed_response:
+                if re.match(pattern, item):
+                    parts = re.split(pattern, item, maxsplit=1)
+                    if len(parts) == 2:
+                        playlist.append(f"{parts[1].strip()} audio")
+
+            info_embed = discord.Embed(description=f"[1/3] Generating your ChatGPT playlist...")
+            message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
+            await QueueSong(self.bot, playlist, 'radio', False, message, ctx.guild.id, ctx.guild.voice_client)
+
+
+        except openai.error.ServiceUnavailableError:
+            await FancyErrors("API_ERROR", ctx.channel)
+            return
 
     ####################################################################
     # trigger: !bump
@@ -181,52 +257,6 @@ class Music(commands.Cog, name="Music"):
         info_embed = discord.Embed(description=f"Removed {len(queue[guild_id])} songs from queue.")
         message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
         queue[guild_id] = []
-
-    ####################################################################
-    # trigger: !mix
-    # ----
-    # Endlessly adds new music to the queue when enabled and there is
-    # no queue.
-    ####################################################################
-    @commands.command(name='mix')
-    async def mix_radio(self, ctx, *, args=None):
-        """
-        Toggles endless mix mode.
-
-        Syntax:
-            !mix [<null>|<theme>]
-        """
-        global endless_radio
-        guild_id = ctx.guild.id
-
-        # are you even allowed to use this command?
-        if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
-            await FancyErrors("AUTHOR_PERMS", ctx.channel)
-            return
-
-        # is chatgpt enabled?
-        if not config.BOT_OPENAI_KEY:
-            await FancyErrors("DISABLED_FEATURE", ctx.channel)
-            return
-        
-        # author isn't in a voice channel
-        if not ctx.author.voice:
-            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel)
-            return
-        
-        # we're not in voice, lets change that
-        if not ctx.guild.voice_client:
-            await JoinVoice(ctx)
-
-        if args:
-            endless_radio[guild_id] = args
-            await ctx.send(f"♾️ Endless mix enabled, theme: **{args}**.")
-        elif endless_radio[guild_id] == False:
-            endless_radio[guild_id] = "anything, im not picky"
-            await ctx.send(f"♾️ Endless mix enabled, theme: anything, im not picky.")
-        else:
-            endless_radio[guild_id] = False
-            await ctx.send(f"♾️ Endless mix disabled.")
 
     ####################################################################
     # trigger: !play
@@ -336,16 +366,24 @@ class Music(commands.Cog, name="Music"):
     ####################################################################
     # trigger: !radio
     # ----
-    # Generates a ChatGPT 10 song playlist based off context.
+    # Endlessly adds new music to the queue when enabled and there is
+    # no queue.
     ####################################################################
-    @commands.command(name="radio", aliases=['aiplaylist'])
-    async def ai_playlist(self, ctx, *, args):
+    @commands.command(name='radio')
+    async def ai_radio(self, ctx, *, args=None):
         """
-        Generates a ChatGPT 10 song playlist based off context.
+        Toggles endless mix mode.
 
         Syntax:
-            !radio <theme>
+            !radio [<null>|<theme>]
         """
+        global endless_radio
+        guild_id = ctx.guild.id
+
+        # are you even allowed to use this command?
+        if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
+            await FancyErrors("AUTHOR_PERMS", ctx.channel)
+            return
 
         # is chatgpt enabled?
         if not config.BOT_OPENAI_KEY:
@@ -360,45 +398,16 @@ class Music(commands.Cog, name="Music"):
         # we're not in voice, lets change that
         if not ctx.guild.voice_client:
             await JoinVoice(ctx)
-        
-        # what are you asking that's shorter, really
-        if len(args) < 3:
-            await FancyErrors("SHORT", ctx.channel)
-            return
-        
-        conversation = [
-            { "role": "system", "content": f"return only the information requested with no additional words or context" },
-            { "role": "user", "content": f"make a playlist of 10 songs, which can include other artists based off {args}" }
-        ]
 
-        try:
-            response = openai.ChatCompletion.create(
-                model=config.BOT_OPENAI_MODEL,
-                messages=conversation,
-                temperature=0.8,
-                max_tokens=1000
-            )
-
-            # filter out the goop
-            parsed_response = response['choices'][0].message.content.split('\n')
-            pattern = r'^\d+\.\s'
-
-            playlist = []
-            for item in parsed_response:
-                if re.match(pattern, item):
-                    parts = re.split(pattern, item, maxsplit=1)
-                    if len(parts) == 2:
-                        playlist.append(f"{parts[1].strip()} audio")
-
-            info_embed = discord.Embed(description=f"[1/3] Generating your ChatGPT playlist...")
-            message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
-            await QueueSong(self.bot, playlist, 'radio', False, message, ctx.guild.id, ctx.guild.voice_client)
-
-
-        except openai.error.ServiceUnavailableError:
-            await FancyErrors("API_ERROR", ctx.channel)
-            return
-        
+        if args:
+            endless_radio[guild_id] = args
+            await ctx.send(f"📻 Radio enabled, theme: **{args}**.")
+        elif endless_radio[guild_id] == False:
+            endless_radio[guild_id] = "anything, im not picky"
+            await ctx.send(f"📻 Radio enabled, theme: anything, im not picky.")
+        else:
+            endless_radio[guild_id] = False
+            await ctx.send(f"📻 Radio disabled.")           
 
     ####################################################################
     # trigger: !remove
@@ -516,6 +525,29 @@ class Music(commands.Cog, name="Music"):
                 await PlayNextSong(self.bot, guild_id, ctx.guild.voice_client)
 
 ####################################################################
+# function: ChatGPT(bot, data)
+# ----
+# TBA
+####################################################################
+async def ChatGPT(bot, sys_content, user_content):
+    conversation = [
+        { "role": "system", "content": sys_content },
+        { "role": "user", "content": user_content }
+    ]
+
+    try:
+        response = openai.ChatCompletion.create(
+            model=config.BOT_OPENAI_MODEL,
+            messages=conversation,
+            temperature=0.8,
+            max_tokens=1000
+        )
+        return response
+
+    except openai.error.ServiceUnavailableError:
+        return "API_ERROR"
+
+####################################################################
 # function: CheckBrokenPlaying(bot)
 # ----
 # TBA
@@ -531,7 +563,6 @@ async def CheckBrokenPlaying(bot):
 
         await asyncio.sleep(5)
 
-
 ####################################################################
 # function: CheckEndlessMix(bot)
 # ----
@@ -544,48 +575,44 @@ async def CheckEndlessMix(bot):
             guild_str = str(guild_id)
             voice_client = bot.get_guild(guild_id).voice_client
 
-            # build recently played songs list
-            last_hour = []
-            for entry in song_history[guild_str]:
-                if entry and float(entry["timestamp"]) > (time.time() - 3600) and entry["title"] not in last_hour:
-                    clean_title = re.sub(r'\s*\((?!Audio|Video|Lyric)[^)]*\)', '', entry["title"], flags=re.IGNORECASE)
-                    last_hour.append(clean_title)
-
+            # is this thing even on?
             if (guild_id in endless_radio and endless_radio[guild_id]) and (guild_id not in queue or not queue[guild_id]):
                     if voice_client:
 
-                        conversation = [
-                            { "role": "system", "content": f"return only the information requested with no additional words or context" },
-                            { "role": "user", "content": f"make a playlist of 3 songs, with the following theme: {endless_radio[guild_id]}. Do not include any of the following: {last_hour}" }
-                        ]
+                        theme = endless_radio[guild_id]
 
-                        try:
-                            response = openai.ChatCompletion.create(
-                                model=config.BOT_OPENAI_MODEL,
-                                messages=conversation,
-                                temperature=0.8,
-                                max_tokens=1000
-                            )
-
-                            # filter out the goop
-                            parsed_response = response['choices'][0].message.content.split('\n')
-                            pattern = r'^\d+\.\s'
-
-                            playlist = []
-                            for item in parsed_response:
-                                if re.match(pattern, item):
-                                    parts = re.split(pattern, item, maxsplit=1)
-                                    if len(parts) == 2:
-                                        playlist.append(f"{parts[1].strip()} audio")
-
+                        # do we already know this theme?
+                        if theme in radio_playlists:
+                            playlist = random.sample(radio_playlists[theme], 3)
                             await QueueSong(bot, playlist, 'endless', False, 'endless', guild_id, voice_client)
 
 
-                        except openai.error.ServiceUnavailableError:
-                            await FancyErrors("API_ERROR", ctx.channel)
-                            return
+                        # we don't, lets build a setlist
+                        else:
+                            try:
+                                radio_playlists[theme] = []
+                                response = await ChatGPT(
+                                    bot,
+                                    "Return only the information requested with no additional words or context.",
+                                    f"make a playlist of 50 songs, including artist name (formatted as artist - song), themed around: {endless_radio[guild_id]}."
+                                )
+
+                                # filter out the goop
+                                parsed_response = response['choices'][0].message.content.split('\n')
+                                pattern = r'^\d+\.\s'
+
+                                for item in parsed_response:
+                                    if re.match(pattern, item):
+                                        parts = re.split(pattern, item, maxsplit=1)
+                                        radio_playlists[theme].append(parts[1].strip())
+
+                                SaveRadio()
+
+                            except openai.error.ServiceUnavailableError:
+                                await FancyErrors("API_ERROR", ctx.channel)
+                                return
         
-        await asyncio.sleep(15)
+        await asyncio.sleep(5)
 
 ####################################################################
 # function: CheckVoiceIdle(bot)
@@ -703,6 +730,7 @@ async def GetQueue(ctx, extra=None):
 
     output.add_field(name="Up Next:", value="No queue.", inline=False)
 
+    # more than 10? let's set some boundaries...
     if len(queue[guild_id]) > 10:
         first_10 = queue[guild_id][:10]
         for i, song in enumerate(first_10, 1):
@@ -713,6 +741,7 @@ async def GetQueue(ctx, extra=None):
                 output.set_field_at(index=1, name="Up Next:", value=f"{output.fields[1].value}**{i}**. {title}\n", inline=False)
         output.set_field_at(index=1, name="Up Next:", value=f"{output.fields[1].value}And {len(queue[guild_id]) - 10} more...", inline=False)
 
+    # less than 10, give em the sauce
     else:
         for i, song in enumerate(queue[guild_id], 1):
             title = song['title'].replace('*', r'\*')
@@ -722,7 +751,7 @@ async def GetQueue(ctx, extra=None):
                 output.set_field_at(index=1, name="Up Next:", value=f"{output.fields[1].value}**{i}**. {title}\n", inline=False)
 
     # feature status
-    output.add_field(name="Settings:", value=f"🔊: {settings[str(guild_id)]['volume']}%\n🔁: {repeat[guild_id] and 'on' or 'off'}\n🔀: {shuffle[guild_id] and 'on' or 'off'}\n♾️: {endless_radio[guild_id] and endless_radio[guild_id] or 'off'}", inline=False)
+    output.add_field(name="Settings:", value=f"🔊: {settings[str(guild_id)]['volume']}%\n🔁: {repeat[guild_id] and 'on' or 'off'}\n🔀: {shuffle[guild_id] and 'on' or 'off'}\n📻: {endless_radio[guild_id] and endless_radio[guild_id] or 'off'}", inline=False)
 
     await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
 
@@ -844,7 +873,7 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
 
                 try:
                     log_music.info(f"Downloading song {i} of {len(playlist)} from endless playlist")
-                    song = await DownloadSong(item, 'search')
+                    song = await DownloadSong(f"{item} audio", 'search')
                     queue[guild_id].append(song[0])
                     temp += f"{i}. {song[0]['title']}\n"
 
