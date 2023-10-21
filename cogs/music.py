@@ -27,8 +27,21 @@ from func import LoadSettings, FancyErrors, CheckPermissions
 # we need voice functions
 from cogs.voice import JoinVoice
 
-# load our settings from settings.json
+def LoadSettings():
+    try:
+        with open('settings.json', 'r') as file:
+            return json.load(file)
+    except FileNotFoundError:
+        with open('settings.json', 'w') as file:
+            default = {}
+            json.dump(default, file, indent=4)
+            return default
+
 settings = LoadSettings()
+
+def SaveSettings():
+    with open('settings.json', 'w') as file:
+        json.dump(settings, file, indent=4)
 
 # build song history
 def LoadHistory():
@@ -69,6 +82,7 @@ endless_radio = {}
 
 last_activity_time = {}
 start_time = {}
+pause_time = {}
 
 song_history = LoadHistory()
 radio_playlists = LoadRadio()
@@ -114,6 +128,9 @@ class Music(commands.Cog, name="Music"):
 
             if not guild_id in start_time:
                 start_time[guild_id] = None
+
+            if not guild_id in pause_time:
+                pause_time[guild_id] = None
 
         # check if the queue is broken
         self.bot.loop.create_task(CheckBrokenPlaying(self.bot))
@@ -257,6 +274,49 @@ class Music(commands.Cog, name="Music"):
         info_embed = discord.Embed(description=f"Removed {len(queue[guild_id])} songs from queue.")
         message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
         queue[guild_id] = []
+
+    ####################################################################
+    # trigger: !pause
+    # ----
+    # Pauses the song.
+    ####################################################################
+    @commands.command(name='pause')
+    async def pause_song(self, ctx, *, args=None):
+        """
+        Pauses the song playing.
+
+        Syntax:
+            !pause
+        """
+        guild_id = ctx.guild.id
+
+        # are you even allowed to use this command?
+        if not await CheckPermissions(self.bot, ctx.guild.id, ctx.author.id, ctx.author.roles):
+            await FancyErrors("AUTHOR_PERMS", ctx.channel)
+            return
+
+        # author isn't in a voice channel
+        if not ctx.author.voice:
+            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel)
+            return
+
+        # we're not in voice, lets change that
+        if not ctx.guild.voice_client:
+            await FancyErrors("BOT_NO_VOICE", ctx.channel)
+            return
+
+        # we're not playing anything
+        if not ctx.guild.voice_client.is_playing():
+            await FancyErrors("NO_PLAYING", ctx.channel)
+            return
+        
+        # hol' up fam (pause the song)
+        pause_time[guild_id] = time.time()
+        ctx.guild.voice_client.pause()
+
+        # build our message
+        info_embed = discord.Embed(description=f"⏸️ Playback paused.")
+        message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
 
     ####################################################################
     # trigger: !play
@@ -472,6 +532,52 @@ class Music(commands.Cog, name="Music"):
         await ctx.send(f"🔁 Repeat mode {repeat[guild_id] and 'enabled' or 'disabled'}.")
 
     ####################################################################
+    # trigger: !resume
+    # ----
+    # Resumes song playback.
+    ####################################################################
+    @commands.command(name='resume')
+    async def resume_song(self, ctx, *, args=None):
+        """
+        Resume song playback.
+
+        Syntax:
+            !resume
+        """
+        global start_time
+        guild_id = ctx.guild.id
+
+        # are you even allowed to use this command?
+        if not await CheckPermissions(self.bot, ctx.guild.id, ctx.author.id, ctx.author.roles):
+            await FancyErrors("AUTHOR_PERMS", ctx.channel)
+            return
+
+        # author isn't in a voice channel
+        if not ctx.author.voice:
+            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel)
+            return
+
+        # we're not in voice
+        if not ctx.guild.voice_client:
+            await FancyErrors("BOT_NO_VOICE", ctx.channel)
+            return
+
+        # we're not playing anything
+        if not ctx.guild.voice_client.is_paused():
+            await FancyErrors("NO_PLAYING", ctx.channel)
+            return
+        
+        # update the start_time
+        start_time[guild_id] += (pause_time[guild_id] - start_time[guild_id])
+        
+        # catJAM lets vibe catJAM
+        ctx.guild.voice_client.resume()
+
+        # build our message
+        info_embed = discord.Embed(description=f"🤘 Playback resumed.")
+        message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
+
+    ####################################################################
     # trigger: !shuffle
     # ----
     # Enables our shuffle
@@ -558,7 +664,7 @@ async def CheckBrokenPlaying(bot):
             guild_id = guild.id
             voice_client = bot.get_guild(guild_id).voice_client
 
-            if (voice_client and not voice_client.is_playing()) and (guild_id in queue and queue[guild_id]):
+            if voice_client and (not voice_client.is_playing() and not voice_client.is_paused()) and (guild_id in queue and queue[guild_id]):
                 await PlayNextSong(bot, guild_id, voice_client)
 
         await asyncio.sleep(5)
@@ -707,6 +813,7 @@ async def DownloadSong(args, method, item=None):
 ####################################################################
 async def GetQueue(ctx, extra=None):
     guild_id = ctx.guild.id
+    voice_client = ctx.guild.voice_client
 
     if not extra:
         output = discord.Embed(title="Song Queue")
@@ -715,14 +822,14 @@ async def GetQueue(ctx, extra=None):
 
     # currently playing
     output.add_field(name="Now Playing:", value="Nothing playing.", inline=False)
-    if ctx.guild.voice_client and ctx.guild.voice_client.is_playing() and currently_playing:
+    if voice_client and ((voice_client.is_playing() and currently_playing) or voice_client.is_paused()):
 
         title = currently_playing[guild_id]['title'].replace('*', r'\*')
-        progress = time.time() - start_time[guild_id]
+        progress = voice_client.is_paused() and pause_time[guild_id] - start_time[guild_id] or time.time() - start_time[guild_id]
         total_duration = currently_playing[guild_id]["duration"]
         current = str(datetime.timedelta(seconds=int(progress)))
         total = str(datetime.timedelta(seconds=int(total_duration)))
-        progress_bar = f"▶ {'▬' * int(10 * (int(progress) / int(total_duration)))}🔘{'▬' * (10 - int(10 * (int(progress) / int(total_duration))))}🔈[{current} / {total}]"
+        progress_bar = f"{voice_client.is_paused() and '⏸️' or '▶️'} {'▬' * int(10 * (int(progress) / int(total_duration)))}🔘{'▬' * (10 - int(10 * (int(progress) / int(total_duration))))}🔈[{current} / {total}]"
     
         output.set_field_at(index=0, name="Now Playing:", value=f"{title}\n{progress_bar}", inline=False)
         if currently_playing[guild_id]['thumbnail']:
@@ -764,7 +871,7 @@ async def PlayNextSong(bot, guild_id, channel):
     global queue, currently_playing, song_history
     guild_str = str(guild_id)
 
-    if channel.is_playing():
+    if channel.is_playing() or channel.is_paused():
         return
 
     if queue[guild_id]:
@@ -782,9 +889,6 @@ async def PlayNextSong(bot, guild_id, channel):
 
         # actually play the song
         channel.play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(path), volume=volume), after=remove_song)
-
-        # update status
-        await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name=title))
 
         # add to song history
         song_history[guild_str].append({"timestamp": time.time(), "title": title})
@@ -872,7 +976,7 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
             for i, item in enumerate(args, start=1):
 
                 try:
-                    log_music.info(f"Downloading song {i} of {len(playlist)} from endless playlist")
+                    log_music.info(f"Downloading \"{item}\".")
                     song = await DownloadSong(f"{item} audio", 'search')
                     queue[guild_id].append(song[0])
                     temp += f"{i}. {song[0]['title']}\n"
