@@ -74,6 +74,7 @@ def SaveRadio():
         json.dump(radio_playlists, file, indent=4)
 
 # build our temp variables
+BOT_SPOTIFY_KEY = ""
 currently_playing = {}
 queue = {}
 repeat = {}
@@ -86,6 +87,7 @@ pause_time = {}
 
 song_history = LoadHistory()
 radio_playlists = LoadRadio()
+hot100 = []
 
 # define the class
 class Music(commands.Cog, name="Music"):
@@ -139,6 +141,9 @@ class Music(commands.Cog, name="Music"):
 
         # background task for endless mix
         self.bot.loop.create_task(CheckEndlessMix(self.bot))
+
+        # generate a spotify key
+        self.bot.loop.create_task(CreateSpotifyKey(self.bot))
 
     ####################################################################
     # on_voice_state_update()
@@ -289,6 +294,45 @@ class Music(commands.Cog, name="Music"):
         queue[guild_id] = []
 
     ####################################################################
+    # trigger: !hot100
+    # ----
+    # Endlessly adds new music to the queue when enabled and there is
+    # no queue.
+    ####################################################################
+    @commands.command(name='hot100')
+    async def hot100_radio(self, ctx):
+        """
+        Toggles Billboard "Hot 100" radio.
+
+        Syntax:
+            !hot100
+        """
+        global endless_radio
+        guild_id = ctx.guild.id
+        current_year = datetime.datetime.now().year
+
+        # are you even allowed to use this command?
+        if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
+            await FancyErrors("AUTHOR_PERMS", ctx.channel)
+            return
+        
+        # author isn't in a voice channel
+        if not ctx.author.voice:
+            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel)
+            return
+        
+        # we're not in voice, lets change that
+        if not ctx.guild.voice_client:
+            await JoinVoice(ctx)
+
+        if endless_radio[guild_id] == False:
+            endless_radio[guild_id] = f"Billboard Hot💯 ({current_year})"
+            await ctx.send(f"📻 Radio enabled, theme: **Billboard Hot💯 ({current_year})**")
+        else:
+            endless_radio[guild_id] = False
+            await ctx.send(f"📻 Radio disabled.") 
+
+    ####################################################################
     # trigger: !pause
     # ----
     # Pauses the song.
@@ -384,7 +428,7 @@ class Music(commands.Cog, name="Music"):
             !play [search | link]
         """
         guild_id = ctx.guild.id
-        is_playlist = '&list=' in args and True or False
+        is_playlist = ('&list=' in args or 'open.spotify.com/playlist' in args) and True or False
 
         # are you even allowed to use this command?
         if not await CheckPermissions(self.bot, ctx.guild.id, ctx.author.id, ctx.author.roles):
@@ -697,11 +741,32 @@ async def CheckEndlessMix(bot):
             # is this thing even on?
             if (guild_id in endless_radio and endless_radio[guild_id]) and (guild_id not in queue or not queue[guild_id]):
                     if voice_client:
-
                         theme = endless_radio[guild_id]
 
+                        # hot100 checkpoint🔞
+                        if "Billboard Hot💯" in theme:
+                            
+                            # does the chart already exist?
+                            if len(hot100) == 0:
+                                print("grabbing hot 100")
+                                url = 'https://api.spotify.com/v1/playlists/37i9dQZF1DXcBWIGoYBM5M'
+                                headers = {'Authorization': f'Bearer {config.BOT_SPOTIFY_KEY}'}
+
+                                response = requests.get(url, headers=headers)
+                                playlist_raw = response.json()
+                                playlist = playlist_raw['tracks']['items']
+
+                                for track in playlist:
+                                    artist = track['track']['artists'][0]['name']
+                                    song = track['track']['name']
+                                    hot100.append(f"{artist} - {song}")
+
+                            playlist = random.sample(hot100, 3)
+                            print(hot100)
+                            await QueueSong(bot, playlist, 'endless', False, 'endless', guild_id, voice_client)
+
                         # do we already know this theme?
-                        if theme.lower() in radio_playlists:
+                        elif theme.lower() in radio_playlists:
                             playlist = random.sample(radio_playlists[theme], 3)
                             await QueueSong(bot, playlist, 'endless', False, 'endless', guild_id, voice_client)
 
@@ -760,6 +825,32 @@ async def CheckVoiceIdle(bot):
             await PlayNextSong(bot, guild_id, voice_client)
 
         await asyncio.sleep(3)
+
+####################################################################
+# function: CreateSpotifyKey(bot)
+# ----
+# Generates a new Spotify API key.
+####################################################################
+async def CreateSpotifyKey(bot):
+    global BOT_SPOTIFY_KEY
+    while True:
+        # generate a spotify key
+        response = requests.post(
+            "https://accounts.spotify.com/api/token",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            data={
+                "grant_type": "client_credentials",
+                "client_id": config.BOT_SPOTIFY_CLIENT,
+                "client_secret": config.BOT_SPOTIFY_SECRET
+            }
+        )
+        data = response.json()
+        log_music.info("Generated new Spotify API Access Token.")
+        BOT_SPOTIFY_KEY = data['access_token']
+
+        await asyncio.sleep(1800)
+
+
 
 ####################################################################
 # function: DownloadSong(args, type, item)
@@ -930,7 +1021,7 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
     try:
         # we've got a playlist
         is_playlist = method == 'link' and True or False
-        if is_playlist:
+        if is_playlist and 'list=' in args:
             playlist_id = re.search(r'list=([a-zA-Z0-9_-]+)', args).group(1)
             response = requests.get(f'https://www.googleapis.com/youtube/v3/playlists?key={config.BOT_YOUTUBE_KEY}&part=contentDetails&id={playlist_id}')
             data = response.json()
@@ -951,6 +1042,57 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
                     log_music.error(e)
 
             embed = discord.Embed(description=f"Added {playlist_length} tracks to queue.")
+            await message.edit(content=None, embed=embed)
+            return
+        
+        # spotify playlist
+        elif is_playlist and 'open.spotify.com/playlist/' in args:
+            playlist_id = re.search(r'/playlist/([a-zA-Z0-9]+)(?:[/?]|$)', args).group(1)
+            response = requests.get(f'https://api.spotify.com/v1/playlists/{playlist_id}', headers={'Authorization': f'Bearer {BOT_SPOTIFY_KEY}'})
+            data_raw = response.json()
+            data = data_raw['tracks']['items']
+            playlist_length = len(data) <= config.MUSIC_MAX_PLAYLIST and len(data) or config.MUSIC_MAX_PLAYLIST
+
+
+            log_music.info(f"playlist ({playlist_id}) true length {len(data)}")
+
+            for i, track in enumerate(data[:20], 1):
+                embed = discord.Embed(description=f"Loading {i} of {playlist_length} tracks from \"{data_raw['name']}\"...")
+                await message.edit(content=None, embed=embed)
+                try:
+                    log_music.info(f"Downloading song {i} of playlist {playlist_id}")
+                    song = await DownloadSong(f"{track['track']['artists'][0]['name']} - {track['track']['name']} audio", "search")
+                    queue[guild_id].append(song[0])
+
+                    if not voice_client.is_playing() and queue[guild_id]:
+                        await PlayNextSong(bot, guild_id, voice_client)
+                except Exception as e:
+                    log_music.error(e)
+
+            embed = discord.Embed(description=f"Added {playlist_length} tracks to queue.")
+            await message.edit(content=None, embed=embed)
+            return
+
+        # spotify link
+        elif 'open.spotify.com/track/' in args:
+            track_id = re.search(r'/track/([a-zA-Z0-9]+)(?:[/?]|$)', args).group(1)
+            response = requests.get(f'https://api.spotify.com/v1/tracks/{track_id}', headers={'Authorization': f'Bearer {BOT_SPOTIFY_KEY}'})
+            track = response.json()
+            title = f"{track['artists'][0]['name']} - {track['name']}"
+
+            try:
+                log_music.info(f"Downloading {title}")
+                embed = discord.Embed(description=f"Downloading {title}")
+                await message.edit(content=None, embed=embed)
+                song = await DownloadSong(f"{title} audio", "search")
+                queue[guild_id].append(song[0])
+
+                if not voice_client.is_playing() and queue[guild_id]:
+                    await PlayNextSong(bot, guild_id, voice_client)
+            except Exception as e:
+                log_music.error(e)
+
+            embed = discord.Embed(description=f"Added {song[0]['title']} to queue.")
             await message.edit(content=None, embed=embed)
             return
 
