@@ -680,7 +680,7 @@ async def CheckBrokenPlaying(bot):
             if voice_client and (not voice_client.is_playing() and not voice_client.is_paused()) and (guild_id in queue and queue[guild_id]):
                 await PlayNextSong(bot, guild_id, voice_client)
 
-        await asyncio.sleep(5)
+        await asyncio.sleep(3)
 
 ####################################################################
 # function: CheckEndlessMix(bot)
@@ -731,7 +731,7 @@ async def CheckEndlessMix(bot):
                                 print("Service Unavailable :(")
                                 return
         
-        await asyncio.sleep(5)
+        await asyncio.sleep(3)
 
 ####################################################################
 # function: CheckVoiceIdle(bot)
@@ -759,7 +759,7 @@ async def CheckVoiceIdle(bot):
             # always checking whats next to play
             await PlayNextSong(bot, guild_id, voice_client)
 
-        await asyncio.sleep(1)
+        await asyncio.sleep(3)
 
 ####################################################################
 # function: DownloadSong(args, type, item)
