@@ -95,7 +95,6 @@ class Music(commands.Cog, name="Music"):
     ####################################################################
     # on_ready()
     ####################################################################
-
     @commands.Cog.listener()
     async def on_ready(self):
 
@@ -140,6 +139,20 @@ class Music(commands.Cog, name="Music"):
 
         # background task for endless mix
         self.bot.loop.create_task(CheckEndlessMix(self.bot))
+
+    ####################################################################
+    # on_voice_state_update()
+    ####################################################################
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, author, before, after):
+        if self.bot.user == author:
+            guild_id = author.guild.id
+            voice_client = self.bot.get_guild(guild_id).voice_client
+
+            # start playing music again if we move channels
+            if currently_playing[guild_id] and voice_client:
+                await asyncio.sleep(1)
+                voice_client.resume()
 
     ####################################################################
     # trigger: !aiplaylist
