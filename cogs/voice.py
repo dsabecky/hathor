@@ -5,12 +5,27 @@ import time
 import asyncio
 import yt_dlp
 import os
+import json
 
 import config
 import func
-from func import LoadSettings, SaveSettings, FancyErrors, CheckPermissions
+from func import LoadSettings, FancyErrors, CheckPermissions
+
+def LoadSettings():
+    try:
+        with open('settings.json', 'r') as file:
+            return json.load(file)
+    except FileNotFoundError:
+        with open('settings.json', 'w') as file:
+            default = {}
+            json.dump(default, file, indent=4)
+            return default
 
 settings = LoadSettings()
+
+def SaveSettings():
+    with open('settings.json', 'w') as file:
+        json.dump(settings, file, indent=4)
 
 queue = {}
 currently_playing = {}
