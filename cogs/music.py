@@ -659,7 +659,7 @@ async def ChatGPT(bot, sys_content, user_content):
             model=config.BOT_OPENAI_MODEL,
             messages=conversation,
             temperature=0.8,
-            max_tokens=1000
+            max_tokens=2000
         )
         return response
 
@@ -701,7 +701,7 @@ async def CheckEndlessMix(bot):
                         theme = endless_radio[guild_id]
 
                         # do we already know this theme?
-                        if theme in radio_playlists:
+                        if theme.lower() in radio_playlists:
                             playlist = random.sample(radio_playlists[theme], 3)
                             await QueueSong(bot, playlist, 'endless', False, 'endless', guild_id, voice_client)
 
@@ -709,11 +709,11 @@ async def CheckEndlessMix(bot):
                         # we don't, lets build a setlist
                         else:
                             try:
-                                radio_playlists[theme] = []
+                                radio_playlists[theme.lower()] = []
                                 response = await ChatGPT(
                                     bot,
                                     "Return only the information requested with no additional words or context.",
-                                    f"make a playlist of 50 songs, including artist name (formatted as artist - song), themed around: {endless_radio[guild_id]}."
+                                    f"Make a playlist of 50 songs, including artist name (formatted as artist - song), themed around: {endless_radio[guild_id]}."
                                 )
 
                                 # filter out the goop
