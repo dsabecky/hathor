@@ -728,7 +728,7 @@ async def CheckEndlessMix(bot):
                                 SaveRadio()
 
                             except openai.error.ServiceUnavailableError:
-                                await FancyErrors("API_ERROR", ctx.channel)
+                                print("Service Unavailable :(")
                                 return
         
         await asyncio.sleep(5)
