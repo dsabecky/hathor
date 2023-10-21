@@ -750,7 +750,7 @@ async def CheckEndlessMix(bot):
                             if len(hot100) == 0:
                                 print("grabbing hot 100")
                                 url = 'https://api.spotify.com/v1/playlists/37i9dQZF1DXcBWIGoYBM5M'
-                                headers = {'Authorization': f'Bearer {config.BOT_SPOTIFY_KEY}'}
+                                headers = {'Authorization': f'Bearer {BOT_SPOTIFY_KEY}'}
 
                                 response = requests.get(url, headers=headers)
                                 playlist_raw = response.json()
@@ -855,7 +855,7 @@ async def CreateSpotifyKey(bot):
 ####################################################################
 # function: DownloadSong(args, type, item)
 # ----
-# Returns prewritten errors.
+# Downloads the song requested from QueueSong.
 ####################################################################
 async def DownloadSong(args, method, item=None):
     args = method == "search" and f"ytsearch:{args}" or args
