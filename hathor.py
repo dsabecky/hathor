@@ -215,7 +215,7 @@ async def set_perms(ctx, opts=None, id_type=None, discord_id=None):
     guild = await bot.fetch_guild(ctx.guild.id) # why cant i get this from ctx.guild???
     guild_id, guild_str = guild.id, str(guild.id)
     owner = await bot.fetch_user(guild.owner_id)
-    owner_id, owner_name = owner.id, owner.name
+    owner_name = owner.name
 
     # are you even allowed to use this command?
     if not await CheckPermissions(bot, guild_id, ctx.author.id, ctx.author.roles):

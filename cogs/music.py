@@ -185,7 +185,7 @@ class Music(commands.Cog, name="Music"):
         
         # we're not in voice, lets change that
         if not ctx.guild.voice_client:
-            await JoinVoice(ctx)
+            await JoinVoice(self.bot, ctx)
         
         # what are you asking that's shorter, really
         if len(args) < 3:
@@ -323,7 +323,7 @@ class Music(commands.Cog, name="Music"):
         
         # we're not in voice, lets change that
         if not ctx.guild.voice_client:
-            await JoinVoice(ctx)
+            await JoinVoice(self.bot, ctx)
 
         if endless_radio[guild_id] == False:
             endless_radio[guild_id] = f"Billboard Hot💯 ({current_year})"
@@ -397,7 +397,7 @@ class Music(commands.Cog, name="Music"):
 
         # we're not in voice, lets change that
         if not ctx.guild.voice_client:
-            await JoinVoice(ctx)
+            await JoinVoice(self.bot, ctx)
 
         # no data provided
         if not args:
@@ -447,7 +447,7 @@ class Music(commands.Cog, name="Music"):
 
         # we're not in voice, lets change that
         if not ctx.guild.voice_client:
-            await JoinVoice(ctx)
+            await JoinVoice(self.bot, ctx)
 
         # no data provided
         if not args:
@@ -514,7 +514,7 @@ class Music(commands.Cog, name="Music"):
         
         # we're not in voice, lets change that
         if not ctx.guild.voice_client:
-            await JoinVoice(ctx)
+            await JoinVoice(self.bot, ctx)
 
         if args:
             endless_radio[guild_id] = args

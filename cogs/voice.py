@@ -128,7 +128,7 @@ class Voice(commands.Cog, name="Voice"):
         Syntax:
             !join
         """
-        await JoinVoice(ctx)
+        await JoinVoice(self.bot, ctx)
 
     ####################################################################
     # trigger: !leave
@@ -203,8 +203,8 @@ class Voice(commands.Cog, name="Voice"):
 # ----
 # Joins the current voice channel.
 ####################################################################
-async def JoinVoice(ctx):
-    if ctx.guild.voice_client:
+async def JoinVoice(bot, ctx):
+    if ctx.guild.voice_client and not await CheckPermissions(bot, ctx.guild.id, ctx.author.id, ctx.author.roles):
         await FancyErrors("BOT_EXIST_VOICE", ctx.channel)
     elif not ctx.author.voice:
         await FancyErrors("AUTHOR_NO_VOICE", ctx.channel)
