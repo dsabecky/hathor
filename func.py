@@ -42,6 +42,7 @@ err = {
         'SONG_LENGTH':          "Requested song is too long!",
         'SYNTAX':               "Syntax error",
         "VOICE_MISMATCH":       "You must be in the same voice channel to do this",
+        "VOICE_FULL":           "That voice channel is full",
         'VOL_RANGE':            "Invalid! Volume range is 1-100",
         'YTMD':                 "You're the man now, dog!"
     }
