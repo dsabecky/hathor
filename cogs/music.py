@@ -297,17 +297,17 @@ class Music(commands.Cog, name="Music"):
         queue[guild_id] = []
 
     ####################################################################
-    # trigger: !fuse
+    # trigger: !defuse
     # ----
-    # Fuses a new radio station into the current radio station(s).
+    # Removes a fused station from the mix.
     ####################################################################
-    @commands.command(name='fuse')
-    async def fuse_radio(self, ctx, *, args=None):
+    @commands.command(name='defuse')
+    async def defuse_radio(self, ctx, *, args=None):
         """
-        Fuses a new radio station into the current station(s).
+        Removes a fused station from the mix.
 
         Syntax:
-            !fuse <theme>
+            !defuse <theme>
         """
         global endless_radio
         guild_id = ctx.guild.id
@@ -330,6 +330,69 @@ class Music(commands.Cog, name="Music"):
             await FancyErrors("NO_RADIO", ctx.channel)
             return
         
+        # fusion doesnt exist
+        if guild_id not in fuse_radio or (fuse_radio[guild_id] and args.lower() not in fuse_radio[guild_id]):
+            await FancyErrors("NO_FUSE_EXIST", ctx.channel)
+            return
+        
+        # let's defuse this situation
+        if any(station.lower() == args.lower() for station in fuse_radio[guild_id]):
+            fuse_radio[guild_id].remove(args)
+
+        # send our mesage and build a new station
+        info_embed = discord.Embed(description=f"📻 Removed \"{args}\" from the radio.")
+        message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
+        await FuseRadio(self.bot, ctx)   
+
+    ####################################################################
+    # trigger: !fuse
+    # ----
+    # Fuses a new radio station into the current radio station(s).
+    ####################################################################
+    @commands.command(name='fuse')
+    async def fuse_radio(self, ctx, *, args=None):
+        """
+        Fuses a new radio station into the current station(s).
+        You can add multiple fusions by separating with: |
+
+        Syntax:
+            !fuse <theme>
+            !fuse <theme> | <theme>
+        """
+        global endless_radio
+        guild_id = ctx.guild.id
+        # are you even allowed to use this command?
+        if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
+            await FancyErrors("AUTHOR_PERMS", ctx.channel)
+            return
+        
+        # author isn't in a voice channel
+        if not ctx.author.voice:
+            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel)
+            return
+        
+        # empty theme
+        if not args:
+            await FancyErrors("SYNTAX", ctx.channel)
+            return
+        
+        # theres no radio playing
+        if endless_radio[guild_id] == False:
+            await FancyErrors("NO_RADIO", ctx.channel)
+            return
+        
+        if guild_id in fuse_radio and args in fuse_radio[guild_id]:
+            await FancyErrors("RADIO_EXIST", ctx.channel)
+            return
+        
+        # get list of stations
+        stations = ""
+        if "|" in args:
+            for i, part in enumerate(args.split("|"), 1):
+                stations += i == 1 and f"**{part}**" or f", **{part}**"  
+        else:
+            stations = f"**{args}**"
+        
         # too short
         if len(args) < 3:
             await FancyErrors("SHORT", ctx.channel)
@@ -337,10 +400,10 @@ class Music(commands.Cog, name="Music"):
         
         # we're not in voice, lets change that
         if not ctx.guild.voice_client:
-            await JoinVoice(self.bot, ctx)
+            await JoinVoice(self.bot, ctx)        
         
         # let's fuse the radio
-        info_embed = discord.Embed(description=f"📻 Fusing \"{args}\" into the radio.")
+        info_embed = discord.Embed(description=f"📻 Fusing \"{stations}\" into the radio.")
         message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
         await FuseRadio(self.bot, ctx, args)        
 
@@ -575,8 +638,23 @@ class Music(commands.Cog, name="Music"):
             fuse_playlist.pop(guild_id)
 
         if args:
-            endless_radio[guild_id] = args
-            info_embed = discord.Embed(description=f"📻 Radio enabled, theme: **{args}**.")
+            # check for fusion
+            if "|" in args:
+                stations = ""
+                for i, part in enumerate(args.split("|"), 1):
+                    if i == 1:
+                        endless_radio[guild_id] = part.strip()
+                        stations += f"**{part.strip()}**"
+                    else:
+                        stations += f", **{part.strip()}**"
+                info_embed = discord.Embed(description=f"📻 Radio enabled, fused themes: \"{stations}\".")
+                await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
+                await FuseRadio(self.bot, ctx, args)
+                return
+            else:
+                endless_radio[guild_id] = args
+                info_embed = discord.Embed(description=f"📻 Radio enabled, theme: **{args}**.")
+            
         elif endless_radio[guild_id] == False:
             endless_radio[guild_id] = "anything, im not picky"
             info_embed = discord.Embed(description=f"📻 Radio enabled, theme: anything, im not picky.")
@@ -982,8 +1060,9 @@ async def DownloadSong(args, method, item=None):
 # ----
 # Fuse function to merge radio stations.
 ####################################################################
-async def FuseRadio(bot, ctx, new_theme):
+async def FuseRadio(bot, ctx, new_theme=None):
     guild_id = ctx.guild.id
+    fuse_playlist[guild_id] = []
 
     # initial build
     if guild_id not in fuse_radio:
@@ -991,8 +1070,20 @@ async def FuseRadio(bot, ctx, new_theme):
         fuse_radio[guild_id].append(endless_radio[guild_id])
 
     # add the themes to the fuse, and clear out the old fuse station
-    fuse_radio[guild_id].append(new_theme)
-    fuse_playlist[guild_id] = []
+    if new_theme:
+        # add multiple fusions
+        if "|" in new_theme:
+            parts = new_theme.split("|")
+            for part in parts:
+                if part.strip() not in endless_radio[guild_id]:
+                    fuse_radio[guild_id].append(part.strip())
+        # add single fusion
+        else:
+            if new_theme not in endless_radio[guild_id]:
+                fuse_radio[guild_id].append(new_theme)
+
+    if fuse_radio[guild_id] == []:
+        return
 
     # how many songs are we grabbing from each station
     song_limit = math.ceil(50 / len(fuse_radio[guild_id]))
