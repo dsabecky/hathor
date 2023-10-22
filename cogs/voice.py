@@ -208,7 +208,7 @@ async def JoinVoice(bot, ctx):
         await FancyErrors("BOT_EXIST_VOICE", ctx.channel)
     elif not ctx.author.voice:
         await FancyErrors("AUTHOR_NO_VOICE", ctx.channel)
-    elif ctx.author.voice.channel.members >= ctx.author.voice.channel.user_limit:
+    elif ctx.author.voice.channel.user_limit <= len(ctx.author.voice.channel.members):
         await FancyErrors("VOICE_FULL", ctx.channel)
     else:
         channel = ctx.author.voice.channel
