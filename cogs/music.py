@@ -8,6 +8,7 @@ import requests
 
 # allow for extra bits
 import datetime
+import math
 import openai
 import os
 import random
@@ -80,6 +81,7 @@ queue = {}
 repeat = {}
 shuffle = {}
 endless_radio = {}
+fuse_radio = {}
 
 last_activity_time = {}
 start_time = {}
@@ -87,6 +89,7 @@ pause_time = {}
 
 song_history = LoadHistory()
 radio_playlists = LoadRadio()
+fuse_playlist = {}
 hot100 = []
 
 # define the class
@@ -294,6 +297,54 @@ class Music(commands.Cog, name="Music"):
         queue[guild_id] = []
 
     ####################################################################
+    # trigger: !fuse
+    # ----
+    # Fuses a new radio station into the current radio station(s).
+    ####################################################################
+    @commands.command(name='fuse')
+    async def fuse_radio(self, ctx, *, args=None):
+        """
+        Fuses a new radio station into the current station(s).
+
+        Syntax:
+            !fuse <theme>
+        """
+        global endless_radio
+        guild_id = ctx.guild.id
+        # are you even allowed to use this command?
+        if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
+            await FancyErrors("AUTHOR_PERMS", ctx.channel)
+            return
+        
+        # author isn't in a voice channel
+        if not ctx.author.voice:
+            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel)
+            return
+        
+        # empty theme
+        if not args:
+            await FancyErrors("SYNTAX", ctx.channel)
+            return
+        
+        if endless_radio[guild_id] == False:
+            await FancyErrors("NO_RADIO", ctx.channel)
+            return
+        
+        # too short
+        if len(args) < 3:
+            await FancyErrors("SHORT", ctx.channel)
+            return
+        
+        # we're not in voice, lets change that
+        if not ctx.guild.voice_client:
+            await JoinVoice(self.bot, ctx)
+        
+        # let's fuse the radio
+        info_embed = discord.Embed(description=f"📻 Fusing \"{args}\" into the radio.")
+        message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
+        await FuseRadio(self.bot, ctx, args)        
+
+    ####################################################################
     # trigger: !hot100
     # ----
     # Endlessly adds new music to the queue when enabled and there is
@@ -327,10 +378,12 @@ class Music(commands.Cog, name="Music"):
 
         if endless_radio[guild_id] == False:
             endless_radio[guild_id] = f"Billboard Hot💯 ({current_year})"
-            await ctx.send(f"📻 Radio enabled, theme: **Billboard Hot💯 ({current_year})**")
+            info_embed = discord.Embed(description=f"📻 Radio enabled, theme: **Billboard Hot💯 ({current_year})**")
         else:
             endless_radio[guild_id] = False
-            await ctx.send(f"📻 Radio disabled.") 
+            info_embed = discord.Embed(description=f"📻 Radio disabled.")
+
+        message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
 
     ####################################################################
     # trigger: !pause
@@ -516,15 +569,22 @@ class Music(commands.Cog, name="Music"):
         if not ctx.guild.voice_client:
             await JoinVoice(self.bot, ctx)
 
+        # cancel out fusion
+        if guild_id in fuse_radio:
+            fuse_radio.pop(guild_id)
+            fuse_playlist.pop(guild_id)
+
         if args:
             endless_radio[guild_id] = args
-            await ctx.send(f"📻 Radio enabled, theme: **{args}**.")
+            info_embed = discord.Embed(description=f"📻 Radio enabled, theme: **{args}**.")
         elif endless_radio[guild_id] == False:
             endless_radio[guild_id] = "anything, im not picky"
-            await ctx.send(f"📻 Radio enabled, theme: anything, im not picky.")
+            info_embed = discord.Embed(description=f"📻 Radio enabled, theme: anything, im not picky.")
         else:
             endless_radio[guild_id] = False
-            await ctx.send(f"📻 Radio disabled.")           
+            info_embed = discord.Embed(description=f"📻 Radio disabled.")
+        
+        await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())    
 
     ####################################################################
     # trigger: !remove
@@ -560,7 +620,8 @@ class Music(commands.Cog, name="Music"):
 
         else:
             song = queue[guild_id].pop((int(args) - 1))
-            await ctx.channel.send(f"Removed **{song['title']}** from queue.")
+            info_embed = discord.Embed(description=f"Removed **{song['title']}** from queue.")
+            await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
 
     ####################################################################
     # trigger: !repeat
@@ -586,7 +647,8 @@ class Music(commands.Cog, name="Music"):
         
         repeat[guild_id] = not repeat[guild_id]
 
-        await ctx.send(f"🔁 Repeat mode {repeat[guild_id] and 'enabled' or 'disabled'}.")
+        info_embed = discord.Embed(description=f"🔁 Repeat mode {repeat[guild_id] and 'enabled' or 'disabled'}.")
+        await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
 
     ####################################################################
     # trigger: !resume
@@ -657,7 +719,8 @@ class Music(commands.Cog, name="Music"):
         
         random.shuffle(queue[guild_id])
         shuffle[guild_id] = not shuffle[guild_id]
-        await ctx.send(f"🔀 Shuffle mode {shuffle[guild_id] and 'enabled' or 'disabled'}.")
+        info_embed = discord.Embed(description=f"🔀 Shuffle mode {shuffle[guild_id] and 'enabled' or 'disabled'}.")
+        message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
 
     ####################################################################
     # trigger: !skip
@@ -743,8 +806,13 @@ async def CheckEndlessMix(bot):
                     if voice_client:
                         theme = endless_radio[guild_id]
 
+                        # fuse radio checkpoint🔞
+                        if guild_id in fuse_radio:
+                            playlist = random.sample(fuse_playlist[guild_id], 3)
+                            await QueueSong(bot, playlist, 'endless', False, 'endless', guild_id, voice_client)
+
                         # hot100 checkpoint🔞
-                        if "Billboard Hot💯" in theme:
+                        elif "Billboard Hot💯" in theme:
                             
                             # does the chart already exist?
                             if len(hot100) == 0:
@@ -762,7 +830,6 @@ async def CheckEndlessMix(bot):
                                     hot100.append(f"{artist} - {song}")
 
                             playlist = random.sample(hot100, 3)
-                            print(hot100)
                             await QueueSong(bot, playlist, 'endless', False, 'endless', guild_id, voice_client)
 
                         # do we already know this theme?
@@ -778,7 +845,7 @@ async def CheckEndlessMix(bot):
                                 response = await ChatGPT(
                                     bot,
                                     "Return only the information requested with no additional words or context.",
-                                    f"Make a playlist of 50 songs, including artist name (formatted as artist - song), themed around: {endless_radio[guild_id]}."
+                                    f"Make a playlist of 50 songs (formatted as artist - song), themed around: {endless_radio[guild_id]}. Include similar artists and songs."
                                 )
 
                                 # filter out the goop
@@ -796,7 +863,7 @@ async def CheckEndlessMix(bot):
                                 print("Service Unavailable :(")
                                 return
         
-        await asyncio.sleep(3)
+        await asyncio.sleep(10)
 
 ####################################################################
 # function: CheckVoiceIdle(bot)
@@ -911,6 +978,61 @@ async def DownloadSong(args, method, item=None):
     return await download()
 
 ####################################################################
+# function: FuseRadio(bot, ctx, new_theme)
+# ----
+# Fuse function to merge radio stations.
+####################################################################
+async def FuseRadio(bot, ctx, new_theme):
+    guild_id = ctx.guild.id
+
+    # initial build
+    if guild_id not in fuse_radio:
+        fuse_radio[guild_id] = []
+        fuse_radio[guild_id].append(endless_radio[guild_id])
+
+    # add the themes to the fuse, and clear out the old fuse station
+    fuse_radio[guild_id].append(new_theme)
+    fuse_playlist[guild_id] = []
+
+    # how many songs are we grabbing from each station
+    song_limit = math.ceil(50 / len(fuse_radio[guild_id]))
+
+    # build our new combined station
+    for station in fuse_radio[guild_id]:
+
+        # we don't know this station, build it
+        if station.lower() not in radio_playlists:
+            try:
+                radio_playlists[station.lower()] = []
+                response = await ChatGPT(
+                    bot,
+                    "Return only the information requested with no additional words or context.",
+                    f"Make a playlist of 50 songs (formatted as artist - song), themed around: {station}. Include similar artists and songs."
+                )
+
+                # filter out the goop
+                parsed_response = response['choices'][0].message.content.split('\n')
+                pattern = r'^\d+\.\s'
+
+                for item in parsed_response:
+                    if re.match(pattern, item):
+                        parts = re.split(pattern, item, maxsplit=1)
+                        radio_playlists[station].append(parts[1].strip())
+                SaveRadio()
+
+            except openai.error.ServiceUnavailableError:
+                print("Service Unavailable :(")
+                return
+            
+        # add the station songs to the fuse station, and mix up the list
+        temp_pl = random.sample(radio_playlists[station.lower()], song_limit)
+        for song in temp_pl:
+            fuse_playlist[guild_id].append(song)
+        random.shuffle(fuse_playlist[guild_id])
+
+    return
+
+####################################################################
 # function: GetQueue(ctx, extra)
 # ----
 # Returns currently playing and queue.
@@ -961,8 +1083,25 @@ async def GetQueue(ctx, extra=None):
             else:
                 output.set_field_at(index=1, name="Up Next:", value=f"{output.fields[1].value}**{i}**. {title}\n", inline=False)
 
+    # fusion check
+    r = guild_id in endless_radio and endless_radio[guild_id] or 'off'
+    fuse = ""
+    if guild_id in fuse_radio:
+        r = "💥 Fused Stations 💥"
+        for i, station in enumerate(fuse_radio[guild_id], 1):
+            if i == 1:
+                fuse += f"\"**{station}**\""
+            else:
+                fuse += f", \"**{station}**\""
+        r = f"Fused: {fuse}"
+
     # feature status
-    output.add_field(name="Settings:", value=f"🔊: {settings[str(guild_id)]['volume']}%\n🔁: {repeat[guild_id] and 'on' or 'off'}\n🔀: {shuffle[guild_id] and 'on' or 'off'}\n📻: {endless_radio[guild_id] and endless_radio[guild_id] or 'off'}", inline=False)
+    output.add_field(name="Settings:", value=f" \
+                     🔊: {settings[str(guild_id)]['volume']}%\n \
+                     🔁: {repeat[guild_id] and 'on' or 'off'}\n \
+                     🔀: {shuffle[guild_id] and 'on' or 'off'}\n \
+                     📻: {r}",
+                     inline=False)
 
     await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
 
@@ -1007,7 +1146,6 @@ async def PlayNextSong(bot, guild_id, channel):
 
     else:
         currently_playing[guild_id] = None
-        await bot.change_presence(activity=None)
     
 ####################################################################
 # function: QueueSong(bot, args, method, priority, message, guild_id, voice_client)
