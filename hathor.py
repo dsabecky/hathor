@@ -69,7 +69,7 @@ log_cogs.info("loading 'RaiderIO' cog")
 from cogs.raiderio import RaiderIO
 asyncio.run(bot.add_cog(RaiderIO(bot)))
 
-# add raiderio category
+# add gamba category
 log_cogs.info("loading 'Gamba' cog")
 from cogs.gamba import Gamba
 asyncio.run(bot.add_cog(Gamba(bot)))
@@ -97,7 +97,7 @@ async def on_ready():
 
     # build default settings into config if neccesary
     for guild in bot.guilds:
-        guild_id, guild_str = guild.id, str(guild.id)
+        guild_str = str(guild.id)
 
         if guild_str not in settings:
             settings[guild_str] = {}
@@ -106,8 +106,13 @@ async def on_ready():
             settings[guild_str]['perms']['user_id'] = []
             settings[guild_str]['perms']['role_id'] = []
             settings[guild_str]['perms']['channels'] = []
-
-        SaveSettings()
+        if 'volume' not in settings[guild_str]:
+            settings[guild_str]['volume'] = 20
+        if 'voice_idle' not in settings[guild_str]:
+            settings[guild_str]['voice_idle'] = 300
+            
+    SaveSettings()
+    
 
 
 ####################################################################
@@ -115,7 +120,6 @@ async def on_ready():
 ####################################################################
 @bot.event
 async def on_guild_join(guild):
-    global settings
 
     # build default settings into config if neccesary
     guild_str = str(guild.id)
@@ -126,8 +130,12 @@ async def on_guild_join(guild):
         settings[guild_str]['perms']['user_id'] = []
         settings[guild_str]['perms']['role_id'] = []
         settings[guild_str]['perms']['channels'] = []
+    if 'volume' not in settings[guild_str]:
+        settings[guild_str]['volume'] = 20
+    if 'voice_idle' not in settings[guild_str]:
+        settings[guild_str]['voice_idle'] = 300
 
-        SaveSettings()
+    SaveSettings()
 
 ####################################################################
 # on_voice_state_update()

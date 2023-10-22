@@ -40,38 +40,14 @@ class Voice(commands.Cog, name="Voice"):
     ####################################################################
     # on_ready()
     ####################################################################
-    @commands.Cog.listener()
-    async def on_ready(self):
-
-        # build all our temp variables
-        for guild in self.bot.guilds:
-            guild_id, guild_str = guild.id, str(guild.id)
-
-            if guild_str not in settings:
-                settings[guild_str] = {}
-            if 'volume' not in settings[guild_str]:
-                settings[guild_str]['volume'] = 20
-            if 'voice_idle' not in settings[guild_str]:
-                settings[guild_str]['voice_idle'] = 300
-
-            SaveSettings()
+    # @commands.Cog.listener()
+    # async def on_ready(self):
 
     ####################################################################
     # on_guild_join()
     ####################################################################
-    @commands.Cog.listener()
-    async def on_guild_join(self, guild):
-
-        # build default settings into config if neccesary
-        guild_str = str(guild.id)
-        if guild_str not in settings:
-            settings[guild_str] = {}
-        if 'volume' not in settings[guild_str]:
-            settings[guild_str]['volume'] = 20
-        if 'voice_idle' not in settings[guild_str]:
-            settings[guild_str]['voice_idle'] = 300
-
-        SaveSettings()
+    # @commands.Cog.listener()
+    # async def on_guild_join(self, guild):
 
     ####################################################################
     # trigger: !idle
