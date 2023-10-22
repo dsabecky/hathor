@@ -7,6 +7,7 @@ from discord.ext.commands import Greedy, Context
 # extra functionality to manage bot / system files
 import asyncio
 import os
+import json
 from typing import Literal, Optional
 
 # logging
@@ -18,12 +19,27 @@ import config
 
 # get our special functions
 import func
-from func import FancyErrors, CheckPermissions, LoadSettings, SaveSettings
+from func import FancyErrors, CheckPermissions
 
 # set intents
 intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True
+
+def LoadSettings():
+    try:
+        with open('settings.json', 'r') as file:
+            return json.load(file)
+    except FileNotFoundError:
+        with open('settings.json', 'w') as file:
+            default = {}
+            json.dump(default, file, indent=4)
+            return default
+
+def SaveSettings():
+    with open('settings.json', 'w') as file:
+        json.dump(settings, file, indent=4)
+
 
 # load settings
 settings = LoadSettings()
@@ -195,10 +211,6 @@ async def sync(
 ####################################################################
 # trigger: !permissions
 # alias: !perms, !roles
-# ----
-# opts:       [add | remove]
-# id_type:    [user | group | channel]
-# discord_id: [userID | groupID | channelID]
 # ----
 # TBD
 ####################################################################

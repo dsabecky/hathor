@@ -40,7 +40,6 @@ class Voice(commands.Cog, name="Voice"):
     ####################################################################
     # on_ready()
     ####################################################################
-
     @commands.Cog.listener()
     async def on_ready(self):
 
@@ -62,7 +61,6 @@ class Voice(commands.Cog, name="Voice"):
     ####################################################################
     @commands.Cog.listener()
     async def on_guild_join(self, guild):
-        global settings
 
         # build default settings into config if neccesary
         guild_str = str(guild.id)
@@ -158,8 +156,6 @@ class Voice(commands.Cog, name="Voice"):
     ####################################################################
     # trigger: !volume
     # alias: !vol
-    # ----
-    # args: [1-100]
     # ----
     # Adjusts the volume of the currently playing audio.
     ####################################################################

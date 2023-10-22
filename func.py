@@ -79,11 +79,6 @@ settings = LoadSettings()
 ####################################################################
 # function: CheckPermissions(bot, guild_id, user_id, user_roles)
 # ----
-# bot:        bot variable
-# guild_id:   guildID of server
-# user_id:    userID of user being checked
-# user_roles: roles of user being checked
-# ----
 # Checks if a user has elevated permissions in a server.
 ####################################################################
 async def CheckPermissions(bot, guild_id, user_id, user_roles):
@@ -109,8 +104,6 @@ async def CheckPermissions(bot, guild_id, user_id, user_roles):
     
 ####################################################################
 # function: FancyErrors(error)
-# ----
-# error: valid error code (see code).
 # ----
 # Returns prewritten errors.
 ####################################################################

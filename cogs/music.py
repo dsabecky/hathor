@@ -417,7 +417,7 @@ class Music(commands.Cog, name="Music"):
     ####################################################################
     # trigger: !playnext
     # ----
-    # Plays a song.
+    # Plays a song (puts at the top of the queue).
     ####################################################################
     @commands.command(name='playnext')
     async def prio_play(self, ctx, *, args=None):
@@ -637,7 +637,7 @@ class Music(commands.Cog, name="Music"):
     ####################################################################
     # trigger: !shuffle
     # ----
-    # Enables our shuffle
+    # Enables our shuffle.
     ####################################################################
     @commands.command(name='shuffle')
     async def shuffle_songs(self, ctx):
@@ -690,7 +690,7 @@ class Music(commands.Cog, name="Music"):
 ####################################################################
 # function: ChatGPT(bot, data)
 # ----
-# TBA
+# ChatGPT logic.
 ####################################################################
 async def ChatGPT(bot, sys_content, user_content):
     conversation = [
@@ -713,7 +713,7 @@ async def ChatGPT(bot, sys_content, user_content):
 ####################################################################
 # function: CheckBrokenPlaying(bot)
 # ----
-# TBA
+# Checks if a song should be playing, and resumes as required.
 ####################################################################
 async def CheckBrokenPlaying(bot):
     while True:
@@ -729,7 +729,7 @@ async def CheckBrokenPlaying(bot):
 ####################################################################
 # function: CheckEndlessMix(bot)
 # ----
-# TBA
+# Radio logic function.
 ####################################################################
 async def CheckEndlessMix(bot):
     while True:
