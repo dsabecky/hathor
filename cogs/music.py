@@ -8,6 +8,7 @@ import requests
 
 # allow for extra bits
 import datetime
+from gtts import gTTS
 import math
 import openai
 import os
@@ -74,6 +75,15 @@ def SaveRadio():
     with open('radio_playlists.json', 'w') as file:
         json.dump(radio_playlists, file, indent=4)
 
+intros = [
+    "Up next is",
+    "Next up we've got",
+    "Coming your way is",
+    "We've got a special treat for you here,"
+    "The next track is",
+    "Keeping the music going with"
+]
+
 # build our temp variables
 BOT_SPOTIFY_KEY = ""
 currently_playing = {}
@@ -82,6 +92,7 @@ repeat = {}
 shuffle = {}
 endless_radio = {}
 fuse_radio = {}
+intro_playing = {}
 
 last_activity_time = {}
 start_time = {}
@@ -135,6 +146,9 @@ class Music(commands.Cog, name="Music"):
 
             if not guild_id in pause_time:
                 pause_time[guild_id] = None
+
+            if not guild_id in intro_playing:
+                intro_playing[guild_id] = False
 
         # check if the queue is broken
         self.bot.loop.create_task(CheckBrokenPlaying(self.bot))
@@ -828,6 +842,33 @@ class Music(commands.Cog, name="Music"):
             if repeat[guild_id]:
                 await PlayNextSong(self.bot, guild_id, ctx.guild.voice_client)
 
+    ####################################################################
+    # trigger: !intro
+    # ----
+    # Toggles song intros when radio is used.
+    ####################################################################
+    @commands.command(name='intro')
+    async def repeat_song(self, ctx):
+        """
+        Toggles song intros for the radio station.
+
+        Syntax:
+            !intro
+        """
+        global repeat, settings
+        guild_id = ctx.guild.id
+
+        # are you even allowed to use this command?
+        if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
+            await FancyErrors("AUTHOR_PERMS", ctx.channel)
+            return
+        
+        settings[str(guild_id)]['radio_intro'] = not settings[str(guild_id)]['radio_intro']
+        SaveSettings()
+
+        info_embed = discord.Embed(description=f"📢 Radio intros {settings[str(guild_id)]['radio_intro'] and 'enabled' or 'disabled'}.")
+        await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
+
 ####################################################################
 # function: ChatGPT(bot, data)
 # ----
@@ -1003,6 +1044,13 @@ async def CreateSpotifyKey(bot):
 # Downloads the song requested from QueueSong.
 ####################################################################
 async def DownloadSong(args, method, item=None):
+    if args.endswith(" audio"):
+        strip_audio = args.rstrip(" audio")
+        split_args = strip_audio.split(" - ", 1)
+        proper_title = f"{split_args[1]}, by {split_args[0]}"
+    else:
+        proper_title = ""
+
     args = method == "search" and f"ytsearch:{args}" or args
     id = uuid.uuid4()
 
@@ -1038,7 +1086,8 @@ async def DownloadSong(args, method, item=None):
                                 "title": info['title'],
                                 "path": f"db/{id}.mp3",
                                 "duration": info['duration'],
-                                "thumbnail": info['thumbnail']
+                                "thumbnail": info['thumbnail'],
+                                "proper_title": proper_title
                             })
                     return song_list
 
@@ -1048,7 +1097,8 @@ async def DownloadSong(args, method, item=None):
                             "title": info['title'],
                             "path": f"db/{id}.mp3",
                             "duration": info['duration'],
-                            "thumbnail": info['thumbnail']
+                            "thumbnail": info['thumbnail'],
+                            "proper_title": proper_title
                         }]
             else:
                 return None
@@ -1202,7 +1252,7 @@ async def GetQueue(ctx, extra=None):
 # Bootstrapper for songs, manages queue and info db.
 ####################################################################
 async def PlayNextSong(bot, guild_id, channel):
-    global queue, currently_playing, song_history
+    global queue, currently_playing, song_history, intro_playing
     guild_str = str(guild_id)
 
     if channel.is_playing() or channel.is_paused():
@@ -1210,7 +1260,7 @@ async def PlayNextSong(bot, guild_id, channel):
 
     if queue[guild_id]:
         song = queue[guild_id].pop(0)
-        path, title = song['path'], song['title']
+        path, title, proper_title = song['path'], song['title'], song['proper_title']
         start_time[guild_id] = time.time()
         volume = settings[str(guild_id)]['volume'] / 100
 
@@ -1220,6 +1270,21 @@ async def PlayNextSong(bot, guild_id, channel):
                 queue[guild_id].insert(0, song)
             else:
                 os.remove(path)
+
+        # wait for intro to finish (if enabled)
+        def play_after_intro(junk):
+            intro_playing[guild_id] = False
+
+        # add an intro (if radio is enabled)
+        print(proper_title)
+        if proper_title != "" and settings[guild_str]['radio_intro']:
+            intro_playing[guild_id] = True
+            intro = gTTS(f"{random.choice(intros)} {proper_title}", lang='en', slow=False)
+            intro.save("db/intro.mp3")
+            channel.play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio("db/intro.mp3"), volume=volume), after=play_after_intro)
+
+        while intro_playing[guild_id] == True:
+            await asyncio.sleep(0.5)
 
         # actually play the song
         channel.play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(path), volume=volume), after=remove_song)

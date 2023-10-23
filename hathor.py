@@ -1,4 +1,3 @@
-# discord imports
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -110,10 +109,10 @@ async def on_ready():
             settings[guild_str]['volume'] = 20
         if 'voice_idle' not in settings[guild_str]:
             settings[guild_str]['voice_idle'] = 300
+        if 'radio_intro' not in settings[guild_str]:
+            settings[guild_str]['radio_intro'] = True
             
     SaveSettings()
-    
-
 
 ####################################################################
 # on_guild_join()
@@ -134,6 +133,8 @@ async def on_guild_join(guild):
         settings[guild_str]['volume'] = 20
     if 'voice_idle' not in settings[guild_str]:
         settings[guild_str]['voice_idle'] = 300
+    if 'radio_intro' not in settings[guild_str]:
+        settings[guild_str]['radio_intro'] = True
 
     SaveSettings()
 
