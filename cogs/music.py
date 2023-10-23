@@ -848,7 +848,7 @@ class Music(commands.Cog, name="Music"):
     # Toggles song intros when radio is used.
     ####################################################################
     @commands.command(name='intro')
-    async def repeat_song(self, ctx):
+    async def intro_toggle(self, ctx):
         """
         Toggles song intros for the radio station.
 
