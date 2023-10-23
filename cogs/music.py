@@ -1276,7 +1276,6 @@ async def PlayNextSong(bot, guild_id, channel):
             intro_playing[guild_id] = False
 
         # add an intro (if radio is enabled)
-        print(proper_title)
         if proper_title != "" and settings[guild_str]['radio_intro']:
             intro_playing[guild_id] = True
             intro = gTTS(f"{random.choice(intros)} {proper_title}", lang='en', slow=False)
