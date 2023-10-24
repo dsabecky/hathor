@@ -1263,7 +1263,7 @@ async def PlayNextSong(bot, guild_id, channel):
         path, title, proper_title = song['path'], song['title'], song['proper_title']
         start_time[guild_id] = time.time()
         volume = settings[str(guild_id)]['volume'] / 100
-        intro_volume = volume < 90 and (settings[str(guild_id)]['volume'] + 10) / 100
+        intro_volume = settings[str(guild_id)]['volume'] < 80 and (settings[str(guild_id)]['volume'] + 15) / 100
 
         # delete song after playing
         def remove_song(error):
