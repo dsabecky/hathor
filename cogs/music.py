@@ -1263,6 +1263,7 @@ async def PlayNextSong(bot, guild_id, channel):
         path, title, proper_title = song['path'], song['title'], song['proper_title']
         start_time[guild_id] = time.time()
         volume = settings[str(guild_id)]['volume'] / 100
+        intro_volume = volume < 90 and (settings[str(guild_id)]['volume'] + 10) / 100
 
         # delete song after playing
         def remove_song(error):
@@ -1280,7 +1281,7 @@ async def PlayNextSong(bot, guild_id, channel):
             intro_playing[guild_id] = True
             intro = gTTS(f"{random.choice(intros)} {proper_title}", lang='en', slow=False)
             intro.save("db/intro.mp3")
-            channel.play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio("db/intro.mp3"), volume=volume), after=play_after_intro)
+            channel.play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio("db/intro.mp3"), volume=intro_volume), after=play_after_intro)
 
         while intro_playing[guild_id] == True:
             await asyncio.sleep(0.5)
