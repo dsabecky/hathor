@@ -7,25 +7,28 @@ BOT_PREFIX = '!'
 # set the bot administrator (your personal userID)
 BOT_ADMIN  = 000000000
 
-# set your openai key here
+# set your openai key here (optional)
 #BOT_OPENAI_KEY = ''
 #BOT_OPENAI_MODEL = 'gpt-3.5-turbo'
-
-# youtube api key
-BOT_YOUTUBE_KEY = ''
 
 # spotify api
 BOT_SPOTIFY_CLIENT = ''
 BOT_SPOTIFY_SECRET = ''
 
-# maximum playlist legnth
-MUSIC_MAX_PLAYLIST = 20
+# youtube api key
+BOT_YOUTUBE_KEY = ''
+
+# set to True if bot is in maintenance mode
+MAINTENANCE = False
 
 # maximum song length
 MUSIC_MAX_DURATION = 1800
 
-# set to True if bot is in maintenance mode
-MAINTENANCE = False
+# maximum playlist legnth
+MUSIC_MAX_PLAYLIST = 20
+
+# radio queue length (how many songs should radio queue at a time)
+RADIO_QUEUE = 5
 
 ####################################################################
 #       !! DON'T MODIFY BELOW ME !! DON'T MODIFY BELOW ME !!       #
