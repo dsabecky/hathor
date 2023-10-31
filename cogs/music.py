@@ -490,6 +490,33 @@ class Music(commands.Cog, name="Music"):
         message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
 
     ####################################################################
+    # trigger: !intro
+    # ----
+    # Toggles song intros when radio is used.
+    ####################################################################
+    @commands.command(name='intro')
+    async def intro_toggle(self, ctx):
+        """
+        Toggles song intros for the radio station.
+
+        Syntax:
+            !intro
+        """
+        global repeat
+        guild_id, guild_str = ctx.guild.id, str(ctx.guild.id)
+
+        # are you even allowed to use this command?
+        if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
+            await FancyErrors("AUTHOR_PERMS", ctx.channel)
+            return
+        
+        config.settings[guild_str]['radio_intro'] = not config.settings[guild_str]['radio_intro']
+        config.SaveSettings()
+
+        info_embed = discord.Embed(description=f"📢 Radio intros {config.settings[guild_str]['radio_intro'] and 'enabled' or 'disabled'}.")
+        await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
+
+    ####################################################################
     # trigger: !pause
     # ----
     # Pauses the song.
@@ -868,73 +895,6 @@ class Music(commands.Cog, name="Music"):
             ctx.guild.voice_client.stop()
             if repeat[guild_id]:
                 await PlayNextSong(self.bot, guild_id, ctx.guild.voice_client)
-
-    ####################################################################
-    # trigger: !intro
-    # ----
-    # Toggles song intros when radio is used.
-    ####################################################################
-    @commands.command(name='intro')
-    async def intro_toggle(self, ctx):
-        """
-        Toggles song intros for the radio station.
-
-        Syntax:
-            !intro
-        """
-        global repeat
-        guild_id, guild_str = ctx.guild.id, str(ctx.guild.id)
-
-        # are you even allowed to use this command?
-        if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
-            await FancyErrors("AUTHOR_PERMS", ctx.channel)
-            return
-        
-        config.settings[guild_str]['radio_intro'] = not config.settings[guild_str]['radio_intro']
-        config.SaveSettings()
-
-        info_embed = discord.Embed(description=f"📢 Radio intros {config.settings[guild_str]['radio_intro'] and 'enabled' or 'disabled'}.")
-        await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
-
-    ####################################################################
-    # trigger: !volume
-    # alias: !vol
-    # ----
-    # Adjusts the volume of the currently playing audio.
-    ####################################################################
-    @commands.command(name='volume', aliases=['vol'])
-    async def song_volume(self, ctx, args=None):
-        """
-        Sets the bot volume for current server.
-
-        Syntax:
-            !volume <1-100>
-        """
-        guild_id, guild_str = ctx.guild.id, str(ctx.guild.id)
-        voice = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
-
-        if not args:
-            await ctx.channel.send(f'Current volume is: {config.settings[guild_str]["volume"]}%.')
-
-        elif args.isdigit():
-            if 0 <= int(args) <= 100:
-
-                # are you even allowed to use this command?
-                if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
-                    await FancyErrors("AUTHOR_PERMS", ctx.channel)
-                    return
-                
-                if guild_str in config.settings:
-                    config.settings[guild_str]['volume'] = int(args)
-                    config.SaveSettings()
-
-                    if voice:
-                        voice.source.volume = config.settings[guild_str]["volume"] / 100
-
-                    await ctx.channel.send(f'Server volume changed to: {config.settings[guild_str]["volume"]}%.')
-
-            else:
-                await FancyErrors("VOL_RANGE", ctx.channel)
 
 ####################################################################
 # function: ChatGPT(bot, data)
