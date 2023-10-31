@@ -31,12 +31,16 @@ err = {
         'BOT_NO_SOURCE':        "I have no audio source for this server",
         'BOT_NO_VOICE':         "I am not in a voice channel",
         'DISABLED_FEATURE':     "This feature is not currently enabled",
+        'DUPLICATE_SONG':       "This song already exists in the destination",
         'NO_HELP':              "There is no help documentation for this command",
         'NO_PERMISSIONS_EXIST': "Those permissions do not exist",
         'NO_QUEUE':             "There is no queue",
         'NO_PLAYING':           "There is nothing playing",
+        'NO_RADIO':             "There is no active radio",
+        'NO_FUSE_EXIST':        "That station is not fused",
         'PERMISSIONS_EXIST':    "Those permissions already exist",
         'QUEUE_RANGE':          "Request is out of range",
+        'RADIO_EXIST':          "Radio station already exists",
         'SHORT':                "Message is too short",
         "SHUFFLE_NO_PLAYLIST":  "Playlists are not allowed in playnext, don't be greedy.",
         'SONG_LENGTH':          "Requested song is too long!",
@@ -47,34 +51,6 @@ err = {
         'YTMD':                 "You're the man now, dog!"
     }
 }
-
-####################################################################
-# function: LoadSettings()
-# ----
-# Returns persistent settings.
-####################################################################
-def LoadSettings():
-    try:
-        with open('settings.json', 'r') as file:
-            return json.load(file)
-    except FileNotFoundError:
-        with open('settings.json', 'w') as file:
-            default = {}
-            json.dump(default, file, indent=4)
-            return default
-
-####################################################################
-# function: SaveSettings()
-# ----
-# Writes persistent settings to settings.json
-####################################################################
-def SaveSettings():
-    with open('settings.json', 'w') as file:
-        json.dump(settings, file, indent=4)
-
-
-# load settings
-settings = LoadSettings()
 
 ####################################################################
 # function: CheckPermissions(bot, guild_id, user_id, user_roles)
@@ -93,10 +69,10 @@ async def CheckPermissions(bot, guild_id, user_id, user_roles):
     elif user_id == owner.id:
         return True
     
-    elif user_id in settings[guild_str]['perms']['user_id']:
+    elif user_id in config.settings[guild_str]['perms']['user_id']:
         return True
     
-    elif any(role.id in settings[guild_str]['perms']['role_id'] for role in user_roles):
+    elif any(role.id in config.settings[guild_str]['perms']['role_id'] for role in user_roles):
         return True
     
     else:

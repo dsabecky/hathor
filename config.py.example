@@ -26,3 +26,23 @@ MUSIC_MAX_DURATION = 1800
 
 # set to True if bot is in maintenance mode
 MAINTENANCE = False
+
+####################################################################
+#       !! DON'T MODIFY BELOW ME !! DON'T MODIFY BELOW ME !!       #
+####################################################################
+
+def LoadSettings():
+    try:
+        with open('settings.json', 'r') as file:
+            return json.load(file)
+    except FileNotFoundError:
+        with open('settings.json', 'w') as file:
+            default = {}
+            json.dump(default, file, indent=4)
+            return default
+
+def SaveSettings():
+    with open('settings.json', 'w') as file:
+        json.dump(settings, file, indent=4)
+
+settings = LoadSettings()

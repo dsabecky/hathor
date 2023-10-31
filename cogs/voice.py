@@ -9,23 +9,7 @@ import json
 
 import config
 import func
-from func import LoadSettings, FancyErrors, CheckPermissions
-
-def LoadSettings():
-    try:
-        with open('settings.json', 'r') as file:
-            return json.load(file)
-    except FileNotFoundError:
-        with open('settings.json', 'w') as file:
-            default = {}
-            json.dump(default, file, indent=4)
-            return default
-
-settings = LoadSettings()
-
-def SaveSettings():
-    with open('settings.json', 'w') as file:
-        json.dump(settings, file, indent=4)
+from func import FancyErrors, CheckPermissions
 
 queue = {}
 currently_playing = {}
@@ -66,7 +50,7 @@ class Voice(commands.Cog, name="Voice"):
         """
 
         if not idle_time:
-            output = discord.Embed(title="Idle Time", description=f"I will currently idle for {int(settings[str(ctx.guild.id)]['voice_idle'] / 60)} minutes.")
+            output = discord.Embed(title="Idle Time", description=f"I will currently idle for {int(config.settings[str(ctx.guild.id)]['voice_idle'] / 60)} minutes.")
             await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
             return
 
@@ -82,9 +66,9 @@ class Voice(commands.Cog, name="Voice"):
         idle_time = int(idle_time)
 
         if 1 <= idle_time <= 30:
-            settings[str(ctx.guild.id)]['voice_idle'] = idle_time * 60
-            SaveSettings()
-            output = discord.Embed(title="Idle Time", description=f"Idle time is now {int(settings[str(ctx.guild.id)]['voice_idle'] / 60)} minutes.")
+            config.settings[str(ctx.guild.id)]['voice_idle'] = idle_time * 60
+            config.SaveSettings()
+            output = discord.Embed(title="Idle Time", description=f"Idle time is now {int(config.settings[str(ctx.guild.id)]['voice_idle'] / 60)} minutes.")
             await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
         else:
             await FancyErrors("QUEUE_RANGE", ctx.channel)
@@ -129,45 +113,7 @@ class Voice(commands.Cog, name="Voice"):
         else:
             await FancyErrors("BOT_NO_VOICE", ctx.channel)
 
-    ####################################################################
-    # trigger: !volume
-    # alias: !vol
-    # ----
-    # Adjusts the volume of the currently playing audio.
-    ####################################################################
-    @commands.command(name='volume', aliases=['vol'])
-    async def song_volume(self, ctx, args=None):
-        """
-        Sets the bot volume for current server.
 
-        Syntax:
-            !volume <1-100>
-        """
-        guild_id, guild_str = ctx.guild.id, str(ctx.guild.id)
-        voice = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
-
-        if not args:
-            await ctx.channel.send(f'Current volume is: {settings[guild_str]["volume"]}.')
-
-        elif args.isdigit():
-            if 0 <= int(args) <= 100:
-
-                # are you even allowed to use this command?
-                if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
-                    await FancyErrors("AUTHOR_PERMS", ctx.channel)
-                    return
-                
-                if guild_str in settings:
-                    settings[guild_str]['volume'] = int(args)
-                    SaveSettings()
-
-                    if voice:
-                        voice.source.volume = settings[guild_str]["volume"] / 100
-
-                    await ctx.channel.send(f'Server volume changed to: {settings[guild_str]["volume"]}%.')
-
-            else:
-                await FancyErrors("VOL_RANGE", ctx.channel)
 
 
 ####################################################################
@@ -180,7 +126,7 @@ async def JoinVoice(bot, ctx):
         await FancyErrors("BOT_EXIST_VOICE", ctx.channel)
     elif not ctx.author.voice:
         await FancyErrors("AUTHOR_NO_VOICE", ctx.channel)
-    elif ctx.author.voice.channel.user_limit <= len(ctx.author.voice.channel.members):
+    elif ctx.author.voice.channel.user_limit != 0 and ctx.author.voice.channel.user_limit <= len(ctx.author.voice.channel.members):
         await FancyErrors("VOICE_FULL", ctx.channel)
     else:
         channel = ctx.author.voice.channel

@@ -24,26 +24,10 @@ from logs import log_music
 # grab our important stuff
 import config
 import func
-from func import LoadSettings, FancyErrors, CheckPermissions
+from func import FancyErrors, CheckPermissions
 
 # we need voice functions
 from cogs.voice import JoinVoice
-
-def LoadSettings():
-    try:
-        with open('settings.json', 'r') as file:
-            return json.load(file)
-    except FileNotFoundError:
-        with open('settings.json', 'w') as file:
-            default = {}
-            json.dump(default, file, indent=4)
-            return default
-
-settings = LoadSettings()
-
-def SaveSettings():
-    with open('settings.json', 'w') as file:
-        json.dump(settings, file, indent=4)
 
 # build song history
 def LoadHistory():
@@ -163,10 +147,51 @@ class Music(commands.Cog, name="Music"):
         self.bot.loop.create_task(CreateSpotifyKey(self.bot))
 
     ####################################################################
+    # on_guild_join()
+    ####################################################################
+    @commands.Cog.listener()
+    async def on_guild_join(self, guild):
+
+        # build all our temp variables
+        guild_id = guild.id
+        guild_str = str(guild.id)
+
+        if not guild_id in queue:
+            queue[guild_id] = []
+
+        if not guild_id in currently_playing:
+            currently_playing[guild_id] = None
+
+        if not guild_id in endless_radio:
+            endless_radio[guild_id] = False
+
+        if not guild_str in song_history:
+            song_history[guild_str] = []
+            SaveHistory()
+
+        if not guild_id in last_activity_time:
+            last_activity_time[guild_id] = None
+
+        if not guild_id in repeat:
+            repeat[guild_id] = False
+
+        if not guild_id in shuffle:
+            shuffle[guild_id] = False
+
+        if not guild_id in start_time:
+            start_time[guild_id] = None
+
+        if not guild_id in pause_time:
+            pause_time[guild_id] = None
+
+        if not guild_id in intro_playing:
+            intro_playing[guild_id] = False
+
+    ####################################################################
     # on_voice_state_update()
     ####################################################################
     @commands.Cog.listener()
-    async def on_voice_state_update(self, author, before, after):
+    async def on_voice_state_update(self, author):
         if self.bot.user == author:
             guild_id = author.guild.id
             voice_client = self.bot.get_guild(guild_id).voice_client
@@ -325,6 +350,7 @@ class Music(commands.Cog, name="Music"):
         """
         global endless_radio
         guild_id = ctx.guild.id
+
         # are you even allowed to use this command?
         if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
             await FancyErrors("AUTHOR_PERMS", ctx.channel)
@@ -356,7 +382,7 @@ class Music(commands.Cog, name="Music"):
         # send our mesage and build a new station
         info_embed = discord.Embed(description=f"📻 Removed \"{args}\" from the radio.")
         message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
-        await FuseRadio(self.bot, ctx)   
+        await FuseRadio(self.bot, ctx)
 
     ####################################################################
     # trigger: !fuse
@@ -375,6 +401,7 @@ class Music(commands.Cog, name="Music"):
         """
         global endless_radio
         guild_id = ctx.guild.id
+
         # are you even allowed to use this command?
         if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
             await FancyErrors("AUTHOR_PERMS", ctx.channel)
@@ -855,19 +882,59 @@ class Music(commands.Cog, name="Music"):
         Syntax:
             !intro
         """
-        global repeat, settings
-        guild_id = ctx.guild.id
+        global repeat
+        guild_id, guild_str = ctx.guild.id, str(ctx.guild.id)
 
         # are you even allowed to use this command?
         if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
             await FancyErrors("AUTHOR_PERMS", ctx.channel)
             return
         
-        settings[str(guild_id)]['radio_intro'] = not settings[str(guild_id)]['radio_intro']
-        SaveSettings()
+        config.settings[guild_str]['radio_intro'] = not config.settings[guild_str]['radio_intro']
+        config.SaveSettings()
 
-        info_embed = discord.Embed(description=f"📢 Radio intros {settings[str(guild_id)]['radio_intro'] and 'enabled' or 'disabled'}.")
+        info_embed = discord.Embed(description=f"📢 Radio intros {config.settings[guild_str]['radio_intro'] and 'enabled' or 'disabled'}.")
         await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
+
+    ####################################################################
+    # trigger: !volume
+    # alias: !vol
+    # ----
+    # Adjusts the volume of the currently playing audio.
+    ####################################################################
+    @commands.command(name='volume', aliases=['vol'])
+    async def song_volume(self, ctx, args=None):
+        """
+        Sets the bot volume for current server.
+
+        Syntax:
+            !volume <1-100>
+        """
+        guild_id, guild_str = ctx.guild.id, str(ctx.guild.id)
+        voice = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
+
+        if not args:
+            await ctx.channel.send(f'Current volume is: {config.settings[guild_str]["volume"]}%.')
+
+        elif args.isdigit():
+            if 0 <= int(args) <= 100:
+
+                # are you even allowed to use this command?
+                if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
+                    await FancyErrors("AUTHOR_PERMS", ctx.channel)
+                    return
+                
+                if guild_str in config.settings:
+                    config.settings[guild_str]['volume'] = int(args)
+                    config.SaveSettings()
+
+                    if voice:
+                        voice.source.volume = config.settings[guild_str]["volume"] / 100
+
+                    await ctx.channel.send(f'Server volume changed to: {config.settings[guild_str]["volume"]}%.')
+
+            else:
+                await FancyErrors("VOL_RANGE", ctx.channel)
 
 ####################################################################
 # function: ChatGPT(bot, data)
@@ -917,7 +984,6 @@ async def CheckEndlessMix(bot):
     while True:
         for guild in bot.guilds:
             guild_id = guild.id
-            guild_str = str(guild_id)
             voice_client = bot.get_guild(guild_id).voice_client
 
             # is this thing even on?
@@ -928,6 +994,14 @@ async def CheckEndlessMix(bot):
                         # fuse radio checkpoint🔞
                         if guild_id in fuse_radio:
                             playlist = random.sample(fuse_playlist[guild_id], 3)
+
+                            # did we play this recently?
+                            recent = song_history[str(guild_id)][-15:]
+                            for item in recent:
+                                for new in playlist:
+                                    if new in item['radio_title']:
+                                        playlist.pop(new)
+
                             await QueueSong(bot, playlist, 'endless', False, 'endless', guild_id, voice_client)
 
                         # hot100 checkpoint🔞
@@ -1003,7 +1077,7 @@ async def CheckVoiceIdle(bot):
 
             # nothing playing w/o queue, update idle time
             elif last_activity_time[guild_id]:
-                if (time.time() - last_activity_time[guild_id]) > settings[str(guild_id)]['voice_idle']:
+                if (time.time() - last_activity_time[guild_id]) > config.settings[str(guild_id)]['voice_idle']:
                     await voice_client.disconnect()
                     last_activity_time[guild_id] = None
 
@@ -1087,7 +1161,9 @@ async def DownloadSong(args, method, item=None):
                                 "path": f"db/{id}.mp3",
                                 "duration": info['duration'],
                                 "thumbnail": info['thumbnail'],
-                                "proper_title": proper_title
+                                "proper_title": proper_title,
+                                "url": info['webpage_url'],
+                                "radio_title": strip_audio and strip_audio or ""
                             })
                     return song_list
 
@@ -1098,7 +1174,9 @@ async def DownloadSong(args, method, item=None):
                             "path": f"db/{id}.mp3",
                             "duration": info['duration'],
                             "thumbnail": info['thumbnail'],
-                            "proper_title": proper_title
+                            "proper_title": proper_title,
+                            "url": info['webpage_url'],
+                            "radio_title": strip_audio and strip_audio or ""
                         }]
             else:
                 return None
@@ -1238,7 +1316,7 @@ async def GetQueue(ctx, extra=None):
 
     # feature status
     output.add_field(name="Settings:", value=f" \
-                     🔊: {settings[str(guild_id)]['volume']}%\n \
+                     🔊: {config.settings[str(guild_id)]['volume']}%\n \
                      🔁: {repeat[guild_id] and 'on' or 'off'}\n \
                      🔀: {shuffle[guild_id] and 'on' or 'off'}\n \
                      📻: {r}",
@@ -1262,8 +1340,8 @@ async def PlayNextSong(bot, guild_id, channel):
         song = queue[guild_id].pop(0)
         path, title, proper_title = song['path'], song['title'], song['proper_title']
         start_time[guild_id] = time.time()
-        volume = settings[str(guild_id)]['volume'] / 100
-        intro_volume = settings[str(guild_id)]['volume'] < 80 and (settings[str(guild_id)]['volume'] + 15) / 100
+        volume = config.settings[str(guild_id)]['volume'] / 100
+        intro_volume = config.settings[str(guild_id)]['volume'] < 80 and (config.settings[str(guild_id)]['volume'] + 15) / 100
 
         # delete song after playing
         def remove_song(error):
@@ -1277,7 +1355,7 @@ async def PlayNextSong(bot, guild_id, channel):
             intro_playing[guild_id] = False
 
         # add an intro (if radio is enabled)
-        if proper_title != "" and settings[guild_str]['radio_intro']:
+        if proper_title != "" and config.settings[guild_str]['radio_intro']:
             intro_playing[guild_id] = True
             intro = gTTS(f"{random.choice(intros)} {proper_title}", lang='en', slow=False)
             intro.save("db/intro.mp3")
@@ -1290,14 +1368,16 @@ async def PlayNextSong(bot, guild_id, channel):
         channel.play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(path), volume=volume), after=remove_song)
 
         # add to song history
-        song_history[guild_str].append({"timestamp": time.time(), "title": title})
+        song_history[guild_str].append({"timestamp": time.time(), "title": title, "radio_title": song['radio_title']})
         SaveHistory()
 
         currently_playing[guild_id] = {
             "title": title,
             "duration": song["duration"],
             "path": path,
-            "thumbnail": song["thumbnail"]
+            "thumbnail": song["thumbnail"],
+            "url": song["url"],
+            "proper_title": proper_title
         }
 
     else:

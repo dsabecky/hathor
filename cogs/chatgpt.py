@@ -4,9 +4,7 @@ import openai
 
 import config
 import func
-from func import LoadSettings, FancyErrors
-
-settings = LoadSettings()
+from func import FancyErrors
 
 # enable openai if we set a key
 if config.BOT_OPENAI_KEY:
