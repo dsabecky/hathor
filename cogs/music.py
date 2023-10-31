@@ -100,37 +100,27 @@ class Music(commands.Cog, name="Music"):
 
         # build all our temp variables
         for guild in self.bot.guilds:
-            guild_id = guild.id
-            guild_str = str(guild.id)
+            guild_id, guild_str = guild.id, str(guild.id)
 
             if not guild_id in queue:
                 queue[guild_id] = []
-
             if not guild_id in currently_playing:
                 currently_playing[guild_id] = None
-
             if not guild_id in endless_radio:
                 endless_radio[guild_id] = False
-
             if not guild_str in song_history:
                 song_history[guild_str] = []
                 SaveHistory()
-
             if not guild_id in last_activity_time:
                 last_activity_time[guild_id] = None
-
             if not guild_id in repeat:
                 repeat[guild_id] = False
-
             if not guild_id in shuffle:
                 shuffle[guild_id] = False
-
             if not guild_id in start_time:
                 start_time[guild_id] = None
-
             if not guild_id in pause_time:
                 pause_time[guild_id] = None
-
             if not guild_id in intro_playing:
                 intro_playing[guild_id] = False
 
@@ -153,37 +143,27 @@ class Music(commands.Cog, name="Music"):
     async def on_guild_join(self, guild):
 
         # build all our temp variables
-        guild_id = guild.id
-        guild_str = str(guild.id)
+        guild_id, guild_str = guild.id, str(guild.id)
 
         if not guild_id in queue:
             queue[guild_id] = []
-
         if not guild_id in currently_playing:
             currently_playing[guild_id] = None
-
         if not guild_id in endless_radio:
             endless_radio[guild_id] = False
-
         if not guild_str in song_history:
             song_history[guild_str] = []
             SaveHistory()
-
         if not guild_id in last_activity_time:
             last_activity_time[guild_id] = None
-
         if not guild_id in repeat:
             repeat[guild_id] = False
-
         if not guild_id in shuffle:
             shuffle[guild_id] = False
-
         if not guild_id in start_time:
             start_time[guild_id] = None
-
         if not guild_id in pause_time:
             pause_time[guild_id] = None
-
         if not guild_id in intro_playing:
             intro_playing[guild_id] = False
 
@@ -217,13 +197,11 @@ class Music(commands.Cog, name="Music"):
 
         # is chatgpt enabled?
         if not config.BOT_OPENAI_KEY:
-            await FancyErrors("DISABLED_FEATURE", ctx.channel)
-            return
+            await FancyErrors("DISABLED_FEATURE", ctx.channel); return
         
         # author isn't in a voice channel
         if not ctx.author.voice:
-            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel)
-            return
+            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel); return
         
         # we're not in voice, lets change that
         if not ctx.guild.voice_client:
@@ -231,8 +209,7 @@ class Music(commands.Cog, name="Music"):
         
         # what are you asking that's shorter, really
         if len(args) < 3:
-            await FancyErrors("SHORT", ctx.channel)
-            return
+            await FancyErrors("SHORT", ctx.channel); return
         
         try:
             response = await ChatGPT(
@@ -258,8 +235,7 @@ class Music(commands.Cog, name="Music"):
 
 
         except openai.error.ServiceUnavailableError:
-            await FancyErrors("API_ERROR", ctx.channel)
-            return
+            await FancyErrors("API_ERROR", ctx.channel); return
 
     ####################################################################
     # trigger: !bump
@@ -281,15 +257,14 @@ class Music(commands.Cog, name="Music"):
 
         # are you even allowed to use this command?
         if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
-            await FancyErrors("AUTHOR_PERMS", ctx.channel)
-            return
+            await FancyErrors("AUTHOR_PERMS", ctx.channel); return
 
         # is there even enough songs to justify?
         if guild_id in queue and len(queue[guild_id]) < 2:
-            await FancyErrors("BUMP_SHORT", ctx.channel)
+            await FancyErrors("BUMP_SHORT", ctx.channel); return
 
         elif not song_number or not song_number.isdigit() or (song_number.isdigit() and int(song_number) < 2):
-            await FancyErrors("SYNTAX", ctx.channel)
+            await FancyErrors("SYNTAX", ctx.channel); return
 
         elif guild_id in queue:
             bumped = queue[guild_id].pop(int(song_number) - 1)
@@ -314,22 +289,18 @@ class Music(commands.Cog, name="Music"):
 
         # are you even allowed to use this command?
         if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
-            await FancyErrors("AUTHOR_PERMS", ctx.channel)
-            return
+            await FancyErrors("AUTHOR_PERMS", ctx.channel); return
         
         if len(queue[guild_id]) == 0:
-            await FancyErrors("NO_QUEUE", ctx.channel)
-            return
+            await FancyErrors("NO_QUEUE", ctx.channel); return
         
         # author isn't in a voice channel
         if not ctx.guild.voice_client:
-            await FancyErrors("BOT_NO_VOICE", ctx.channel)
-            return
+            await FancyErrors("BOT_NO_VOICE", ctx.channel); return
         
         # author isn't in a voice channel
         if not ctx.author.voice:
-            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel)
-            return
+            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel); return
         
         info_embed = discord.Embed(description=f"Removed {len(queue[guild_id])} songs from queue.")
         message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
@@ -353,27 +324,23 @@ class Music(commands.Cog, name="Music"):
 
         # are you even allowed to use this command?
         if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
-            await FancyErrors("AUTHOR_PERMS", ctx.channel)
-            return
+            await FancyErrors("AUTHOR_PERMS", ctx.channel); return
         
         # author isn't in a voice channel
         if not ctx.author.voice:
-            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel)
-            return
+            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel); return
         
         # empty theme
         if not args:
-            await FancyErrors("SYNTAX", ctx.channel)
-            return
+            await FancyErrors("SYNTAX", ctx.channel); return
         
+        # is the radio even on?
         if endless_radio[guild_id] == False:
-            await FancyErrors("NO_RADIO", ctx.channel)
-            return
+            await FancyErrors("NO_RADIO", ctx.channel); return
         
         # fusion doesnt exist
         if guild_id not in fuse_radio or (fuse_radio[guild_id] and args.lower() not in fuse_radio[guild_id]):
-            await FancyErrors("NO_FUSE_EXIST", ctx.channel)
-            return
+            await FancyErrors("NO_FUSE_EXIST", ctx.channel); return
         
         # let's defuse this situation
         if any(station.lower() == args.lower() for station in fuse_radio[guild_id]):
@@ -404,27 +371,22 @@ class Music(commands.Cog, name="Music"):
 
         # are you even allowed to use this command?
         if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
-            await FancyErrors("AUTHOR_PERMS", ctx.channel)
-            return
+            await FancyErrors("AUTHOR_PERMS", ctx.channel); return
         
         # author isn't in a voice channel
         if not ctx.author.voice:
-            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel)
-            return
+            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel); return
         
         # empty theme
         if not args:
-            await FancyErrors("SYNTAX", ctx.channel)
-            return
+            await FancyErrors("SYNTAX", ctx.channel); return
         
         # theres no radio playing
         if endless_radio[guild_id] == False:
-            await FancyErrors("NO_RADIO", ctx.channel)
-            return
+            await FancyErrors("NO_RADIO", ctx.channel); return
         
         if guild_id in fuse_radio and args in fuse_radio[guild_id]:
-            await FancyErrors("RADIO_EXIST", ctx.channel)
-            return
+            await FancyErrors("RADIO_EXIST", ctx.channel); return
         
         # get list of stations
         stations = ""
@@ -436,8 +398,7 @@ class Music(commands.Cog, name="Music"):
         
         # too short
         if len(args) < 3:
-            await FancyErrors("SHORT", ctx.channel)
-            return
+            await FancyErrors("SHORT", ctx.channel); return
         
         # we're not in voice, lets change that
         if not ctx.guild.voice_client:
@@ -468,13 +429,11 @@ class Music(commands.Cog, name="Music"):
 
         # are you even allowed to use this command?
         if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
-            await FancyErrors("AUTHOR_PERMS", ctx.channel)
-            return
+            await FancyErrors("AUTHOR_PERMS", ctx.channel); return
         
         # author isn't in a voice channel
         if not ctx.author.voice:
-            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel)
-            return
+            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel); return
         
         # we're not in voice, lets change that
         if not ctx.guild.voice_client:
@@ -507,8 +466,7 @@ class Music(commands.Cog, name="Music"):
 
         # are you even allowed to use this command?
         if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
-            await FancyErrors("AUTHOR_PERMS", ctx.channel)
-            return
+            await FancyErrors("AUTHOR_PERMS", ctx.channel); return
         
         config.settings[guild_str]['radio_intro'] = not config.settings[guild_str]['radio_intro']
         config.SaveSettings()
@@ -533,23 +491,19 @@ class Music(commands.Cog, name="Music"):
 
         # are you even allowed to use this command?
         if not await CheckPermissions(self.bot, ctx.guild.id, ctx.author.id, ctx.author.roles):
-            await FancyErrors("AUTHOR_PERMS", ctx.channel)
-            return
+            await FancyErrors("AUTHOR_PERMS", ctx.channel); return
 
         # author isn't in a voice channel
         if not ctx.author.voice:
-            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel)
-            return
+            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel); return
 
         # we're not in voice, lets change that
         if not ctx.guild.voice_client:
-            await FancyErrors("BOT_NO_VOICE", ctx.channel)
-            return
+            await FancyErrors("BOT_NO_VOICE", ctx.channel); return
 
         # we're not playing anything
         if not ctx.guild.voice_client.is_playing():
-            await FancyErrors("NO_PLAYING", ctx.channel)
-            return
+            await FancyErrors("NO_PLAYING", ctx.channel); return
         
         # hol' up fam (pause the song)
         pause_time[guild_id] = time.time()
@@ -576,8 +530,7 @@ class Music(commands.Cog, name="Music"):
 
         # author isn't in a voice channel
         if not ctx.author.voice:
-            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel)
-            return
+            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel); return
 
         # we're not in voice, lets change that
         if not ctx.guild.voice_client:
@@ -585,8 +538,7 @@ class Music(commands.Cog, name="Music"):
 
         # no data provided
         if not args:
-            await FancyErrors("SYNTAX", ctx.channel)
-            return
+            await FancyErrors("SYNTAX", ctx.channel); return
         
         # what are we doin here?
         song_type = args.startswith('https://') and 'link' or 'search'
@@ -616,27 +568,23 @@ class Music(commands.Cog, name="Music"):
 
         # are you even allowed to use this command?
         if not await CheckPermissions(self.bot, ctx.guild.id, ctx.author.id, ctx.author.roles):
-            await FancyErrors("AUTHOR_PERMS", ctx.channel)
-            return
+            await FancyErrors("AUTHOR_PERMS", ctx.channel); return
 
         # author isn't in a voice channel
         if not ctx.author.voice:
-            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel)
-            return
+            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel); return
         
         # playlists not supported with playnext
         if is_playlist:
-            await FancyErrors("SHUFFLE_NO_PLAYLIST", ctx.channel)
-            return
+            await FancyErrors("SHUFFLE_NO_PLAYLIST", ctx.channel); return
+        
+        # no data provided
+        if not args:
+            await FancyErrors("SYNTAX", ctx.channel); return
 
         # we're not in voice, lets change that
         if not ctx.guild.voice_client:
             await JoinVoice(self.bot, ctx)
-
-        # no data provided
-        if not args:
-            await FancyErrors("SYNTAX", ctx.channel)
-            return
         
         # what are we doin here?
         song_type = args.startswith('https://') and 'link' or 'search'
@@ -683,18 +631,15 @@ class Music(commands.Cog, name="Music"):
 
         # are you even allowed to use this command?
         if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
-            await FancyErrors("AUTHOR_PERMS", ctx.channel)
-            return
+            await FancyErrors("AUTHOR_PERMS", ctx.channel); return
 
         # is chatgpt enabled?
         if not config.BOT_OPENAI_KEY:
-            await FancyErrors("DISABLED_FEATURE", ctx.channel)
-            return
+            await FancyErrors("DISABLED_FEATURE", ctx.channel); return
         
         # author isn't in a voice channel
         if not ctx.author.voice:
-            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel)
-            return
+            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel); return
         
         # we're not in voice, lets change that
         if not ctx.guild.voice_client:
@@ -749,12 +694,10 @@ class Music(commands.Cog, name="Music"):
 
         # are you even allowed to use this command?
         if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
-            await FancyErrors("AUTHOR_PERMS", ctx.channel)
-            return
+            await FancyErrors("AUTHOR_PERMS", ctx.channel); return
         
         if not args or (args and not args.isdigit()):
-            await FancyErrors("SYNTAX", ctx.channel)
-            return
+            await FancyErrors("SYNTAX", ctx.channel); return
 
         args = int(args)
 
@@ -788,8 +731,7 @@ class Music(commands.Cog, name="Music"):
 
         # are you even allowed to use this command?
         if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
-            await FancyErrors("AUTHOR_PERMS", ctx.channel)
-            return
+            await FancyErrors("AUTHOR_PERMS", ctx.channel); return
         
         repeat[guild_id] = not repeat[guild_id]
 
@@ -814,23 +756,19 @@ class Music(commands.Cog, name="Music"):
 
         # are you even allowed to use this command?
         if not await CheckPermissions(self.bot, ctx.guild.id, ctx.author.id, ctx.author.roles):
-            await FancyErrors("AUTHOR_PERMS", ctx.channel)
-            return
+            await FancyErrors("AUTHOR_PERMS", ctx.channel); return
 
         # author isn't in a voice channel
         if not ctx.author.voice:
-            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel)
-            return
+            await FancyErrors("AUTHOR_NO_VOICE", ctx.channel); return
 
         # we're not in voice
         if not ctx.guild.voice_client:
-            await FancyErrors("BOT_NO_VOICE", ctx.channel)
-            return
+            await FancyErrors("BOT_NO_VOICE", ctx.channel); return
 
         # we're not playing anything
         if not ctx.guild.voice_client.is_paused():
-            await FancyErrors("NO_PLAYING", ctx.channel)
-            return
+            await FancyErrors("NO_PLAYING", ctx.channel); return
         
         # update the start_time
         start_time[guild_id] += (pause_time[guild_id] - start_time[guild_id])
@@ -860,8 +798,7 @@ class Music(commands.Cog, name="Music"):
 
         # are you even allowed to use this command?
         if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
-            await FancyErrors("AUTHOR_PERMS", ctx.channel)
-            return
+            await FancyErrors("AUTHOR_PERMS", ctx.channel); return
         
         random.shuffle(queue[guild_id])
         shuffle[guild_id] = not shuffle[guild_id]
@@ -885,16 +822,15 @@ class Music(commands.Cog, name="Music"):
 
         # are you even allowed to use this command?
         if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
-            await FancyErrors("AUTHOR_PERMS", ctx.channel)
-            return
+            await FancyErrors("AUTHOR_PERMS", ctx.channel); return
         
         if not ctx.guild.voice_client or not ctx.guild.voice_client.is_playing():
-            await FancyErrors("NO_PLAYING", ctx.channel)
-        else:
-            await ctx.channel.send(f"Skipping {currently_playing[guild_id]['title']}.")
-            ctx.guild.voice_client.stop()
-            if repeat[guild_id]:
-                await PlayNextSong(self.bot, guild_id, ctx.guild.voice_client)
+            await FancyErrors("NO_PLAYING", ctx.channel); return
+        
+        await ctx.channel.send(f"Skipping {currently_playing[guild_id]['title']}.")
+        ctx.guild.voice_client.stop()
+        if repeat[guild_id]:
+            await PlayNextSong(self.bot, guild_id, ctx.guild.voice_client)
 
 ####################################################################
 # function: ChatGPT(bot, data)
@@ -1266,7 +1202,6 @@ async def GetQueue(ctx, extra=None):
     r = guild_id in endless_radio and endless_radio[guild_id] or 'off'
     fuse = ""
     if guild_id in fuse_radio:
-        r = "💥 Fused Stations 💥"
         for i, station in enumerate(fuse_radio[guild_id], 1):
             if i == 1:
                 fuse += f"\"**{station}**\""
@@ -1376,8 +1311,7 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
                     log_music.error(e)
 
             embed = discord.Embed(description=f"Added {playlist_length} tracks to queue.")
-            await message.edit(content=None, embed=embed)
-            return
+            await message.edit(content=None, embed=embed); return
         
         # spotify playlist
         elif is_playlist and 'open.spotify.com/playlist/' in args:
@@ -1404,8 +1338,7 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
                     log_music.error(e)
 
             embed = discord.Embed(description=f"Added {playlist_length} tracks to queue.")
-            await message.edit(content=None, embed=embed)
-            return
+            await message.edit(content=None, embed=embed); return
 
         # spotify link
         elif 'open.spotify.com/track/' in args:
@@ -1427,8 +1360,7 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
                 log_music.error(e)
 
             embed = discord.Embed(description=f"Added {song[0]['title']} to queue.")
-            await message.edit(content=None, embed=embed)
-            return
+            await message.edit(content=None, embed=embed); return
 
         # it's chatgpt dude
         elif method == 'radio':
@@ -1454,8 +1386,7 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
             embed = discord.Embed(description=f"[3/3] Your ChatGPT playlist has been added to queue!")
             embed.add_field(name="Added:", value=f"{temp}", inline=False)
 
-            await message.edit(content=None, embed=embed)
-            return
+            await message.edit(content=None, embed=embed); return
 
         # endless!
         elif method == 'endless':
@@ -1502,8 +1433,7 @@ async def QueueSong(bot, args, method, priority, message, guild_id, voice_client
                 await message.edit(content=None, embed=embed)
 
                 if not voice_client.is_playing() and queue[guild_id]:
-                    await PlayNextSong(bot, guild_id, voice_client)
-                    return
+                    await PlayNextSong(bot, guild_id, voice_client); return
 
             except Exception as e:
                 log_music.error(e)
