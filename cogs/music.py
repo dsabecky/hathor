@@ -171,7 +171,7 @@ class Music(commands.Cog, name="Music"):
     # on_voice_state_update()
     ####################################################################
     @commands.Cog.listener()
-    async def on_voice_state_update(self, author):
+    async def on_voice_state_update(self, author, _1, _2):
         if self.bot.user == author:
             guild_id = author.guild.id
             voice_client = self.bot.get_guild(guild_id).voice_client
