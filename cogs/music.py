@@ -1014,9 +1014,10 @@ async def CreateSpotifyKey(bot):
 # Downloads the song requested from QueueSong.
 ####################################################################
 async def DownloadSong(args, method, item=None):
+    strip_audio = args
     if args.endswith(" audio"):
         strip_audio = args.rstrip(" audio")
-        split_args = strip_audio.split(" - ", 1)
+        split_args = "-" in strip_audio and strip_audio.split(" - ", 1) or strip_audio
         proper_title = f"{split_args[1]}, by {split_args[0]}"
     else:
         proper_title = ""
