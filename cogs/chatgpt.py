@@ -161,7 +161,6 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
     # ----
     # Sends a request to dall-e.
     ####################################################################
-
     @commands.command(name='imagine')
     async def ask_dalle(
         self, ctx, *,
@@ -197,11 +196,14 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         message = await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
 
         try:
+            # Offload the image generation to a background asyncio task
+            await asyncio.create_task(self.generate_dalle_image(ctx, request))
 
-            # Offloading the image generation to a background task
-            await asyncio.gather(self.generate_dalle_image(ctx, request))
+        except:
+            return
 
-
+    async def generate_dalle_image(self, ctx, request):
+        try:
             response = openai.Image.create(
                 model=config.BOT_DALLE_MODEL,
                 prompt=request,
@@ -209,16 +211,8 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
                 n=1
             )
 
-        except:
-            return
+            image_data = BytesIO(requests.get(response['data'][0]['url']).content)
+            await ctx.send(file=discord.File(image_data, filename='dalle_image.png'))
 
-    async def generate_dalle_image(self, ctx, request):
-        response = openai.Image.create(
-            model=config.BOT_DALLE_MODEL,
-            prompt=request,
-            quality='hd',
-            n=1
-        )
-
-        image_data = BytesIO(requests.get(response['data'][0]['url']).content)
-        await ctx.send(file=discord.File(image_data, filename='dalle_image.png'))
+        except openai.error.OpenAIError as e:
+            print(f"OpenAI API error: {e}")
