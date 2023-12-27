@@ -1,6 +1,11 @@
 import discord
 from discord.ext import commands
 import openai
+import asyncio
+import requests
+from io import BytesIO
+import base64
+import imghdr
 
 import config
 import func
@@ -31,7 +36,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
     # ----
     # Sends a request to chatgpt.
     ####################################################################
-    @commands.command(name='ai')
+    @commands.command(name='chatgpt')
     async def ask_chatgpt(
         self, ctx, *,
         request = commands.parameter(default=None, description="Prompt request")
@@ -41,8 +46,8 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         If the seperator | is used, you can provide a tone followed by your prompt.
 
         Syntax:
-            !ai prompt
-            !ai tone | prompt
+            !chatgpt prompt
+            !chatgpt tone | prompt
         """
 
         # is there an api key present?
@@ -56,7 +61,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             return
         
         # what are you asking that's shorter, really
-        if len(request) < 3:
+        if len(request) < 3 and not ctx.message.attachments:
             await FancyErrors("SHORT", ctx.channel)
             return
         
@@ -75,14 +80,25 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             output.add_field(name="Prompt:", value=user_request, inline=False)
             message = await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
 
-            conversation = [
-                { "role": "system", "content": f"Limit response length to 1000 characters. {system_request}" },
-                { "role": "user", "content": user_request }
-            ]
+            # including an image?
+            if ctx.message.attachments and ctx.message.attachments[0].content_type.startswith('image/'):
+                image_data = await ctx.message.attachments[0].read()
+                image_base64 = base64.b64encode(image_data).decode('utf-8')
+                image_type = imghdr.what(None, h=image_data)
+
+                conversation = [
+                    { "role": "system", "content": f"Limit response length to 1000 characters. {system_request}" },
+                    { "role": "user", "content": [ { "type": "text", "text": user_request }, { "type": "image_url", "image_url": { "url": f"data:image/{image_type};base64,{image_base64}" } } ] }
+                ]
+            else:
+                conversation = [
+                    { "role": "system", "content": f"Limit response length to 1000 characters. {system_request}" },
+                    { "role": "user", "content": user_request }
+                ]
 
             try:
                 response = openai.ChatCompletion.create(
-                    model=config.BOT_OPENAI_MODEL,
+                    model=config.BOT_CHATGPT_MODEL,
                     messages=conversation,
                     temperature=0.8,
                     max_tokens=1000
@@ -97,14 +113,25 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             output.add_field(name="Prompt:", value=user_request, inline=False)
             message = await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
 
-            conversation = [
-                { "role": "system", "content": f"Limit response length to 1000 characters." },
-                { "role": "user", "content": user_request }
-            ]
+            # including an image?
+            if ctx.message.attachments and ctx.message.attachments[0].content_type.startswith('image/'):
+                image_data = await ctx.message.attachments[0].read()
+                image_base64 = base64.b64encode(image_data).decode('utf-8')
+                image_type = imghdr.what(None, h=image_data)
+
+                conversation = [
+                    { "role": "system", "content": f"Limit response length to 1000 characters." },
+                    { "role": "user", "content": [ { "type": "text", "text": user_request }, { "type": "image_url", "image_url": { "url": f"data:image/{image_type};base64,{image_base64}" } } ] }
+                ]
+            else:
+                conversation = [
+                    { "role": "system", "content": f"Limit response length to 1000 characters." },
+                    { "role": "user", "content": user_request }
+                ]
 
             try:
                 response = openai.ChatCompletion.create(
-                    model=config.BOT_OPENAI_MODEL,
+                    model=config.BOT_CHATGPT_MODEL,
                     messages=conversation,
                     temperature=0.8,
                     max_tokens=1000
@@ -118,7 +145,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             output.description = f"ERROR"
             await message.edit(content=None, embed=output)
         else:
-            output.description = f"Reponse was generated using the **{config.BOT_OPENAI_MODEL}** model."
+            output.description = f"Reponse was generated using the **{config.BOT_CHATGPT_MODEL}** model."
 
             response_content = response.choices[0].message.content
             if len(response_content) > 1024:
@@ -127,4 +154,71 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
                 await ctx.channel.send(f"```{response_content[:1990]}```")
             else:
                 output.add_field(name="Response:", value=response_content, inline=False)
-                await message.edit(content=None, embed=output)            
+                await message.edit(content=None, embed=output)
+
+    ####################################################################
+    # trigger: !imagine
+    # ----
+    # Sends a request to dall-e.
+    ####################################################################
+
+    @commands.command(name='imagine')
+    async def ask_dalle(
+        self, ctx, *,
+        request = commands.parameter(default=None, description="Prompt request")
+        ):
+        """
+        Generates a Dall-E prompt.
+
+        Syntax:
+            !imagine prompt
+        """
+
+        # is there an api key present?
+        if not config.BOT_OPENAI_KEY:
+            await FancyErrors("DISABLED_FEATURE", ctx.channel)
+            return
+
+        # did you even ask anything
+        if not request:
+            await FancyErrors("SYNTAX", ctx.channel)
+            return
+        
+        # what are you asking that's shorter, really
+        if len(request) < 10:
+            await FancyErrors("SHORT", ctx.channel)
+            return
+        
+        # prep our message
+        output = discord.Embed(title="DALL-E", description="Sending request to DALL-E...")
+
+        # Prep our message
+        output.add_field(name="Prompt:", value=request, inline=False)
+        message = await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
+
+        try:
+
+            # Offloading the image generation to a background task
+            await asyncio.gather(self.generate_dalle_image(ctx, request))
+
+
+            response = openai.Image.create(
+                model=config.BOT_DALLE_MODEL,
+                prompt=request,
+                quality='hd',
+                n=1
+            )
+
+        except:
+            return
+
+    async def generate_dalle_image(self, ctx, request):
+        response = openai.Image.create(
+            model=config.BOT_DALLE_MODEL,
+            prompt=request,
+            quality='hd',
+            n=1
+        )
+
+        image_data = BytesIO(requests.get(response['data'][0]['url']).content)
+        await ctx.send(file=discord.File(image_data, filename='dalle_image.png'))
