@@ -157,6 +157,70 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
                 await message.edit(content=None, embed=output)
 
     ####################################################################
+    # trigger: !gptimagine
+    # ----
+    # Pivots a chatgpt request to dall-e for even more detail.
+    ####################################################################
+    @commands.command(name='gptimagine')
+    async def ask_gptdalle(
+        self, ctx, *,
+        request = commands.parameter(default=None, description="Prompt request")
+        ):
+        """
+        Uses ChatGPT to create a DALL-E prompt, then returns the result.
+
+        Syntax:
+            !gptimagine prompt
+        """
+
+        # is there an api key present?
+        if not config.BOT_OPENAI_KEY:
+            await FancyErrors("DISABLED_FEATURE", ctx.channel)
+            return
+
+        # did you even ask anything
+        if not request:
+            await FancyErrors("SYNTAX", ctx.channel)
+            return
+        
+        # what are you asking that's shorter, really
+        if len(request) < 5:
+            await FancyErrors("SHORT", ctx.channel)
+            return
+        
+        # prep our message
+        output = discord.Embed(title="OpenAI Generation", description="Generating request...")
+
+        conversation = [
+                    { "role": "system", "content": f"Provide only the information requested. Include a lot of detail." },
+                    { "role": "user", "content": f"Write a DALL-E prompt for the following: {request}" }
+                ]
+
+        try:
+
+            # Prep our message
+            output.add_field(name="Prompt:", value=request, inline=False)
+            message = await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
+
+            # get chatgpt response
+            response = openai.ChatCompletion.create(
+                model=config.BOT_CHATGPT_MODEL,
+                messages=conversation,
+                temperature=0.8,
+                max_tokens=1000
+            )
+
+            # include chatgpt results in message
+            output.add_field(name="ChatGPT Prompt:", value=response.choices[0].message.content, inline=False)
+            await message.edit(embed=output, allowed_mentions=discord.AllowedMentions.none())
+
+            # generate dall-e image from chatgpt result
+            await asyncio.create_task(self.generate_dalle_image(ctx, response.choices[0].message.content))
+
+        except openai.error.ServiceUnavailableError:
+            return
+
+    ####################################################################
     # trigger: !imagine
     # ----
     # Sends a request to dall-e.
