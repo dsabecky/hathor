@@ -1,6 +1,6 @@
 import json
 
-# set your bot token here
+# set your bot token here (https://discord.com/developers)
 BOT_TOKEN = ''
 
 # set to True if bot is in maintenance mode
@@ -10,19 +10,23 @@ MAINTENANCE = False
 BOT_PREFIX = '!'
 
 # set the bot administrator (your personal userID)
-BOT_ADMIN  = 000000000
+BOT_ADMIN  = 000000000000000
 
-# set your openai key here
+# set your openai key here (https://platform.openai.com/api-keys)
 BOT_OPENAI_KEY = ''
 BOT_CHATGPT_MODEL = 'gpt-4-vision-preview'
 BOT_DALLE_MODEL = 'dall-e-3'
 
-# youtube api key
+# youtube api key (https://developers.google.com/youtube/v3)
 BOT_YOUTUBE_KEY = ''
 
-# spotify api
+# spotify api (https://developer.spotify.com/)
 BOT_SPOTIFY_CLIENT = ''
 BOT_SPOTIFY_SECRET = ''
+
+# elevenlabs tts api (https://elevenlabs.io/api)
+ELEVENLABS_API = ''
+ELEVENLABS_VOICEID = 't0jbNlBVZ17f02VDIeMI'
 
 # maximum playlist legnth
 MUSIC_MAX_PLAYLIST = 20

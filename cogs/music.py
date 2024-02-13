@@ -8,7 +8,6 @@ import requests
 
 # allow for extra bits
 import datetime
-from gtts import gTTS
 import math
 import openai
 import os
@@ -58,15 +57,6 @@ def LoadRadio():
 def SaveRadio():
     with open('radio_playlists.json', 'w') as file:
         json.dump(radio_playlists, file, indent=4)
-
-intros = [
-    "Up next is",
-    "Next up we've got",
-    "Coming your way is",
-    "We've got a special treat for you here,"
-    "The next track is",
-    "Keeping the music going with"
-]
 
 # build our temp variables
 BOT_SPOTIFY_KEY = ""
@@ -845,7 +835,7 @@ async def ChatGPT(bot, sys_content, user_content):
 
     try:
         response = openai.ChatCompletion.create(
-            model=config.BOT_OPENAI_MODEL,
+            model=config.BOT_CHATGPT_MODEL,
             messages=conversation,
             temperature=0.8,
             max_tokens=2000
@@ -896,7 +886,7 @@ async def CheckEndlessMix(bot):
                             for item in recent:
                                 for new in playlist:
                                     if new in item['radio_title']:
-                                        playlist.pop(new)
+                                        playlist.remove(new)
 
                             await QueueSong(bot, playlist, 'endless', False, 'endless', guild_id, voice_client)
 
@@ -1014,13 +1004,13 @@ async def CreateSpotifyKey(bot):
 # Downloads the song requested from QueueSong.
 ####################################################################
 async def DownloadSong(args, method, item=None):
-    strip_audio = args
     if args.endswith(" audio"):
         strip_audio = args.rstrip(" audio")
         split_args = "-" in strip_audio and strip_audio.split(" - ", 1) or strip_audio
-        proper_title = f"{split_args[1]}, by {split_args[0]}"
+        song_artist, song_title = split_args[0], split_args[1]
     else:
-        proper_title = ""
+        song_artist = ""
+        song_title = args
 
     args = method == "search" and f"ytsearch:{args}" or args
     id = uuid.uuid4()
@@ -1058,7 +1048,8 @@ async def DownloadSong(args, method, item=None):
                                 "path": f"db/{id}.mp3",
                                 "duration": info['duration'],
                                 "thumbnail": info['thumbnail'],
-                                "proper_title": proper_title,
+                                "song_artist": song_artist,
+                                "song_title": song_title,
                                 "url": info['webpage_url'],
                                 "radio_title": strip_audio and strip_audio or ""
                             })
@@ -1071,7 +1062,8 @@ async def DownloadSong(args, method, item=None):
                             "path": f"db/{id}.mp3",
                             "duration": info['duration'],
                             "thumbnail": info['thumbnail'],
-                            "proper_title": proper_title,
+                            "song_artist": song_artist,
+                            "song_title": song_title,
                             "url": info['webpage_url'],
                             "radio_title": strip_audio and strip_audio or ""
                         }]
@@ -1234,10 +1226,21 @@ async def PlayNextSong(bot, guild_id, channel):
 
     if queue[guild_id]:
         song = queue[guild_id].pop(0)
-        path, title, proper_title = song['path'], song['title'], song['proper_title']
+        path, title, song_artist, song_title = song['path'], song['title'], song['song_artist'], song['song_title']
         start_time[guild_id] = time.time()
         volume = config.settings[str(guild_id)]['volume'] / 100
         intro_volume = config.settings[str(guild_id)]['volume'] < 80 and (config.settings[str(guild_id)]['volume'] + 15) / 100
+
+        intros = [
+            f"Ladies and gentlemen, hold onto your seats because we're about to unveil the magic of {song_title} by {song_artist}. Only here at {channel.guild.name} radio.",
+            f"Turning it up to 11! brace yourselves for {song_artist}'s masterpiece {song_title}. Here on {channel.guild.name} radio.",
+            f"Rock on, warriors! We're cranking up the intensity with {song_title} by {song_artist} on {channel.guild.name} radio.",
+            f"Welcome to the virtual airwaves! Get ready for a wild ride with a hot track by {song_artist} on {channel.guild.name} radio.",
+            f"Buckle up, folks! We're about to take you on a musical journey through the neon-lit streets of {channel.guild.name} radio.",
+            f"Hello, virtual world! Your DJ is in the house, spinning {song_title} by {song_artist}. Only here on {channel.guild.name} radio.",
+            f"Greetings from the digital realm! Tune in, turn up, and let the beats of {song_artist} with {song_title} take over your senses, here on {channel.guild.name} radio.",
+            f"Time to crank up the volume and immerse yourself in the eclectic beats of {channel.guild.name} radio. Let the madness begin with {song_title} by {song_artist}!"
+        ]
 
         # delete song after playing
         def remove_song(error):
@@ -1251,11 +1254,30 @@ async def PlayNextSong(bot, guild_id, channel):
             intro_playing[guild_id] = False
 
         # add an intro (if radio is enabled)
-        if proper_title != "" and config.settings[guild_str]['radio_intro']:
+        if song_artist != "" and config.settings[guild_str]['radio_intro']:
             intro_playing[guild_id] = True
-            intro = gTTS(f"{random.choice(intros)} {proper_title}", lang='en', slow=False)
-            intro.save("db/intro.mp3")
+
+            headers = {
+                "Accept": "audio/mpeg",
+                "Content-Type": "application/json",
+                "xi-api-key": f"{config.ELEVENLABS_API}"
+            }
+
+            data = {
+                "text": random.choice(intros),
+                "model_id": "eleven_monolingual_v1",
+
+                "voice_settings": {
+                    "stability": 0.5,
+                    "similarity_boost": 0.5
+                }
+            }
+
+            intro = requests.post(f'https://api.elevenlabs.io/v1/text-to-speech/{config.ELEVENLABS_VOICEID}', headers=headers, json=data)
+            with open("db/intro.mp3", "wb") as file:
+                file.write(intro.content)
             channel.play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio("db/intro.mp3"), volume=intro_volume), after=play_after_intro)
+
 
         while intro_playing[guild_id] == True:
             await asyncio.sleep(0.5)
@@ -1273,7 +1295,8 @@ async def PlayNextSong(bot, guild_id, channel):
             "path": path,
             "thumbnail": song["thumbnail"],
             "url": song["url"],
-            "proper_title": proper_title
+            "song_artist": song_artist,
+            "song_title": song_title
         }
 
     else:
