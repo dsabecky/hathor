@@ -1009,6 +1009,7 @@ async def DownloadSong(args, method, item=None):
         split_args = "-" in strip_audio and strip_audio.split(" - ", 1) or strip_audio
         song_artist, song_title = split_args[0], split_args[1]
     else:
+        strip_audio = args
         song_artist = ""
         song_title = args
 
@@ -1051,7 +1052,7 @@ async def DownloadSong(args, method, item=None):
                                 "song_artist": song_artist,
                                 "song_title": song_title,
                                 "url": info['webpage_url'],
-                                "radio_title": strip_audio and strip_audio or ""
+                                "radio_title": strip_audio or args
                             })
                     return song_list
 
@@ -1065,7 +1066,7 @@ async def DownloadSong(args, method, item=None):
                             "song_artist": song_artist,
                             "song_title": song_title,
                             "url": info['webpage_url'],
-                            "radio_title": strip_audio and strip_audio or ""
+                            "radio_title": strip_audio or args
                         }]
             else:
                 return None
