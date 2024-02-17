@@ -1232,16 +1232,25 @@ async def PlayNextSong(bot, guild_id, channel):
         volume = config.settings[str(guild_id)]['volume'] / 100
         intro_volume = config.settings[str(guild_id)]['volume'] < 80 and (config.settings[str(guild_id)]['volume'] + 15) / 100
 
+        # standard song introductions
         intros = [
             f"Ladies and gentlemen, hold onto your seats because we're about to unveil the magic of {song_title} by {song_artist}. Only here at {channel.guild.name} radio.",
             f"Turning it up to 11! brace yourselves for {song_artist}'s masterpiece {song_title}. Here on {channel.guild.name} radio.",
             f"Rock on, warriors! We're cranking up the intensity with {song_title} by {song_artist} on {channel.guild.name} radio.",
             f"Welcome to the virtual airwaves! Get ready for a wild ride with a hot track by {song_artist} on {channel.guild.name} radio.",
             f"Buckle up, folks! We're about to take you on a musical journey through the neon-lit streets of {channel.guild.name} radio.",
-            f"Hello, virtual world! Your DJ is in the house, spinning {song_title} by {song_artist}. Only here on {channel.guild.name} radio.",
+            f"Hello, virtual world! It's your DJ, {bot.user.display_name or bot.user.name}, in the house, spinning {song_title} by {song_artist}. Only here on {channel.guild.name} radio.",
             f"Greetings from the digital realm! Tune in, turn up, and let the beats of {song_artist} with {song_title} take over your senses, here on {channel.guild.name} radio.",
             f"Time to crank up the volume and immerse yourself in the eclectic beats of {channel.guild.name} radio. Let the madness begin with {song_title} by {song_artist}!"
         ]
+
+        # special song introductions
+        special_response = await ChatGPT(
+            bot,
+            "Return only the information requested with no additional words or context.",
+            f'Give me a short talking point about the song "{song_artist} - {song_title}" that I can use before playing it on my radio station. No longer than two sentences. Use the tone and cadance of a radio DJ.'
+        )
+        special_intro = special_response['choices'][0].message.content
 
         # delete song after playing
         def remove_song(error):
@@ -1255,7 +1264,7 @@ async def PlayNextSong(bot, guild_id, channel):
             intro_playing[guild_id] = False
 
         # add an intro (if radio is enabled)
-        if song_artist != "" and config.settings[guild_str]['radio_intro']:
+        if song_artist != "" and config.settings[guild_str]['radio_intro'] and random.randint(1, 5) != 5:
             intro_playing[guild_id] = True
 
             headers = {
@@ -1265,7 +1274,7 @@ async def PlayNextSong(bot, guild_id, channel):
             }
 
             data = {
-                "text": random.choice(intros),
+                "text": random.choice([random.choice(intros), f"{special_intro} Here on {channel.guild.name} radio."]),
                 "model_id": "eleven_monolingual_v1",
 
                 "voice_settings": {
