@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 import openai
+from openai import OpenAI
 import asyncio
 import requests
 from io import BytesIO
@@ -13,7 +14,7 @@ from func import FancyErrors
 
 # enable openai if we set a key
 if config.BOT_OPENAI_KEY:
-    openai.api_key = config.BOT_OPENAI_KEY
+    client = OpenAI(api_key=config.BOT_OPENAI_KEY)
 
 # define the class
 class ChatGPT(commands.Cog, name="ChatGPT"):
@@ -28,11 +29,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
     # async def on_ready(self):
 
     ####################################################################
-    # trigger: !ai
-    # ----
-    # request: pseudo-variable
-    # system_request: when split with a |, will set the tone of the prompt
-    # user_request:   the request to be sent
+    # trigger: !chatgpt
     # ----
     # Sends a request to chatgpt.
     ####################################################################
@@ -97,13 +94,13 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
                 ]
 
             try:
-                response = openai.ChatCompletion.create(
+                response = client.chat.completions.create(
                     model=config.BOT_CHATGPT_MODEL,
                     messages=conversation,
                     temperature=0.8,
                     max_tokens=1000
                 )
-            except openai.error.ServiceUnavailableError:
+            except openai.ServiceUnavailableError:
                 reponse = "SERVICE_UNAVAILABLE"
 
         else:
@@ -130,13 +127,13 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
                 ]
 
             try:
-                response = openai.ChatCompletion.create(
+                response = client.chat.completions.create(
                     model=config.BOT_CHATGPT_MODEL,
                     messages=conversation,
                     temperature=0.8,
                     max_tokens=1000
                 )
-            except openai.error.ServiceUnavailableError:
+            except openai.ServiceUnavailableError:
                 reponse = "SERVICE_UNAVAILABLE"
 
         # update our message with the reponse
@@ -192,7 +189,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         output = discord.Embed(title="OpenAI Generation", description="Generating request...")
 
         conversation = [
-                    { "role": "system", "content": f"Provide only the information requested. Include a lot of detail." },
+                    { "role": "system", "content": f"Provide only the information requested. Include a lot of detail. Limit response to 800 characters." },
                     { "role": "user", "content": f"Write a DALL-E prompt for the following: {request}" }
                 ]
 
@@ -203,7 +200,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             message = await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
 
             # get chatgpt response
-            response = openai.ChatCompletion.create(
+            response = client.chat.completions.create(
                 model=config.BOT_CHATGPT_MODEL,
                 messages=conversation,
                 temperature=0.8,
@@ -217,7 +214,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             # generate dall-e image from chatgpt result
             await asyncio.create_task(self.generate_dalle_image(ctx, response.choices[0].message.content))
 
-        except openai.error.ServiceUnavailableError:
+        except openai.ServiceUnavailableError:
             return
 
     ####################################################################
@@ -259,24 +256,27 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         output.add_field(name="Prompt:", value=request, inline=False)
         message = await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
 
-        try:
-            # Offload the image generation to a background asyncio task
-            await asyncio.create_task(self.generate_dalle_image(ctx, request))
+        # try:
+        # Offload the image generation to a background asyncio task
+        await asyncio.create_task(self.generate_dalle_image(ctx, request))
 
-        except:
-            return
+        # except:
+        #     return
 
     async def generate_dalle_image(self, ctx, request):
-        try:
-            response = openai.Image.create(
-                model=config.BOT_DALLE_MODEL,
-                prompt=request,
-                quality='hd',
-                n=1
-            )
+        # try:
+        response = client.images.generate(
+            model=config.BOT_DALLE_MODEL,
+            prompt=request,
+            quality='hd',
+            n=1
+        )
 
-            image_data = BytesIO(requests.get(response['data'][0]['url']).content)
-            await ctx.send(file=discord.File(image_data, filename='dalle_image.png'))
+        for image_data in response.data:
+            image_data_bytes = BytesIO(requests.get(image_data.url).content)
 
-        except openai.error.OpenAIError as e:
-            print(f"OpenAI API error: {e}")
+            # Send the image as a file attachment
+            await ctx.send(file=discord.File(image_data_bytes, filename='dalle_image.png'))
+
+        # except openai.OpenAIError as e:
+        #     print(f"OpenAI API error: {e}")

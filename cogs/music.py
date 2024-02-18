@@ -11,6 +11,7 @@ from pydub import AudioSegment
 import datetime
 import math
 import openai
+from openai import OpenAI
 from gtts import gTTS
 import io
 import os
@@ -30,6 +31,9 @@ from func import FancyErrors, CheckPermissions
 
 # we need voice functions
 from cogs.voice import JoinVoice
+
+if config.BOT_OPENAI_KEY:
+    client = OpenAI(api_key=config.BOT_OPENAI_KEY)
 
 # build song history
 def LoadHistory():
@@ -212,7 +216,7 @@ class Music(commands.Cog, name="Music"):
             )
 
             # filter out the goop
-            parsed_response = response['choices'][0].message.content.split('\n')
+            parsed_response = response.choices[0].message.content.split('\n')
             pattern = r'^\d+\.\s'
 
             playlist = []
@@ -227,7 +231,7 @@ class Music(commands.Cog, name="Music"):
             await QueueSong(self.bot, playlist, 'radio', False, message, ctx.guild.id, ctx.guild.voice_client)
 
 
-        except openai.error.ServiceUnavailableError:
+        except openai.ServiceUnavailableError:
             await FancyErrors("API_ERROR", ctx.channel); return
 
     ####################################################################
@@ -837,7 +841,7 @@ async def ChatGPT(bot, sys_content, user_content):
     ]
 
     try:
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model=config.BOT_CHATGPT_MODEL,
             messages=conversation,
             temperature=0.8,
@@ -845,7 +849,7 @@ async def ChatGPT(bot, sys_content, user_content):
         )
         return response
 
-    except openai.error.ServiceUnavailableError:
+    except openai.ServiceUnavailableError:
         return "API_ERROR"
 
 ####################################################################
@@ -931,7 +935,7 @@ async def CheckEndlessMix(bot):
                                 )
 
                                 # filter out the goop
-                                parsed_response = response['choices'][0].message.content.split('\n')
+                                parsed_response = response.choices[0].message.content.split('\n')
                                 pattern = r'^\d+\.\s'
 
                                 for item in parsed_response:
@@ -941,7 +945,7 @@ async def CheckEndlessMix(bot):
 
                                 SaveRadio()
 
-                            except openai.error.ServiceUnavailableError:
+                            except openai.ServiceUnavailableError:
                                 print("Service Unavailable :(")
                                 return
         
@@ -1123,7 +1127,7 @@ async def FuseRadio(bot, ctx, new_theme=None):
                 )
 
                 # filter out the goop
-                parsed_response = response['choices'][0].message.content.split('\n')
+                parsed_response = response.choices[0].message.content.split('\n')
                 pattern = r'^\d+\.\s'
 
                 for item in parsed_response:
@@ -1132,7 +1136,7 @@ async def FuseRadio(bot, ctx, new_theme=None):
                         radio_playlists[station].append(parts[1].strip())
                 SaveRadio()
 
-            except openai.error.ServiceUnavailableError:
+            except openai.ServiceUnavailableError:
                 print("Service Unavailable :(")
                 return
             
@@ -1253,7 +1257,7 @@ async def PlayNextSong(bot, guild_id, channel):
             "Return only the information requested with no additional words or context.",
             f'Give me a short talking point about the song "{song_artist} - {song_title}" that I can use before playing it on my radio station. No longer than two sentences. Use the tone and cadance of a radio DJ.'
         )
-        special_intro = special_response['choices'][0].message.content
+        special_intro = special_response.choices[0].message.content
 
         # delete song after playing
         def remove_song(error):
