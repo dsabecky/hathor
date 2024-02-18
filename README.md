@@ -2,7 +2,7 @@
 
 The discord bot that has all the features of the paid bots, but is free-to-play.
  <br /><br />
- Requires <b>discord.py</b>, <b>gTTS</b>, <b>OpenAI</b>, and <b>Youtube-DL</b> library.
+ Requires <b>discord.py</b>, <b>gTTS</b>, <b>OpenAI</b>, and <b>Youtube-DL</b> libraries.
 ```bash
 pip install discord.py gtts openai yt_dlp
 ```
