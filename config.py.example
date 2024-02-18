@@ -24,10 +24,6 @@ BOT_YOUTUBE_KEY = ''
 BOT_SPOTIFY_CLIENT = ''
 BOT_SPOTIFY_SECRET = ''
 
-# elevenlabs tts api (https://elevenlabs.io/api)
-ELEVENLABS_API = ''
-ELEVENLABS_VOICEID = 't0jbNlBVZ17f02VDIeMI'
-
 # maximum playlist legnth
 MUSIC_MAX_PLAYLIST = 20
 

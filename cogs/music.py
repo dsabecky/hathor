@@ -5,11 +5,14 @@ from discord.ext import commands
 import asyncio
 import yt_dlp
 import requests
+from pydub import AudioSegment
 
 # allow for extra bits
 import datetime
 import math
 import openai
+from gtts import gTTS
+import io
 import os
 import random
 import re
@@ -1267,27 +1270,10 @@ async def PlayNextSong(bot, guild_id, channel):
         if song_artist != "" and config.settings[guild_str]['radio_intro'] and random.randint(1, 5) != 5:
             intro_playing[guild_id] = True
 
-            headers = {
-                "Accept": "audio/mpeg",
-                "Content-Type": "application/json",
-                "xi-api-key": f"{config.ELEVENLABS_API}"
-            }
+            intro = gTTS(f"{random.choice([random.choice(intros), f'{special_intro} Here on {channel.guild.name} radio.'])}", lang='en', slow=False)
+            intro.save("db/intro.mp3")
 
-            data = {
-                "text": random.choice([random.choice(intros), f"{special_intro} Here on {channel.guild.name} radio."]),
-                "model_id": "eleven_monolingual_v1",
-
-                "voice_settings": {
-                    "stability": 0.5,
-                    "similarity_boost": 0.5
-                }
-            }
-
-            intro = requests.post(f'https://api.elevenlabs.io/v1/text-to-speech/{config.ELEVENLABS_VOICEID}', headers=headers, json=data)
-            with open("db/intro.mp3", "wb") as file:
-                file.write(intro.content)
             channel.play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio("db/intro.mp3"), volume=intro_volume), after=play_after_intro)
-
 
         while intro_playing[guild_id] == True:
             await asyncio.sleep(0.5)
