@@ -14,7 +14,7 @@ BOT_ADMIN  = 000000000000000
 
 # set your openai key here (https://platform.openai.com/api-keys)
 BOT_OPENAI_KEY = ''
-BOT_CHATGPT_MODEL = 'gpt-4-vision-preview'
+BOT_CHATGPT_MODEL = 'gpt-4o'
 BOT_DALLE_MODEL = 'dall-e-3'
 
 # youtube api key (https://developers.google.com/youtube/v3)
