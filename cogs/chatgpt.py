@@ -7,6 +7,8 @@ import requests
 from io import BytesIO
 import base64
 import imghdr
+import re
+import ast
 
 import config
 import func
@@ -97,8 +99,8 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
                 response = client.chat.completions.create(
                     model=config.BOT_CHATGPT_MODEL,
                     messages=conversation,
-                    temperature=0.8,
-                    max_tokens=1000
+                    temperature=1,
+                    max_completion_tokens=1000
                 )
             except openai.ServiceUnavailableError:
                 reponse = "SERVICE_UNAVAILABLE"
@@ -130,8 +132,8 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
                 response = client.chat.completions.create(
                     model=config.BOT_CHATGPT_MODEL,
                     messages=conversation,
-                    temperature=0.8,
-                    max_tokens=1000
+                    temperature=1,
+                    max_completion_tokens=1000
                 )
             except openai.ServiceUnavailableError:
                 reponse = "SERVICE_UNAVAILABLE"
@@ -161,15 +163,14 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
     @commands.command(name='gptimagine')
     async def ask_gptdalle(
         self, ctx, *,
-        request = commands.parameter(default=None, description="Prompt request")
-        ):
+        request=commands.parameter(default=None, description="Prompt request")
+    ):
         """
         Uses ChatGPT to create a DALL-E prompt, then returns the result.
 
         Syntax:
             !gptimagine prompt
         """
-
         # is there an api key present?
         if not config.BOT_OPENAI_KEY:
             await FancyErrors("DISABLED_FEATURE", ctx.channel)
@@ -184,49 +185,59 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         if len(request) < 5:
             await FancyErrors("SHORT", ctx.channel)
             return
-        
-        # prep our message
-        output = discord.Embed(title="OpenAI Generation", description="Generating request...")
 
-        conversation = [
-                    { "role": "system", "content": f"Provide only the information requested. Include a lot of detail. Limit response to 800 characters." },
-                    { "role": "user", "content": f"Write a DALL-E prompt for the following: {request}" }
-                ]
+        # build your embed
+        output = discord.Embed(
+            title="OpenAI Generation",
+            description="Generating request..."
+        )
+        output.add_field(name="Prompt:", value=request, inline=False)
 
-        try:
+        # send it and keep the message object
+        message = await ctx.reply(
+            embed=output,
+            allowed_mentions=discord.AllowedMentions.none()
+        )
 
-            # Prep our message
-            output.add_field(name="Prompt:", value=request, inline=False)
-            message = await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
+        # call ChatGPT synchronously
+        response = client.chat.completions.create(
+            model=config.BOT_CHATGPT_MODEL,
+            messages=[
+                {"role":"system","content":(
+                    "Provide only the information requested. "
+                    "Include a lot of detail. Limit response to 800 characters."
+                )},
+                {"role":"user","content":f"Write a DALL-E prompt for the following: {request}"}
+            ],
+            temperature=1,
+            max_completion_tokens=1000
+        )
 
-            # get chatgpt response
-            response = client.chat.completions.create(
-                model=config.BOT_CHATGPT_MODEL,
-                messages=conversation,
-                temperature=0.8,
-                max_tokens=1000
-            )
+        # add ChatGPT’s result into that same embed
+        output.add_field(
+            name="ChatGPT Prompt:",
+            value=response.choices[0].message.content,
+            inline=False
+        )
+        await message.edit(
+            embed=output,
+            allowed_mentions=discord.AllowedMentions.none()
+        )
 
-            # include chatgpt results in message
-            output.add_field(name="ChatGPT Prompt:", value=response.choices[0].message.content, inline=False)
-            await message.edit(embed=output, allowed_mentions=discord.AllowedMentions.none())
+        # now fire-and-forget, passing along the embed + message
+        asyncio.create_task(self.generate_dalle_image(ctx, response.choices[0].message.content, message, output, ctx.message))
 
-            # generate dall-e image from chatgpt result
-            await asyncio.create_task(self.generate_dalle_image(ctx, response.choices[0].message.content))
-
-        except openai.ServiceUnavailableError:
-            return
 
     ####################################################################
     # trigger: !imagine
     # ----
     # Sends a request to dall-e.
     ####################################################################
-    @commands.command(name='imagine')
+    @commands.command(name="imagine")
     async def ask_dalle(
-        self, ctx, *,
-        request = commands.parameter(default=None, description="Prompt request")
-        ):
+        self, ctx, *, 
+        request=commands.parameter(default=None, description="Prompt request")
+    ):
         """
         Generates a Dall-E prompt.
 
@@ -234,49 +245,102 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             !imagine prompt
         """
 
-        # is there an api key present?
         if not config.BOT_OPENAI_KEY:
             await FancyErrors("DISABLED_FEATURE", ctx.channel)
             return
 
-        # did you even ask anything
         if not request:
             await FancyErrors("SYNTAX", ctx.channel)
             return
-        
-        # what are you asking that's shorter, really
+
         if len(request) < 10:
             await FancyErrors("SHORT", ctx.channel)
             return
-        
-        # prep our message
-        output = discord.Embed(title="DALL-E", description="Sending request to DALL-E...")
 
-        # Prep our message
-        output.add_field(name="Prompt:", value=request, inline=False)
-        message = await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
-
-        # try:
-        # Offload the image generation to a background asyncio task
-        await asyncio.create_task(self.generate_dalle_image(ctx, request))
-
-        # except:
-        #     return
-
-    async def generate_dalle_image(self, ctx, request):
-        # try:
-        response = client.images.generate(
-            model=config.BOT_DALLE_MODEL,
-            prompt=request,
-            quality='hd',
-            n=1
+        # 1) build and send the "Generating..." embed
+        embed = discord.Embed(
+            title="Image Generation",
+            description="Generating image request..."
         )
+        embed.add_field(name="Prompt:", value=request, inline=False)
+        message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
-        for image_data in response.data:
-            image_data_bytes = BytesIO(requests.get(image_data.url).content)
+        # 2) fire-and-forget, passing along ctx, prompt, message & embed
+        asyncio.create_task(self.generate_dalle_image(ctx, request, message, embed, ctx.message))
 
-            # Send the image as a file attachment
-            await ctx.send(file=discord.File(image_data_bytes, filename='dalle_image.png'))
+    async def generate_dalle_image(
+        self,
+        ctx,
+        prompt: str,
+        original_message: discord.Message,
+        original_embed: discord.Embed,
+        user_message: discord.Message
+    ):
 
-        # except openai.OpenAIError as e:
-        #     print(f"OpenAI API error: {e}")
+        # helper: parse the "{'error': {...}}" JSON out of str(exc)
+        def parse_error(exc) -> dict:
+            text = str(exc)
+            m = re.search(r"(\{'.*'error':\s*\{.*\}\})", text)
+            if m:
+                try:
+                    return ast.literal_eval(m.group(1))["error"]
+                except Exception:
+                    pass
+            return {"message": text, "code": None}
+
+        try:
+            # run the blocking call in a thread
+            def blocking():
+                return client.images.generate(
+                    model=config.BOT_DALLE_MODEL,
+                    prompt=prompt,
+                    quality='medium'
+                )
+            response = await asyncio.to_thread(blocking)
+
+        except openai.BadRequestError as e:
+            err = parse_error(e)
+            msg = err.get("message", str(e))
+
+            # delete "Generating..." message
+            try:
+                await original_message.delete()
+            except discord.NotFound:
+                pass
+
+            # build and send the error embed
+            err_embed = discord.Embed(
+                title="Image Generation Blocked",
+                description="Your prompt was rejected by OpenAI’s safety system.",
+                color=discord.Color.red()
+            )
+            err_embed.add_field(name="Prompt", value=prompt, inline=False)
+            err_embed.add_field(name="Error",  value=msg,    inline=False)
+
+            await user_message.reply(embed=err_embed, allowed_mentions=discord.AllowedMentions.none())
+            return
+
+        try:
+            await original_message.delete()
+        except discord.NotFound:
+            pass
+
+        img_b64 = response.data[0].b64_json
+        image_bytes = base64.b64decode(img_b64)
+        buffer = BytesIO(image_bytes)
+
+        new_embed = discord.Embed(
+            title=original_embed.title,
+            description="Here’s your generated image!",
+            color=discord.Color.green()
+        )
+        for f in original_embed.fields:
+            new_embed.add_field(name=f.name, value=f.value, inline=f.inline)
+
+        new_embed.set_image(url="attachment://generated.png")
+
+        await user_message.reply(
+            embed=new_embed,
+            file=discord.File(buffer, filename="generated.png"),
+            allowed_mentions=discord.AllowedMentions.none()
+        )
