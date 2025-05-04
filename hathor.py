@@ -171,12 +171,75 @@ async def on_message(ctx):
 
 ########################################################################################################################################
 
+
 ####################################################################
-# trigger: !sync
+# trigger: !botleave
+# ----
+# Force the bot to leave a server.
+####################################################################
+@bot.command(name="botleave")
+async def leave_guild(ctx: commands.Context, guild_id: Optional[int] = None):
+    """
+    BOT OWNER. Leave the provided discord server.
+    
+    Syntax:
+        !botleave <guildID>
+    """
+    # permission check
+    if ctx.author.id != config.BOT_ADMIN:
+        await FancyErrors("AUTHOR_PERMS", ctx.channel)
+        return
+
+    if not guild_id:
+        await FancyErrors("SYNTAX", ctx.channel)
+        return
+
+    guild = bot.get_guild(guild_id)
+
+    # let them know
+    await ctx.send(f"👋 Leaving **{guild.name}** (ID: {guild.id})…")
+
+    # bye felicia
+    await guild.leave()
+
+####################################################################
+# trigger: !botservers
+# ----
+# Displays all servers the bot is in.
+####################################################################
+@bot.command(name="botservers")
+async def show_guilds(ctx: commands.Context):
+    """
+    BOT OWNER. Lists all guilds the bot is currently in.
+
+    Syntax:
+        !botservers
+    """
+    # permission check
+    if ctx.author.id != config.BOT_ADMIN:
+        await FancyErrors("AUTHOR_PERMS", ctx.channel)
+        return
+
+    # build a list of lines "Name (ID: ...)"
+    lines = [f"{g.name} (ID: {g.id})" for g in bot.guilds]
+
+    # assemble embed
+    embed = discord.Embed(
+        title="🤖 Bot is in the following guilds:",
+        description="\n".join(lines) or "None",
+        color=discord.Color.blurple()
+    )
+    embed.set_footer(text=f"Total guilds: {len(lines)}")
+
+    # send to channel
+    await ctx.send(embed=embed)
+
+####################################################################
+# trigger: !botsync
 # ----
 # Syncs /commands
 ####################################################################
-@bot.command()
+@bot.command(name="botsync")
 async def sync(
     ctx: Context,
     guilds: Greedy[discord.Object],
@@ -186,7 +249,7 @@ async def sync(
     BOT OWNER. Syncronizes /slash commands.
 
     Syntax:
-        !sync [ guild | globalguild | clearguild ]
+        !botsync [ guild | globalguild | clearguild ]
     """
     
     if ctx.author.id != config.BOT_ADMIN:
