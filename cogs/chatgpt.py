@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 import openai
-from openai import OpenAI
+from openai import OpenAI, BadRequestError
 import asyncio
 import requests
 from io import BytesIO
@@ -39,7 +39,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
     async def ask_chatgpt(
         self, ctx, *,
         request = commands.parameter(default=None, description="Prompt request")
-        ):
+    ):
         """
         Generates a ChatGPT prompt.
         If the seperator | is used, you can provide a tone followed by your prompt.
@@ -156,6 +156,60 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
                 await message.edit(content=None, embed=output)
 
     ####################################################################
+    # trigger: !gptedit
+    # ----
+    # Edits up to 4 attached images according to provided prompt.
+    ####################################################################
+    @commands.command(name="gptedit")
+    async def edit_gptimage(
+        self,
+        ctx,
+        *,
+        prompt: str = commands.parameter(default=None, description="What should I do to these images?")
+    ):
+        """
+        Edits up to 4 attached images according to the prompt.
+
+        Usage: !gptedit Your instruction here + attach 1–4 images
+        """
+
+        if not config.BOT_OPENAI_KEY:
+            await FancyErrors("DISABLED_FEATURE", ctx.channel)
+            return
+
+        if not prompt:
+            await FancyErrors("SYNTAX", ctx.channel)
+            return
+
+        # collect up to 4 image attachments
+        buffers = []
+        for attachment in ctx.message.attachments[:4]:
+            if not attachment.content_type or \
+            not attachment.content_type.startswith("image/"):
+                continue
+            buf = BytesIO(await attachment.read())
+            buf.name = attachment.filename
+            buf.content_type = attachment.content_type
+            buffers.append(buf)
+
+        if not buffers:
+            await FancyErrors("NO_IMAGE", ctx.channel)
+            return
+
+        # send the “Generating edit…” embed
+        waiting = discord.Embed(
+            title="Image Edit", description="Generating edited image…"
+        )
+        waiting.add_field(name="Prompt", value=prompt, inline=False)
+        waiting_msg = await ctx.reply(
+            embed=waiting,
+            allowed_mentions=discord.AllowedMentions.none()
+        )
+
+        # background work
+        asyncio.create_task(self.generate_image_edit(ctx, prompt, buffers, waiting_msg, ctx.message))
+
+    ####################################################################
     # trigger: !gptimagine
     # ----
     # Pivots a chatgpt request to dall-e for even more detail.
@@ -268,6 +322,12 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         # 2) fire-and-forget, passing along ctx, prompt, message & embed
         asyncio.create_task(self.generate_dalle_image(ctx, request, message, embed, ctx.message))
 
+
+    ####################################################################
+    # internal: generate_dalle_image
+    # ----
+    # Image generation logic.
+    ####################################################################
     async def generate_dalle_image(
         self,
         ctx,
@@ -342,5 +402,87 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         await user_message.reply(
             embed=new_embed,
             file=discord.File(buffer, filename="generated.png"),
+            allowed_mentions=discord.AllowedMentions.none()
+        )
+
+    ####################################################################
+    # internal: generate_image_edit
+    # ----
+    # Image generation logic.
+    ####################################################################
+    async def generate_image_edit(
+        self,
+        ctx,
+        prompt: str,
+        image_buffers: list[BytesIO],
+        waiting_msg: discord.Message,
+        user_message: discord.Message
+    ):
+ 
+        def parse_error(exc) -> dict:
+            text = str(exc)
+            m = re.search(r"(\{'.*'error':\s*\{.*\}\})", text)
+            if m:
+                try:
+                    return ast.literal_eval(m.group(1))["error"]
+                except Exception:
+                    pass
+            return {"message": text, "code": None}
+
+        # run the edit call in a thread
+        try:
+            def blocking():
+                return client.images.edit(
+                    model=config.BOT_DALLE_MODEL,
+                    image=image_buffers,
+                    prompt=prompt
+                )
+            result = await asyncio.to_thread(blocking)
+
+        except BadRequestError as e:
+            err = parse_error(e)
+            msg = err.get("message", str(e))
+
+            # delete waiting
+            try:
+                await waiting_msg.delete()
+            except discord.NotFound:
+                pass
+
+            # send an error embed
+            error_embed = discord.Embed(
+                title="Image Edit Blocked",
+                description="OpenAI’s safety system rejected your request.",
+                color=discord.Color.red()
+            )
+            error_embed.add_field(name="Prompt", value=prompt, inline=False)
+            error_embed.add_field(name="Error", value=msg, inline=False)
+
+            await user_message.reply(
+                embed=error_embed,
+                allowed_mentions=discord.AllowedMentions.none()
+            )
+            return
+
+        # success path: delete waiting, decode and reply with image
+        try:
+            await waiting_msg.delete()
+        except discord.NotFound:
+            pass
+
+        b64 = result.data[0].b64_json
+        img_bytes = base64.b64decode(b64)
+        out = BytesIO(img_bytes)
+
+        final_embed = discord.Embed(
+            title="Here’s your edited image!",
+            color=discord.Color.green()
+        )
+        final_embed.add_field(name="Prompt", value=prompt, inline=False)
+        final_embed.set_image(url="attachment://edited.png")
+
+        await user_message.reply(
+            embed=final_embed,
+            file=discord.File(out, filename="edited.png"),
             allowed_mentions=discord.AllowedMentions.none()
         )

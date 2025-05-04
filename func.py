@@ -33,6 +33,7 @@ err = {
         'DISABLED_FEATURE':     "This feature is not currently enabled",
         'DUPLICATE_SONG':       "This song already exists in the destination",
         'NO_HELP':              "There is no help documentation for this command",
+        'NO_IMAGE':             "No images attached",
         'NO_PERMISSIONS_EXIST': "Those permissions do not exist",
         'NO_QUEUE':             "There is no queue",
         'NO_PLAYING':           "There is nothing playing",
