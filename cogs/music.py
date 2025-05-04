@@ -248,8 +248,9 @@ class Music(commands.Cog, name="Music"):
         Move the requested song to the top of the queue.
 
         Syntax:
-            !bump song_number
+            !bump <song number>
         """
+
         guild_id = ctx.guild.id
 
         # are you even allowed to use this command?
@@ -282,6 +283,7 @@ class Music(commands.Cog, name="Music"):
         Syntax:
             !clear
         """
+
         guild_id = ctx.guild.id
 
         # are you even allowed to use this command?
@@ -316,6 +318,7 @@ class Music(commands.Cog, name="Music"):
         Syntax:
             !defuse <theme>
         """
+
         global endless_radio
         guild_id = ctx.guild.id
 
@@ -363,6 +366,7 @@ class Music(commands.Cog, name="Music"):
             !fuse <theme>
             !fuse <theme> | <theme>
         """
+
         global endless_radio
         guild_id = ctx.guild.id
 
@@ -420,6 +424,7 @@ class Music(commands.Cog, name="Music"):
         Syntax:
             !hot100
         """
+
         global endless_radio
         guild_id = ctx.guild.id
         current_year = datetime.datetime.now().year
@@ -458,6 +463,7 @@ class Music(commands.Cog, name="Music"):
         Syntax:
             !intro
         """
+
         global repeat
         guild_id, guild_str = ctx.guild.id, str(ctx.guild.id)
 
@@ -484,6 +490,7 @@ class Music(commands.Cog, name="Music"):
         Syntax:
             !pause
         """
+
         guild_id = ctx.guild.id
 
         # are you even allowed to use this command?
@@ -521,8 +528,9 @@ class Music(commands.Cog, name="Music"):
         Adds a song to the queue.
 
         Syntax:
-            !play [search | link]
+            !play [ <search query> | <link> ]
         """
+
         guild_id = ctx.guild.id
 
         # author isn't in a voice channel
@@ -558,8 +566,9 @@ class Music(commands.Cog, name="Music"):
         Adds a song to the top of the queue (no playlists).
 
         Syntax:
-            !play [search | link]
+            !play [ <search query> | <link> ]
         """
+
         guild_id = ctx.guild.id
         is_playlist = ('&list=' in args or 'open.spotify.com/playlist' in args) and True or False
 
@@ -607,6 +616,7 @@ class Music(commands.Cog, name="Music"):
         Syntax:
             !queue
         """
+
         await GetQueue(ctx)
 
     ####################################################################
@@ -621,8 +631,9 @@ class Music(commands.Cog, name="Music"):
         Toggles endless mix mode.
 
         Syntax:
-            !radio [<null>|<theme>]
+            !radio [ <null> | <theme> ]
         """
+
         global endless_radio
         guild_id = ctx.guild.id
 
@@ -687,6 +698,7 @@ class Music(commands.Cog, name="Music"):
         Syntax:
             !remove <song number>
         """
+
         guild_id = ctx.guild.id
 
         # are you even allowed to use this command?
@@ -723,6 +735,7 @@ class Music(commands.Cog, name="Music"):
         Syntax:
             !repeat
         """
+
         global repeat
         guild_id = ctx.guild.id
 
@@ -748,6 +761,7 @@ class Music(commands.Cog, name="Music"):
         Syntax:
             !resume
         """
+
         global start_time
         guild_id = ctx.guild.id
 
@@ -790,6 +804,7 @@ class Music(commands.Cog, name="Music"):
         Syntax:
             !shuffle
         """
+
         global shuffle
         guild_id = ctx.guild.id
 
@@ -815,6 +830,7 @@ class Music(commands.Cog, name="Music"):
         Syntax:
             !skip
         """
+        
         guild_id = ctx.guild.id
 
         # are you even allowed to use this command?

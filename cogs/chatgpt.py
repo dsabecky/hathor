@@ -45,8 +45,8 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         If the seperator | is used, you can provide a tone followed by your prompt.
 
         Syntax:
-            !chatgpt prompt
-            !chatgpt tone | prompt
+            !chatgpt <prompt>
+            !chatgpt <tone> | <prompt>
         """
 
         # is there an api key present?
@@ -170,7 +170,8 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         """
         Edits up to 4 attached images according to the prompt.
 
-        Usage: !gptedit Your instruction here + attach 1–4 images
+        Syntax:
+            !gptedit <prompt> <image attachment{1,4}>
         """
 
         if not config.BOT_OPENAI_KEY:
@@ -223,7 +224,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         Uses ChatGPT to create a DALL-E prompt, then returns the result.
 
         Syntax:
-            !gptimagine prompt
+            !gptimagine <prompt>
         """
         # is there an api key present?
         if not config.BOT_OPENAI_KEY:
@@ -296,7 +297,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         Generates a Dall-E prompt.
 
         Syntax:
-            !imagine prompt
+            !imagine <prompt>
         """
 
         if not config.BOT_OPENAI_KEY:
@@ -324,7 +325,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
 
 
     ####################################################################
-    # internal: generate_dalle_image
+    # function: generate_dalle_image
     # ----
     # Image generation logic.
     ####################################################################
@@ -406,7 +407,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         )
 
     ####################################################################
-    # internal: generate_image_edit
+    # function: generate_image_edit
     # ----
     # Image generation logic.
     ####################################################################

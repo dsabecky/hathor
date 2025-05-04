@@ -178,7 +178,16 @@ async def on_message(ctx):
 ####################################################################
 @bot.command()
 async def sync(
-  ctx: Context, guilds: Greedy[discord.Object], spec: Optional[Literal["guild", "globalguild", "clearguild"]] = None) -> None:
+    ctx: Context,
+    guilds: Greedy[discord.Object],
+    spec: Optional[Literal["guild", "globalguild", "clearguild"]] = None
+) -> None:
+    """
+    BOT OWNER. Syncronizes /slash commands.
+
+    Syntax:
+        !sync [ guild | globalguild | clearguild ]
+    """
     
     if ctx.author.id != config.BOT_ADMIN:
         FancyErrors("AUTHOR_PERMS", ctx.channel)
@@ -222,7 +231,9 @@ async def set_perms(ctx, opts=None, id_type=None, discord_id=None):
     Modifies bot permissions for the server.
 
     Syntax:
-        !permissions [add|remove] [user|group|channel] [userID|groupID|chanID]
+        !permissions [ add | remove ] channel <chanID>
+        !permissions [ add | remove ] group <groupID>
+        !permissions [ add | remove ] user <userID>
     """
     global settings
 
