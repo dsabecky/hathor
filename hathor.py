@@ -10,8 +10,27 @@ import json
 from typing import Literal, Optional
 
 # logging
+import pprint
 import logging
 from logs import log_sys, log_cogs, log_msg, log_voice, log_gamba
+
+osend  = Context.send
+oreply = Context.reply
+
+async def lsend(self, *args, **kwargs):
+    embed = kwargs.get("embed")
+    if embed:
+        log_msg.info("EMBED:\n%s", pprint.pformat(embed.to_dict()))
+    return await osend(self, *args, **kwargs)
+
+async def lreply(self, *args, **kwargs):
+    embed = kwargs.get("embed")
+    if embed:
+        log_msg.info("Context.reply embed:\n%s", pprint.pformat(embed.to_dict()))
+    return await oreply(self, *args, **kwargs)
+
+Context.send  = lsend
+Context.reply = lreply
 
 # we need our config
 import config
