@@ -291,7 +291,7 @@ async def sync(
 @bot.command(name='permissions', aliases=['perms', 'roles'])
 async def set_perms(ctx, opts=None, id_type=None, discord_id=None):
     """
-    Modifies bot permissions for the server.
+    BOT MOD. Modifies bot permissions for the server.
 
     Syntax:
         !permissions [ add | remove ] channel <chanID>
