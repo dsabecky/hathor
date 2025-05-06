@@ -353,7 +353,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             # run the blocking call in a thread
             def blocking():
                 return client.images.generate(
-                    model=config.BOT_DALLE_MODEL,
+                    model=config.BOT_GPTIMAGE_MODEL,
                     prompt=prompt,
                     quality='medium'
                 )
@@ -434,7 +434,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         try:
             def blocking():
                 return client.images.edit(
-                    model=config.BOT_DALLE_MODEL,
+                    model=config.BOT_GPTIMAGE_MODEL,
                     image=image_buffers,
                     prompt=prompt
                 )
