@@ -26,7 +26,7 @@ async def lsend(self, *args, **kwargs):
 async def lreply(self, *args, **kwargs):
     embed = kwargs.get("embed")
     if embed:
-        log_msg.info("Context.reply embed:\n%s", pprint.pformat(embed.to_dict()))
+        log_msg.info("EMBED:\n%s", pprint.pformat(embed.to_dict()))
     return await oreply(self, *args, **kwargs)
 
 Context.send  = lsend
@@ -45,7 +45,6 @@ intents.message_content = True
 intents.voice_states = True
 
 # intialize
-
 bot = commands.Bot(command_prefix=config.BOT_PREFIX, intents=intents, case_insensitive=True)
 
 # add voice category
