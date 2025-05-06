@@ -53,9 +53,10 @@ from cogs.voice import Voice
 asyncio.run(bot.add_cog(Voice(bot)))
 
 # add music category
-log_cogs.info("loading 'Music' cog")
-from cogs.music import Music
-asyncio.run(bot.add_cog(Music(bot)))
+if config.BOT_YOUTUBE_KEY and config.BOT_SPOTIFY_CLIENT and config.BOT_SPOTIFY_SECRET:
+    log_cogs.info("loading 'Music' cog")
+    from cogs.music import Music
+    asyncio.run(bot.add_cog(Music(bot)))
 
 # add chatgpt category (if enabled)
 if config.BOT_OPENAI_KEY:
