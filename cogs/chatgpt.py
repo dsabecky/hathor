@@ -99,7 +99,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
                 response = client.chat.completions.create(
                     model=config.BOT_CHATGPT_MODEL,
                     messages=conversation,
-                    temperature=1,
+                    temperature=config.BOT_OPENAI_TEMPERATURE,
                     max_completion_tokens=1000
                 )
             except openai.ServiceUnavailableError:
@@ -132,7 +132,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
                 response = client.chat.completions.create(
                     model=config.BOT_CHATGPT_MODEL,
                     messages=conversation,
-                    temperature=1,
+                    temperature=config.BOT_OPENAI_TEMPERATURE,
                     max_completion_tokens=1000
                 )
             except openai.ServiceUnavailableError:
@@ -242,17 +242,11 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             return
 
         # build your embed
-        output = discord.Embed(
-            title="OpenAI Generation",
-            description="Generating request..."
-        )
+        output = discord.Embed(title="OpenAI Generation", description="Generating request...")
         output.add_field(name="Prompt:", value=request, inline=False)
 
         # send it and keep the message object
-        message = await ctx.reply(
-            embed=output,
-            allowed_mentions=discord.AllowedMentions.none()
-        )
+        message = await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
 
         # call ChatGPT synchronously
         response = client.chat.completions.create(
@@ -262,9 +256,9 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
                     "Provide only the information requested. "
                     "Include a lot of detail. Limit response to 800 characters."
                 )},
-                {"role":"user","content":f"Write a DALL-E prompt for the following: {request}"}
+                {"role":"user","content":f"Write an ai image generation prompt for the following: {request}"}
             ],
-            temperature=1,
+            temperature=config.BOT_OPENAI_TEMPERATURE,
             max_completion_tokens=1000
         )
 
@@ -313,10 +307,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             return
 
         # 1) build and send the "Generating..." embed
-        embed = discord.Embed(
-            title="Image Generation",
-            description="Generating image request..."
-        )
+        embed = discord.Embed(title="Image Generation", description="Generating image request...")
         embed.add_field(name="Prompt:", value=request, inline=False)
         message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 

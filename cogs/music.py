@@ -226,7 +226,7 @@ class Music(commands.Cog, name="Music"):
                     if len(parts) == 2:
                         playlist.append(f"{parts[1].strip()} audio")
 
-            info_embed = discord.Embed(description=f"[1/3] Generating your ChatGPT playlist...")
+            info_embed = discord.Embed(description=f"[1/3] Generating your AI playlist...")
             message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
             await QueueSong(self.bot, playlist, 'radio', False, message, ctx.guild.id, ctx.guild.voice_client)
 
@@ -261,7 +261,7 @@ class Music(commands.Cog, name="Music"):
         if guild_id in queue and len(queue[guild_id]) < 2:
             await FancyErrors("BUMP_SHORT", ctx.channel); return
 
-        elif not song_number or not song_number.isdigit() or (song_number.isdigit() and int(song_number) < 2):
+        elif not song_number or not song_number.isdigit() or int(song_number) < 2:
             await FancyErrors("SYNTAX", ctx.channel); return
 
         elif guild_id in queue:
@@ -860,8 +860,8 @@ async def ChatGPT(bot, sys_content, user_content):
         response = client.chat.completions.create(
             model=config.BOT_CHATGPT_MODEL,
             messages=conversation,
-            temperature=0.8,
-            max_tokens=2000
+            temperature=config.BOT_OPENAI_TEMPERATURE,
+            max_completion_tokens=2000
         )
         return response
 
