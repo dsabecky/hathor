@@ -20,10 +20,12 @@ err = {
         "Not enough lumber.",
         "Sorry, but our princess is in another castle!",
         "You cannot fast travel when enemies are nearby.",
-        "Mission failure, we'll get them next time."
+        "Mission failure, we'll get them next time.",
+        "What do the numbers mean, Mason?",
+        "What a horrible night to have a curse..."
     ],
     'code': {
-        "API_ERROR":            "An API error has occured. Sadge",
+        "API_ERROR":            "An API error has occured",
         'AUTHOR_NO_VOICE':      "You are not in a voice channel",
         'AUTHOR_PERMS':         "Insufficient permissions",
         'BUMP_SHORT':           "Bump failed: queue too short",
@@ -49,7 +51,7 @@ err = {
         "VOICE_MISMATCH":       "You must be in the same voice channel to do this",
         "VOICE_FULL":           "That voice channel is full",
         'VOL_RANGE':            "Invalid! Volume range is 1-100",
-        'YTMD':                 "You're the man now, dog!"
+        'YTMND':                "You're the man now, dog!"
     }
 }
 
