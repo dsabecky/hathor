@@ -216,7 +216,7 @@ class Music(commands.Cog, name="Music"):
             )
 
             # filter out the goop
-            parsed_response = response.choices[0].message.content.split('\n')
+            parsed_response = response.split('\n')
             pattern = r'^\d+\.\s'
 
             playlist = []
@@ -850,23 +850,22 @@ class Music(commands.Cog, name="Music"):
 # ----
 # ChatGPT logic.
 ####################################################################
-async def ChatGPT(bot, sys_content, user_content):
+async def ChatGPT(bot, sys_content: str, user_content: str) -> str:
     conversation = [
         { "role": "system", "content": sys_content },
         { "role": "user", "content": user_content }
     ]
 
-    try:
-        response = client.chat.completions.create(
+    def blocking_call():
+        return client.chat.completions.create(
             model=config.BOT_CHATGPT_MODEL,
             messages=conversation,
-            temperature=config.BOT_OPENAI_TEMPERATURE,
-            max_completion_tokens=2000
+            temperature=config.BOT_OPENAI_TEMPERATURE
         )
-        return response
 
-    except openai.ServiceUnavailableError:
-        return "API_ERROR"
+    response = await asyncio.to_thread(blocking_call)
+
+    return response.choices[0].message.content
 
 ####################################################################
 # function: CheckBrokenPlaying(bot)
@@ -951,7 +950,7 @@ async def CheckEndlessMix(bot):
                                 )
 
                                 # filter out the goop
-                                parsed_response = response.choices[0].message.content.split('\n')
+                                parsed_response = response.split('\n')
                                 pattern = r'^\d+\.\s'
 
                                 for item in parsed_response:
@@ -1143,7 +1142,7 @@ async def FuseRadio(bot, ctx, new_theme=None):
                 )
 
                 # filter out the goop
-                parsed_response = response.choices[0].message.content.split('\n')
+                parsed_response = response.split('\n')
                 pattern = r'^\d+\.\s'
 
                 for item in parsed_response:
@@ -1273,7 +1272,7 @@ async def PlayNextSong(bot, guild_id, channel):
             "Return only the information requested with no additional words or context.",
             f'Give me a short talking point about the song "{song_artist} - {song_title}" that I can use before playing it on my radio station. No longer than two sentences. Use the tone and cadance of a radio DJ.'
         )
-        special_intro = special_response.choices[0].message.content
+        special_intro = special_response
 
         # delete song after playing
         def remove_song(error):
