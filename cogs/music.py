@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands
+from discord.ext.commands import Context
 
 # processing songs
 import asyncio
@@ -631,7 +632,8 @@ class Music(commands.Cog, name="Music"):
         Toggles endless mix mode.
 
         Syntax:
-            !radio [ <null> | <theme> ]
+            !radio
+            !radio <theme>
         """
 
         global endless_radio
@@ -659,22 +661,8 @@ class Music(commands.Cog, name="Music"):
             fuse_playlist.pop(guild_id)
 
         if args:
-            # check for fusion
-            if "|" in args:
-                stations = ""
-                for i, part in enumerate(args.split("|"), 1):
-                    if i == 1:
-                        endless_radio[guild_id] = part.strip()
-                        stations += f"**{part.strip()}**"
-                    else:
-                        stations += f", **{part.strip()}**"
-                info_embed = discord.Embed(description=f"📻 Radio enabled, fused themes: \"{stations}\".")
-                await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
-                await FuseRadio(self.bot, ctx, args)
-                return
-            else:
-                endless_radio[guild_id] = args
-                info_embed = discord.Embed(description=f"📻 Radio enabled, theme: **{args}**.")
+            endless_radio[guild_id] = args
+            info_embed = discord.Embed(description=f"📻 Radio enabled, theme: **{args}**.")
             
         elif endless_radio[guild_id] == False:
             endless_radio[guild_id] = "anything, im not picky"
@@ -1168,72 +1156,90 @@ async def FuseRadio(bot, ctx, new_theme=None):
 # ----
 # Returns currently playing and queue.
 ####################################################################
-async def GetQueue(ctx, extra=None):
+async def GetQueue(ctx: Context, extra: str | None = None):
     guild_id = ctx.guild.id
-    voice_client = ctx.guild.voice_client
+    vc = ctx.guild.voice_client
 
-    if not extra:
-        output = discord.Embed(title="Song Queue")
+    # 1) Prep the embed
+    title = "Song Queue"
+    embed = discord.Embed(
+        title=title,
+        description=extra or None,
+        color=discord.Color.blurple()
+    )
+
+    # 2) Now Playing
+    now_playing = currently_playing.get(guild_id)
+    if vc and now_playing and (vc.is_playing() or vc.is_paused()):
+        # compute progress
+        elapsed = (pause_time[guild_id] - start_time[guild_id]) \
+            if vc.is_paused() else (time.time() - start_time[guild_id])
+        total = now_playing["duration"]
+        ratio = min(max(elapsed / total, 0.0), 1.0)
+
+        bar_width = 10
+        filled = int(ratio * bar_width)
+        empty = bar_width - filled
+        status_emoji = "⏸️" if vc.is_paused() else "▶️"
+        progress_bar = (
+            f"{status_emoji} "
+            f"{'▬' * filled}🔘{'▬' * empty} "
+            f"[{str(datetime.timedelta(seconds=int(elapsed)))}"
+            f" / {str(datetime.timedelta(seconds=int(total)))}]"
+        )
+
+        np_title = now_playing["title"].replace("*", r"\*")
+        np_text = f"{np_title}\n{progress_bar}"
+        embed.add_field(name="Now Playing", value=np_text, inline=False)
+
+        thumb = now_playing.get("thumbnail")
+        if thumb:
+            embed.set_thumbnail(url=thumb)
     else:
-        output = discord.Embed(title="Song Queue", description=f"{extra}")
+        embed.add_field(name="Now Playing", value="Nothing playing.", inline=False)
 
-    # currently playing
-    output.add_field(name="Now Playing:", value="Nothing playing.", inline=False)
-    if voice_client and ((voice_client.is_playing() and currently_playing) or voice_client.is_paused()):
-
-        title = currently_playing[guild_id]['title'].replace('*', r'\*')
-        progress = voice_client.is_paused() and pause_time[guild_id] - start_time[guild_id] or time.time() - start_time[guild_id]
-        total_duration = currently_playing[guild_id]["duration"]
-        current = str(datetime.timedelta(seconds=int(progress)))
-        total = str(datetime.timedelta(seconds=int(total_duration)))
-        progress_bar = f"{voice_client.is_paused() and '⏸️' or '▶️'} {'▬' * int(10 * (int(progress) / int(total_duration)))}🔘{'▬' * (10 - int(10 * (int(progress) / int(total_duration))))}🔈[{current} / {total}]"
-    
-        output.set_field_at(index=0, name="Now Playing:", value=f"{title}\n{progress_bar}", inline=False)
-        if currently_playing[guild_id]['thumbnail']:
-            output.set_thumbnail(url=currently_playing[guild_id]['thumbnail'])
-
-    output.add_field(name="Up Next:", value="No queue.", inline=False)
-
-    # more than 10? let's set some boundaries...
-    if len(queue[guild_id]) > 10:
-        first_10 = queue[guild_id][:10]
-        for i, song in enumerate(first_10, 1):
-            title = song['title'].replace('*', r'\*')
-            if output.fields[1].value == "No queue.":
-                output.set_field_at(index=1, name="Up Next:", value=f"**{i}**. {title}\n", inline=False)
-            else:
-                output.set_field_at(index=1, name="Up Next:", value=f"{output.fields[1].value}**{i}**. {title}\n", inline=False)
-        output.set_field_at(index=1, name="Up Next:", value=f"{output.fields[1].value}And {len(queue[guild_id]) - 10} more...", inline=False)
-
-    # less than 10, give em the sauce
+    # 3) Up Next
+    q = queue.get(guild_id, [])
+    if not q:
+        up_next_text = "No queue."
     else:
-        for i, song in enumerate(queue[guild_id], 1):
-            title = song['title'].replace('*', r'\*')
-            if output.fields[1].value == "No queue.":
-                output.set_field_at(index=1, name="Up Next:", value=f"**{i}**. {title}\n", inline=False)
-            else:
-                output.set_field_at(index=1, name="Up Next:", value=f"{output.fields[1].value}**{i}**. {title}\n", inline=False)
+        display = q[:10]
+        lines = [
+            f"**{i+1}.** {item['title'].replace('*', r'\\*')}"
+            for i, item in enumerate(display)
+        ]
+        if len(q) > 10:
+            lines.append(f"…and {len(q) - 10} more")
+        up_next_text = "\n".join(lines)
 
-    # fusion check
-    r = guild_id in endless_radio and endless_radio[guild_id] or 'off'
-    fuse = ""
+    embed.add_field(name="Up Next", value=up_next_text, inline=False)
+
+    # 4) Settings
+    settings = config.settings[str(guild_id)]
+    volume = settings["volume"]
+    repeat_status = "on" if repeat[guild_id] else "off"
+    shuffle_status = "on" if shuffle[guild_id] else "off"
+
+    # radio / endless
+    endless = "off"
+    if guild_id in endless_radio:
+        endless = endless_radio[guild_id] or "off"
+    fused = ""
     if guild_id in fuse_radio:
-        for i, station in enumerate(fuse_radio[guild_id], 1):
-            if i == 1:
-                fuse += f"\"**{station}**\""
-            else:
-                fuse += f", \"**{station}**\""
-        r = f"Fused: {fuse}"
+        fused = ", ".join(f'{s}' for s in fuse_radio[guild_id])
+        fused = f"♾️ {fused} ♾️"
 
-    # feature status
-    output.add_field(name="Settings:", value=f" \
-                     🔊: {config.settings[str(guild_id)]['volume']}%\n \
-                     🔁: {repeat[guild_id] and 'on' or 'off'}\n \
-                     🔀: {shuffle[guild_id] and 'on' or 'off'}\n \
-                     📻: {r}",
-                     inline=False)
+    intro = "on" if settings["radio_intro"] else "off"
 
-    await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
+    settings_text = (
+        f"```🔊 vol: {volume}%  🔁 repeat: {repeat_status}  🔀 shuffle: {shuffle_status}```"
+        f"```📢 intro: {intro}\n📻 Radio: {fused and fused or endless}```"
+    )
+    embed.add_field(name="Settings", value=settings_text, inline=False)
+
+    # 5) Send
+    await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+
 
 ####################################################################
 # function: PlayNextSong(bot, guild_id, channel)
