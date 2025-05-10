@@ -4,7 +4,7 @@
 
 # discord imports
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord.ext.commands import Context
 
 # audio processing
@@ -21,9 +21,9 @@ import uuid         # we create uuid's for downloaded media instead of file name
 import requests     # grabbing raw data from url
 
 # data analysis
-import re                                       # regex for various filtering
-from typing import List, Optional, TypedDict    # this is supposed to be "cleaner" for array pre-definition
-from collections import defaultdict             # type hints
+import re                                                   # regex for various filtering
+from typing import List, Literal, Optional, TypedDict       # this is supposed to be "cleaner" for array pre-definition
+from collections import defaultdict                         # type hints
 
 # date, time, numbers
 import datetime     # timestamps for song history
@@ -107,7 +107,7 @@ class CurrentlyPlaying(TypedDict):      # Dictionary structure for CurrentlyPlay
     thumbnail: str
     url: str
 
-    duration: int  
+    duration: int
 
 class Settings:     # volatile settings, called as 'allstates' in functions
     def __init__(self):
@@ -119,10 +119,13 @@ class Settings:     # volatile settings, called as 'allstates' in functions
 
         self.radio_station: Optional[str] = None
         self.radio_fusions: Optional[List[str]] = None
+        self.radio_fusions_playlist: Optional[List[str]] = None
+        self.radio_building: bool = False
 
         self.start_time: Optional[float] = None
         self.pause_time: Optional[float] = None
         self.last_active: Optional[float] = None
+        self.intro_playing: bool = False
 
 class Music(commands.Cog, name="Music"):    # Core cog for music functionality
     def __init__(self, bot):
@@ -143,16 +146,15 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
             allstates = self.settings[guild.id]     # load / init per server settings
             guild_str = str(guild.id)               # json is stupid and forces the key to be a string
 
-            # init song history (if required)
-            if not guild_str in song_history:
+            if not guild_str in song_history:   # init song history (if required)
                 song_history[guild_str] = []
 
         SaveHistory() # save our song history
 
-        asyncio.create_task(self.CheckBrokenPlaying())   # check if the queue is broken
-        asyncio.create_task(self.CheckEndlessMix())      # background task for endless mix
-        asyncio.create_task(self.CheckVoiceIdle())       # background task for voice idle checker
-        asyncio.create_task(self.CreateSpotifyKey())     # generate a spotify key
+        self.loop_voice_monitor.start()                 # monitors voice activity for idle, broken playing, etc
+        self.loop_radio_monitor.start()                 # monitors radio queue generation
+
+        asyncio.create_task(self.CreateSpotifyKey())    # generate a spotify key
 
     ### on_guild_join() ################################################
     @commands.Cog.listener()
@@ -169,145 +171,95 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
 
-        # ignore everyone else
-        if self.bot.user.id != member.id:
+        if self.bot.user.id != member.id:   # ignore everyone else
             return
 
-        # voice_client = self.bot.get_guild(member.guild.id).voice_client
         allstates = self.settings[member.guild.id]
         voice_client = member.guild.voice_client
 
-        # start playing music again if we move channels
-        if allstates.currently_playing and voice_client:
-            await asyncio.sleep(1)
-            voice_client.resume()
+        if before.channel is not None and after.channel is None:    # clear out last_active (we left voice)
+            allstates.last_active = None
+
+        else:   # init our last_active when we join
+            allstates.last_active = time.time()
 
 
     ####################################################################
     # Internal: Loops
     ####################################################################
 
-    ### CheckBrokenPlaying(self) #######################################
-    async def CheckBrokenPlaying(self):
-        while True:
-            for guild in self.bot.guilds:
+    ### loop_voice_monitor() ###########################################
+    @tasks.loop(seconds=3)
+    async def loop_voice_monitor(self):
+        for voice_client in self.bot.voice_clients:
+            allstates = self.settings[voice_client.guild.id]
 
-                allstates = self.settings[guild.id]
-                voice_client = guild.voice_client
+            if voice_client.is_playing():   # we're playing something, update last_active
+                allstates.last_active = time.time()
+                continue
 
-                if voice_client and (not voice_client.is_playing() and not voice_client.is_paused()) and (allstates.queue):
-                    await self.PlayNextSong(guild.id, voice_client)
+            if not voice_client.is_playing() and not voice_client.is_paused() and allstates.queue:  # should be, but we're not
+                await self.PlayNextSong(voice_client)
+                continue
 
-            await asyncio.sleep(3)
+            if allstates.last_active and (time.time() - allstates.last_active) > config.settings[str(voice_client.guild.id)]["voice_idle"]:
+                await voice_client.disconnect()
+                allstates.last_active = None
 
-    ### CheckEndlessMix(self) ##########################################
-    async def CheckEndlessMix(self):
-        while True:
-            for guild in self.bot.guilds:
+    @loop_voice_monitor.before_loop
+    async def _before_voice_monitor(self):
+        await self.bot.wait_until_ready()
 
-                allstates = self.settings[guild.id]
-                voice_client = guild.voice_client
+    ### loop_radio_monitor() ###########################################
+    @tasks.loop(seconds=10)
+    async def loop_radio_monitor(self):
+        for guild in self.bot.guilds:
 
-                # is this thing even on?
-                if allstates.radio_station:
-                        if voice_client:
+            allstates = self.settings[guild.id]
+            voice_client = guild.voice_client
 
-                            ### TODO: FIX ME (i don't even know how this was supposed to work)
-                            # fuse radio checkpoint🔞
-                            # if allstates.radio_fusions:
-                            #     playlist = random.sample(fuse_playlist[guild.id], 3)
+            if not allstates.radio_station or not voice_client:     # we dont need to monitor this server
+                continue
 
-                            #     # did we play this recently?
-                            #     recent = song_history[str(guild_id)][-15:]
-                            #     for item in recent:
-                            #         for new in playlist:
-                            #             if new in item['radio_title']:
-                            #                 playlist.remove(new)
+            elif allstates.radio_building:
+                continue
 
-                            #     await QueueSong(bot, playlist, 'endless', False, 'endless', guild_id, voice_client)
+            elif allstates.radio_fusions and len(allstates.queue) < config.RADIO_QUEUE:     # fuse radio checkpoint🔞
+                playlist = random.sample(allstates.radio_fusions_playlist, bot.RADIO_QUEUE)
+                await self.QueueSong(voice_client, playlist, 'radio', False, None)
 
+            elif allstates.radio_station.lower() in radio_playlists and len(allstates.queue) < config.RADIO_QUEUE:  # known theme
+                playlist = random.sample(radio_playlists[allstates.radio_station.lower()], config.RADIO_QUEUE)
+                await self.QueueSong(voice_client, playlist, 'radio', False, None)
 
-                            ### TODO: FIX ME (this needs to be refactored anyway...)
-                            # hot100 checkpoint🔞
-                            # if "Billboard Hot💯" in allstates.radio_station:
-                                
-                            #     # does the chart already exist?
-                            #     if len(hot100) == 0:
-                            #         log_music.info("grabbing hot 100")
-                            #         url = config.BILLBOARD_HOT_100
-                            #         headers = {'Authorization': f'Bearer {BOT_SPOTIFY_KEY}'}
+            elif len(allstates.queue) < config.RADIO_QUEUE:   # previously ungenerated radio station
+                allstates.radio_building = True     # block the loop until we're done
 
-                            #         response = requests.get(url, headers=headers)
-                            #         playlist_raw = response.json()
-                            #         playlist = playlist_raw['tracks']['items']
+                try:
+                    response = await self.ChatGPT(
+                        "Return only the information requested with no additional words or context.",
+                        f"Make a playlist of 50 songs (formatted as artist - song), themed around: {allstates.radio_station}. Include similar artists and songs. Do not number the playlist.")
 
-                            #         for track in playlist:
-                            #             artist = track['track']['artists'][0]['name']
-                            #             song = track['track']['name']
-                            #             hot100.append(f"{artist} - {song}")
+                except Exception as e:
+                    log_music.exception(f"loop_radio_monitor(): {e}"); return
 
-                            #     playlist = random.sample(hot100, 3)
-                            #     await QueueSong(bot, playlist, 'endless', False, 'endless', guild_id, voice_client)
+                parsed_response = response.split('\n')  # split into separate strings
+                radio_playlists[allstates.radio_station.lower()] = []   # build an empty list to populate
+                for item in parsed_response:    # populate the list
+                        radio_playlists[allstates.radio_station.lower()].append(item.strip())
 
-                            # do we already know this theme?
-                            if allstates.radio_station.lower() in radio_playlists:
-                                playlist = random.sample(radio_playlists[allstates.radio_station.lower()], 3)
-                                await QueueSong(bot, playlist, 'endless', False, 'endless', guild_id, voice_client)
+                SaveRadio()     # write the new playlist to json file
 
+                playlist = random.sample(radio_playlists[allstates.radio_station.lower()], config.RADIO_QUEUE)
+                await self.QueueSong(voice_client, playlist, 'radio', False, None)
 
-                            # we don't, lets build a setlist
-                            else:
-                                try:
-                                    radio_playlists[allstates.radio_station.lower()] = []
+                allstates.radio_building = False    # free up the loop
 
-                                    response = await ChatGPT(
-                                        bot,
-                                        "Return only the information requested with no additional words or context.",
-                                        f"Make a playlist of 50 songs (formatted as artist - song), themed around: {radio_station[guild_id]}. Include similar artists and songs."
-                                    )
+    @loop_radio_monitor.before_loop
+    async def _before_radio_monitor(self):
+        await self.bot.wait_until_ready()
 
-                                    # filter out the goop
-                                    parsed_response = response.split('\n')
-                                    pattern = r'^\d+\.\s'
-
-                                    # build our new playlist
-                                    for item in parsed_response:
-                                        if re.match(pattern, item):
-                                            parts = re.split(pattern, item, maxsplit=1)
-                                            radio_playlists[allstates.radio_station.lower()].append(parts[1].strip())
-
-                                    SaveRadio()
-
-                                except Exception as e:
-                                    log_music.error(f"CheckEndlessMix(): {e}")
-            
-            await asyncio.sleep(10)
-
-    ### CheckVoiceIdle #################################################
-    async def CheckVoiceIdle(self):
-
-        while True:
-            for voice_client in self.bot.voice_clients:
-
-                allstates = self.settings[voice_client.guild.id]
-
-                # playing, update last play time
-                if voice_client.is_playing():
-                    allstates.last_active = time.time()
-                    continue
-
-                # nothing playing w/o queue, update idle time
-                elif allstates.last_active:
-                    if (time.time() - allstates.last_active) >= config.settings[str(voice_client.guild.id)]['voice_idle']:
-                        await voice_client.disconnect()
-                        allstates.last_active= None
-
-                # always checking whats next to play
-                await self.PlayNextSong(voice_client.guild.id, voice_client)
-
-            await asyncio.sleep(3)
-
-    ### CreateSpotifyKey(self) #########################################
+    ### CreateSpotifyKey() #############################################
     async def CreateSpotifyKey(self):
         global BOT_SPOTIFY_KEY # write access for global
 
@@ -331,10 +283,10 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
 
     ####################################################################
-    # Internal: Functions
+    # Internal: Core Functions
     ####################################################################
 
-    ### ChatGPT(self, system, user) ####################################
+    ### ChatGPT() ######################################################
     async def ChatGPT(self, sys_content: str, user_content: str) -> str:
         conversation = [
             { "role": "system", "content": sys_content },
@@ -356,18 +308,18 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
         return response.choices[0].message.content
 
-    ### DownloadSong(self, args, type, item) ###########################
-    async def DownloadSong(self, args, method, item=None):
-        if args.endswith(" audio"):
-            strip_audio = args.rstrip(" audio")
-            split_args = "-" in strip_audio and strip_audio.split(" - ", 1) or strip_audio
-            song_artist, song_title = split_args[0], split_args[1]
+    ### DownloadSong() #################################################
+    async def DownloadSong(self, payload: str, payload_type: str, item: Optional[int] = None):
+        if payload.endswith(" audio"):
+            strip_audio = payload.rstrip(" audio")
+            split_payload = "-" in strip_audio and strip_audio.split(" - ", 1) or strip_audio
+            song_artist, song_title = split_payload[0], split_payload[1]
         else:
-            strip_audio = args
+            strip_audio = payload
             song_artist = ""
-            song_title = args
+            song_title = payload
 
-        args = method == "search" and f"ytsearch:{args}" or args
+        payload = payload_type == "search" and f"ytsearch:{payload}" or payload
         id = uuid.uuid4()
 
         if item:
@@ -392,7 +344,7 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         
         async def download():
             with yt_dlp.YoutubeDL(opts) as ydl:
-                info = await loop.run_in_executor(None, ydl.extract_info, args, True)
+                info = await loop.run_in_executor(None, ydl.extract_info, payload, True)
                 if info:
                     if '_type' in info and info['_type'] == "playlist":
                         song_list = []
@@ -406,7 +358,7 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
                                     "song_artist": song_artist,
                                     "song_title": song_title,
                                     "url": info['webpage_url'],
-                                    "radio_title": strip_audio or args
+                                    "radio_title": strip_audio or payload
                                 })
                         return song_list
 
@@ -420,14 +372,14 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
                                 "song_artist": song_artist,
                                 "song_title": song_title,
                                 "url": info['webpage_url'],
-                                "radio_title": strip_audio or args
+                                "radio_title": strip_audio or payload
                             }]
                 else:
                     return None
         
         return await download()
 
-    ### GetQueue(context) ##############################################
+    ### GetQueue() #####################################################
     async def GetQueue(self, ctx: Context):
 
         allstates = self.settings[ctx.guild.id]
@@ -445,7 +397,7 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
             bar_width = 10
             filled = int(ratio * bar_width)
             empty = bar_width - filled
-            status_emoji = "⏸️" if vc.is_paused() else "▶️"
+            status_emoji = "⏸️" if voice_client.is_paused() else "▶️"
             progress_bar = (
                 f"{status_emoji} "
                 f"{'▬' * filled}🔘{'▬' * empty} "
@@ -509,11 +461,11 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
         await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
-    ### PlayNextSong(self, guild.id, channel.id) ##################
-    async def PlayNextSong(self, guild_id, channel):
+    ### PlayNextSong() ############################################
+    async def PlayNextSong(self, channel):
 
-        allstates = self.settings[ctx.guild.id]
-        guild_str = str(ctx.guild.id)
+        allstates = self.settings[channel.guild.id]
+        guild_str = str(channel.guild.id)
 
         if channel.is_playing() or channel.is_paused():    # stop trying if we're playing something (or paused)
             return
@@ -538,10 +490,9 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
             ]
 
             ### TODO: this should only be ran if we decided we're going to use it
-            special_response = await ChatGPT(self.bot,   # special song introductions
+            special_response = await self.ChatGPT(# special song introductions
                 "Return only the information requested with no additional words or context.",
-                f'Give me a short talking point about the song "{song_artist} - {song_title}" that I can use before playing it on my radio station. No longer than two sentences. Use the tone and cadance of a radio DJ.'
-            )
+                f'Give me a short talking point about the song "{song_artist} - {song_title}" that I can use before playing it on my radio station. No longer than two sentences. Use the tone and cadance of a radio DJ.')
             special_intro = special_response
 
             def remove_song(error):     # delete song after playing
@@ -589,6 +540,195 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         else:
             allstates.currently_playing = None
 
+    ### QueueSong() ####################################################
+    async def QueueSong(self,
+        voice_client: discord.VoiceClient,
+        payload: List[str],
+        payload_type: Literal['search', 'link', 'radio'],
+        is_priority: bool = False,
+        message: Optional[discord.Message] = None,
+    ) -> None:
+
+        allstates = self.settings[voice_client.guild.id]
+
+        if payload_type == 'link' and 'list=' in payload[0]:    # youtube playlist
+            await self._queue_youtube_playlist(voice_client, payload[0], message)
+        
+        elif payload_type == 'link' and 'open.spotify.com/playlist/' in payload:    # spotify playlist
+            await self._queue_spotify_playlist(voice_client, payload[0], message)
+            
+        elif 'open.spotify.com/track/' in payload:  # spotify link
+            await self._queue_spotify_song(voice_client, payload[0], message)
+
+        elif payload_type == 'radio':   # it's chatgpt dude
+            await self._queue_chatgpt_playlist(voice_client, payload, message)            
+
+        else:   # just an individial song
+            await self._queue_song(voice_client, payload, False, message)
+
+    ####################################################################
+    # Internal: Helper Functions
+    ####################################################################
+
+    ### _queue_chatgpt_playlist() ######################################
+    async def _queue_chatgpt_playlist(self, voice_client: discord.VoiceClient, payload: str, message: Optional[discord.Message] = None):
+        playlist = payload
+        temp = ""
+
+        allstates = self.settings[voice_client.guild.id]
+
+        for i, item in enumerate(payload, start=1):
+
+            if message:
+                embed = discord.Embed(description=f"[2/3] Preparing your ChatGPT playlist ({i}/{len(payload)})...")
+                await message.edit(content=None, embed=embed)
+
+            try:
+                log_music.info(f"Downloading song {i} of {len(playlist)} from chatgpt playlist")
+                song = await self.DownloadSong(item, 'search')
+
+            except Exception as e:
+                log_music.exception(f"QueueSong():\n{e}"); return
+
+            allstates.queue.append(song[0])
+            temp += f"{i}. {song[0]['title']}\n"
+
+            if not voice_client.is_playing() and allstates.queue:
+                await self.PlayNextSong(voice_client)
+
+        if message:
+            embed = discord.Embed(description=f"[3/3] Your ChatGPT playlist has been added to queue!")
+            embed.add_field(name="Added:", value=f"{temp}", inline=False)
+
+            await message.edit(content=None, embed=embed)
+
+    ### _queue_song() ##################################################
+    async def _queue_song(self, voice_client: discord.VoiceClient, payload: str, is_priority: bool, message: Optional[discord.Message] = None):
+
+        allstates = self.settings[voice_client.guild.id]
+        payload_type = 'link' if 'https://' in payload else 'search'
+
+        try:
+            log_music.info(f"Downloading song {payload}")
+            song = await self.DownloadSong(payload, payload_type)
+
+        except Exception as e:
+            log_music.exception(e); return
+
+        if allstates.shuffle:
+            if not is_priority:
+                position = random.randint(0, len(allstates.queue))
+
+            allstates.queue.insert(position, song[0])
+            embed = discord.Embed(description=f"Added {song[0]['title']} to queue in position {position+1} (🔀).")
+            
+        else:
+            if is_priority:
+                allstates.queue.insert(0, song[0])
+            else:
+                allstates.queue.append(song[0])
+
+            embed = discord.Embed(description=f"Added {song[0]['title']} to queue.")
+        
+        if message:
+            await message.edit(content=None, embed=embed)
+
+        if not voice_client.is_playing() and allstates.queue:
+            await self.PlayNextSong(voice_client)
+
+    ### _queue_spotify_playlist() ######################################
+    async def _queue_spotify_playlist(self, voice_client: discord.VoiceClient, payload: str, message: Optional[discord.Message] = None):
+
+        allstates = self.settings[voice_client.guild.id]
+        
+        playlist_id = re.search(r'/playlist/([a-zA-Z0-9]+)(?:[/?]|$)', payload).group(1)
+        response = requests.get(f'https://api.spotify.com/v1/playlists/{playlist_id}', headers={'Authorization': f'Bearer {BOT_SPOTIFY_KEY}'})
+        data_raw = response.json()
+        data = data_raw['tracks']['items']
+        playlist_length = len(data) <= config.MUSIC_MAX_PLAYLIST and len(data) or config.MUSIC_MAX_PLAYLIST
+        log_music.info(f"playlist ({playlist_id}) true length {len(data)}")
+
+        for i, track in enumerate(data[:config.MUSIC_MAX_PLAYLIST], 1):
+            if message:
+                embed = discord.Embed(description=f"Loading {i} of {playlist_length} tracks from \"{data_raw['name']}\"...")
+                await message.edit(content=None, embed=embed)
+
+            try:
+                log_music.info(f"Downloading song {i} of playlist {playlist_id}")
+                song = await self.DownloadSong(f"{track['track']['artists'][0]['name']} - {track['track']['name']} audio", "search")
+
+            except Exception as e:
+                log_music.exception(f"QueueSong():\n{e}"); return
+
+            allstates.queue.append(song[0])
+            if not voice_client.is_playing() and allstates.queue:
+                await self.PlayNextSong(voice_client)
+
+        if message:
+            embed = discord.Embed(description=f"Added {playlist_length} tracks to queue.")
+            await message.edit(content=None, embed=embed)
+
+    ### _queue_spotify_song() ##########################################
+    async def _queue_spotify_song(self, voice_client: discord.VoiceClient, payload: str, message: Optional[discord.Message]):
+
+        allstates = self.settings[voice_client.guild.id]
+
+        track_id = re.search(r'/track/([a-zA-Z0-9]+)(?:[/?]|$)', payload).group(1)
+        response = requests.get(f'https://api.spotify.com/v1/tracks/{track_id}', headers={'Authorization': f'Bearer {BOT_SPOTIFY_KEY}'})
+        track = response.json()
+        title = f"{track['artists'][0]['name']} - {track['name']}"
+
+        try:
+            log_music.info(f"Downloading {title}")
+
+            if message:
+                embed = discord.Embed(description=f"Downloading {title}")
+                await message.edit(content=None, embed=embed)
+
+            song = await self.DownloadSong(f"{title} audio", "search")
+
+        except Exception as e:
+            log_music.exception(f"QueueSong():\n{e}"); return
+
+        allstates.queue.append(song[0])
+        if not voice_client.is_playing() and allstates.queue:
+            await self.PlayNextSong(voice_client)
+
+        if message:
+            embed = discord.Embed(description=f"Added {song[0]['title']} to queue.")
+            await message.edit(content=None, embed=embed)
+
+    ### _queue_youtube_playlist() ######################################
+    async def _queue_youtube_playlist(self, payload: str, message: discord.Message, voice_client: discord.VoiceClient):
+
+        allstates = self.settings[voice_client.guild.id]
+
+        playlist_id = re.search(r'list=([a-zA-Z0-9_-]+)', payload).group(1)
+        response = requests.get(f'https://www.googleapis.com/youtube/v3/playlists?key={config.BOT_YOUTUBE_KEY}&part=contentDetails&id={playlist_id}')
+        data = response.json()
+        playlist_length = data['items'][0]['contentDetails']['itemCount'] <= config.MUSIC_MAX_PLAYLIST and data['items'][0]['contentDetails']['itemCount'] or config.MUSIC_MAX_PLAYLIST
+        log_music.info(f"playlist ({playlist_id}) true length {data['items'][0]['contentDetails']['itemCount']}")
+
+        for i in range(1, playlist_length):
+            if message:
+                embed = discord.Embed(description=f"Loading {i} of {playlist_length} tracks...")
+                await message.edit(content=None, embed=embed)
+
+            try:
+                log_music.info(f"Downloading song {i} of playlist {playlist_id}")
+                song = await self.DownloadSong(payload, 'link', i)
+
+            except Exception as e:
+                log_music.exception(f"QueueSong():\n{e}"); return
+
+            allstates.queue.append(song[0])
+            if not voice_client.is_playing() and allstates.queue:
+                await self.PlayNextSong(voice_client)
+
+        if message:
+            embed = discord.Embed(description=f"Added {playlist_length} tracks to queue.")
+            await message.edit(content=None, embed=embed)
+
 
     ####################################################################
     # Command triggers
@@ -632,7 +772,7 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
             info_embed = discord.Embed(description=f"[1/3] Generating your AI playlist...")
             message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
-            await QueueSong(self.bot, playlist, 'radio', False, message, ctx.guild.id, ctx.guild.voice_client)
+            await QueueSong(ctx.guild.voice_client, playlist, 'radio', False, message)
 
         except Exception as e:
             return
@@ -878,7 +1018,7 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         info_embed = discord.Embed(description=f"Searching for {args}")
         message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
 
-        await asyncio.create_task(QueueSong(self.bot, args, song_type, False, message, guild.id, ctx.guild.voice_client))
+        await asyncio.create_task(self.QueueSong(ctx.guild.voice_client, args, song_type, False, message))
 
     ### !playnext ######################################################
     @commands.command(name='playnext', aliases=['playbump'])
@@ -911,7 +1051,7 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         info_embed = discord.Embed(description=f"Searching for {args}")
         message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
 
-        await asyncio.create_task(QueueSong(self.bot, args, song_type, True, message, ctx.guild.id, ctx.guild.voice_client))
+        await asyncio.create_task(QueueSong(ctx.guild.voice_client, args, song_type, True, message))
 
     ### !queue #########################################################
     @commands.command(name='queue', aliases=['q', 'np', 'nowplaying', 'song'])
@@ -949,17 +1089,15 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         if not ctx.guild.voice_client: # we're not in voice, lets change that
             await JoinVoice(self.bot, ctx)
 
-        ### TODO: FIXME (with the rest of fusion)
-        # # cancel out fusion
-        # if guild_id in radio_fusions:
-        #     radio_fusions.pop(guild_id)
-        #     fuse_playlist.pop(guild_id)
+        if allstates.radio_fusions:     # cancel out fusion
+            allstates.radio_fusions = None
+            allstates.radio_fusions_playlist = None
 
         if args:
             allstates.radio_station = args
             info_embed = discord.Embed(description=f"📻 Radio enabled, theme: **{args}**.")
             
-        elif allstates.radio_station == False:
+        elif allstates.radio_station == None:
             allstates.radio_station = "anything, im not picky" ### TODO: make this customizable per server
             info_embed = discord.Embed(description=f"📻 Radio enabled, theme: anything, im not picky.") ### TODO: variable to match above todo
         else:
@@ -1078,11 +1216,7 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
             await self.PlayNextSong(ctx.guild.id, ctx.guild.voice_client)
 
 
-####################################################################
-# function: FuseRadio(bot, ctx, new_theme)
-# ----
-# Fuse function to merge radio stations.
-####################################################################
+### FuseRadio() ####################################################
 # async def FuseRadio(bot, ctx, new_theme=None):
 #     guild_id = ctx.guild.id
 #     fuse_playlist[guild_id] = []
@@ -1145,166 +1279,3 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 #         random.shuffle(fuse_playlist[guild_id])
 
 #     return
-    
-####################################################################
-# function: QueueSong(bot, args, method, priority, message, guild_id, voice_client)
-# ----
-# Brain of the music bot. Passes off data to DownloadSong and manages
-# adding the music to the queue.
-####################################################################
-async def QueueSong(bot, args, method, priority, message, guild_id, voice_client):
-    global queue
-
-    try:
-        # we've got a playlist
-        is_playlist = method == 'link' and True or False
-        if is_playlist and 'list=' in args:
-            playlist_id = re.search(r'list=([a-zA-Z0-9_-]+)', args).group(1)
-            response = requests.get(f'https://www.googleapis.com/youtube/v3/playlists?key={config.BOT_YOUTUBE_KEY}&part=contentDetails&id={playlist_id}')
-            data = response.json()
-            playlist_length = data['items'][0]['contentDetails']['itemCount'] <= config.MUSIC_MAX_PLAYLIST and data['items'][0]['contentDetails']['itemCount'] or config.MUSIC_MAX_PLAYLIST
-            log_music.info(f"playlist ({playlist_id}) true length {data['items'][0]['contentDetails']['itemCount']}")
-
-            for i in range(1, playlist_length):
-                embed = discord.Embed(description=f"Loading {i} of {playlist_length} tracks...")
-                await message.edit(content=None, embed=embed)
-                try:
-                    log_music.info(f"Downloading song {i} of playlist {playlist_id}")
-                    song = await DownloadSong(args, 'link', i)
-                    queue[guild_id].append(song[0])
-
-                    if not voice_client.is_playing() and queue[guild_id]:
-                        await self.PlayNextSong(guild_id, voice_client)
-                except Exception as e:
-                    log_music.error(e)
-
-            embed = discord.Embed(description=f"Added {playlist_length} tracks to queue.")
-            await message.edit(content=None, embed=embed); return
-        
-        # spotify playlist
-        elif is_playlist and 'open.spotify.com/playlist/' in args:
-            playlist_id = re.search(r'/playlist/([a-zA-Z0-9]+)(?:[/?]|$)', args).group(1)
-            response = requests.get(f'https://api.spotify.com/v1/playlists/{playlist_id}', headers={'Authorization': f'Bearer {BOT_SPOTIFY_KEY}'})
-            data_raw = response.json()
-            data = data_raw['tracks']['items']
-            playlist_length = len(data) <= config.MUSIC_MAX_PLAYLIST and len(data) or config.MUSIC_MAX_PLAYLIST
-
-
-            log_music.info(f"playlist ({playlist_id}) true length {len(data)}")
-
-            for i, track in enumerate(data[:20], 1):
-                embed = discord.Embed(description=f"Loading {i} of {playlist_length} tracks from \"{data_raw['name']}\"...")
-                await message.edit(content=None, embed=embed)
-                try:
-                    log_music.info(f"Downloading song {i} of playlist {playlist_id}")
-                    song = await DownloadSong(f"{track['track']['artists'][0]['name']} - {track['track']['name']} audio", "search")
-                    queue[guild_id].append(song[0])
-
-                    if not voice_client.is_playing() and queue[guild_id]:
-                        await self.PlayNextSong(guild_id, voice_client)
-                except Exception as e:
-                    log_music.error(e)
-
-            embed = discord.Embed(description=f"Added {playlist_length} tracks to queue.")
-            await message.edit(content=None, embed=embed); return
-
-        # spotify link
-        elif 'open.spotify.com/track/' in args:
-            track_id = re.search(r'/track/([a-zA-Z0-9]+)(?:[/?]|$)', args).group(1)
-            response = requests.get(f'https://api.spotify.com/v1/tracks/{track_id}', headers={'Authorization': f'Bearer {BOT_SPOTIFY_KEY}'})
-            track = response.json()
-            title = f"{track['artists'][0]['name']} - {track['name']}"
-
-            try:
-                log_music.info(f"Downloading {title}")
-                embed = discord.Embed(description=f"Downloading {title}")
-                await message.edit(content=None, embed=embed)
-                song = await DownloadSong(f"{title} audio", "search")
-                queue[guild_id].append(song[0])
-
-                if not voice_client.is_playing() and queue[guild_id]:
-                    await self.PlayNextSong(guild_id, voice_client)
-            except Exception as e:
-                log_music.error(e)
-
-            embed = discord.Embed(description=f"Added {song[0]['title']} to queue.")
-            await message.edit(content=None, embed=embed); return
-
-        # it's chatgpt dude
-        elif method == 'radio':
-            playlist = args
-            temp = ""
-
-            for i, item in enumerate(args, start=1):
-                embed = discord.Embed(description=f"[2/3] Preparing your ChatGPT playlist ({i}/{len(args)})...")
-                await message.edit(content=None, embed=embed)
-
-                try:
-                    log_music.info(f"Downloading song {i} of {len(playlist)} from chatgpt playlist")
-                    song = await DownloadSong(item, 'search')
-                    queue[guild_id].append(song[0])
-                    temp += f"{i}. {song[0]['title']}\n"
-
-                    if not voice_client.is_playing() and queue[guild_id]:
-                        await self.PlayNextSong(guild_id, voice_client)
-
-                except Exception as e:
-                    log_music.error(e)
-
-            embed = discord.Embed(description=f"[3/3] Your ChatGPT playlist has been added to queue!")
-            embed.add_field(name="Added:", value=f"{temp}", inline=False)
-
-            await message.edit(content=None, embed=embed); return
-
-        # endless!
-        elif method == 'endless':
-            playlist = args
-            temp = ""
-
-            for i, item in enumerate(args, start=1):
-
-                try:
-                    log_music.info(f"Downloading \"{item}\".")
-                    song = await DownloadSong(f"{item} audio", 'search')
-                    queue[guild_id].append(song[0])
-                    temp += f"{i}. {song[0]['title']}\n"
-
-                    if not voice_client.is_playing() and queue[guild_id]:
-                        await self.PlayNextSong(guild_id, voice_client)
-
-                except Exception as e:
-                    log_music.error(e)
-
-            return
-
-        # just an individial song
-        else:
-            try:
-                log_music.info(f"Downloading song {args}")
-                song = await DownloadSong(args, method)
-
-                if shuffle[guild_id]:
-                    if not priority:
-                        position = random.randint(0, len(queue[guild_id]))
-
-                    queue[guild_id].insert(position, song[0])
-                    embed = discord.Embed(description=f"Added {song[0]['title']} to queue in position {position+1} (🔀).")
-                    
-                else:
-                    if priority:
-                        queue[guild_id].insert(0, song[0])
-                    else:
-                        queue[guild_id].append(song[0])
-
-                    embed = discord.Embed(description=f"Added {song[0]['title']} to queue.")
-                
-                await message.edit(content=None, embed=embed)
-
-                if not voice_client.is_playing() and queue[guild_id]:
-                    await self.PlayNextSong(guild_id, voice_client); return
-
-            except Exception as e:
-                log_music.error(e)
-
-    except Exception as e:
-        log_music.error(e)
