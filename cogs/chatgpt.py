@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 import openai
-from openai import OpenAI, BadRequestError
+from openai import OpenAI
 import asyncio
 import requests
 from io import BytesIO
@@ -14,9 +14,10 @@ import config
 import func
 from func import FancyErrors
 
-# enable openai if we set a key
-if config.BOT_OPENAI_KEY:
-    client = OpenAI(api_key=config.BOT_OPENAI_KEY)
+if not config.BOT_OPENAI_KEY:
+    sys.exit("Missing OpenAI key. This is configured in hathor/config.py")
+
+client = OpenAI(api_key=config.BOT_OPENAI_KEY)
 
 # define the class
 class ChatGPT(commands.Cog, name="ChatGPT"):
@@ -49,20 +50,12 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             !chatgpt <tone> | <prompt>
         """
 
-        # is there an api key present?
-        if not config.BOT_OPENAI_KEY:
-            await FancyErrors("DISABLED_FEATURE", ctx.channel)
-            return
-
-        # did you even ask anything
-        if not request:
-            await FancyErrors("SYNTAX", ctx.channel)
-            return
+        if not request: # did you even ask anything
+            raise func.err_syntax(); return
         
         # what are you asking that's shorter, really
         if len(request) < 3 and not ctx.message.attachments:
-            await FancyErrors("SHORT", ctx.channel)
-            return
+            raise func.err_message_short(); return
         
         # prep our message
         output = discord.Embed(title="ChatGPT", description="Sending request to ChatGPT...")
@@ -102,7 +95,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
                     temperature=config.BOT_OPENAI_TEMPERATURE,
                     max_completion_tokens=1000
                 )
-            except openai.ServiceUnavailableError:
+            except Exception as e:
                 reponse = "SERVICE_UNAVAILABLE"
 
         else:
@@ -135,7 +128,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
                     temperature=config.BOT_OPENAI_TEMPERATURE,
                     max_completion_tokens=1000
                 )
-            except openai.ServiceUnavailableError:
+            except Exception as e:
                 reponse = "SERVICE_UNAVAILABLE"
 
         # update our message with the reponse
@@ -173,10 +166,6 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         Syntax:
             !gptedit <prompt> <image attachment{1,4}>
         """
-
-        if not config.BOT_OPENAI_KEY:
-            await FancyErrors("DISABLED_FEATURE", ctx.channel)
-            return
 
         if not prompt:
             await FancyErrors("SYNTAX", ctx.channel)
@@ -226,11 +215,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         Syntax:
             !gptimagine <prompt>
         """
-        # is there an api key present?
-        if not config.BOT_OPENAI_KEY:
-            await FancyErrors("DISABLED_FEATURE", ctx.channel)
-            return
-
+        
         # did you even ask anything
         if not request:
             await FancyErrors("SYNTAX", ctx.channel)
