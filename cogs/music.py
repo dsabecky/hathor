@@ -68,7 +68,7 @@ def LoadHistory():
         
 def SaveHistory():
     with open('song_history.json', 'w') as file:
-        json.dump(song_history, file, indent=4)
+        json.dump(song_history, file, ensure_ascii=False, indent=4)
 
 def LoadRadio():
     try:
@@ -82,7 +82,7 @@ def LoadRadio():
         
 def SaveRadio():
     with open('radio_playlists.json', 'w') as file:
-        json.dump(radio_playlists, file, indent=4)
+        json.dump(radio_playlists, file, ensure_ascii=False, indent=4)
 
 
 ####################################################################
@@ -487,10 +487,10 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
         allstates.start_time = time.time()
         volume = cfg['volume'] / 100
-        intro_volume = cfg['volume'] < 80 and (cfg['volume'] + 15) / 100  # slightly bump intro volume
+        intro_volume = cfg['volume'] < 80 and (cfg['volume'] + 20) / 100  # slightly bump intro volume
 
-        if song_artist and cfg['radio_intro'] and random.random() < 0.5:   # add an intro (if radio is enabled)
-            self._play_radio_intro(voice_client, song_artist, song_title, volume)
+        if song_artist and cfg['radio_intro'] and random.random() < 0.6:   # add an intro (if radio is enabled)
+            await self._play_radio_intro(voice_client, song_artist, song_title, volume)
 
         def song_cleanup(error):    # song file cleanup
             if allstates.repeat:    # don't cleanup if we're on repeat
@@ -581,7 +581,7 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         def _on_done(_):
             done.set()
 
-        vc.play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(intro_path), volume=volume), after=_on_done)
+        voice_client.play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(intro_path), volume=volume), after=_on_done)
 
         await done.wait()   # wait for song completion
 
@@ -605,7 +605,7 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
             try:
                 log_music.info(f"Downloading song {i} of {len(playlist)} from chatgpt playlist")
-                song = await self.DownloadSong(item, 'search')
+                song = await self.DownloadSong(f"{item} audio", 'search')
 
             except Exception as e:
                 log_music.exception(f"QueueSong():\n{e}"); return
@@ -1071,7 +1071,7 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         info_embed = discord.Embed(description=f"Searching for {args}")
         message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
 
-        await asyncio.create_task(QueueSong(ctx.guild.voice_client, args, song_type, True, message))
+        await asyncio.create_task(self.QueueSong(ctx.guild.voice_client, args, song_type, True, message))
 
     ### !queue #########################################################
     @commands.command(name='queue', aliases=['q', 'np', 'nowplaying', 'song'])
