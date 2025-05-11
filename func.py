@@ -1,18 +1,26 @@
+####################################################################
+# Library & Modules
+####################################################################
+
+# discord imports
 import discord
 from discord.ext import commands
-from datetime import datetime
+
+# system level stuff
 import json
+
+# date, time, numbers
+from datetime import datetime
 import random
 
+# hathor internals
 import config
 
-####################################################################
-# variable: LoadSettings()
-# ----
-# Our database of errors and fun quotes.
-####################################################################
-err = {
-    'quote': [
+###############################################################
+# Quotable References
+###############################################################
+
+error_flavor = {
         "You must construct additional pylons.",
         "Not enough mana.",
         "Minions have spawned.",
@@ -23,8 +31,11 @@ err = {
         "Mission failure, we'll get them next time.",
         "What do the numbers mean, Mason?",
         "What a horrible night to have a curse..."
-    ]
 }
+
+###############################################################
+# Errors: Cases & Linker References
+###############################################################
 
 class Error(commands.CommandError):
     pass
@@ -124,11 +135,9 @@ def requires_queue():
     return commands.check(predicate)
 
 
-####################################################################
-# function: CheckPermissions(bot, guild_id, user_id, user_roles)
-# ----
-# Checks if a user has elevated permissions in a server.
-####################################################################
+###############################################################
+# Internal Functions
+###############################################################
 async def CheckPermissions(bot, guild_id, user_id, user_roles):
     guild = await bot.fetch_guild(guild_id) # why cant i get this from ctx.guild???
     
@@ -155,5 +164,5 @@ async def CheckPermissions(bot, guild_id, user_id, user_roles):
 # ----
 # Returns prewritten errors.
 ####################################################################
-async def FancyErrors(error, channel):
-    await channel.send(f'{random.choice(err["quote"])} ({error})')
+async def FancyErrors(error: str, channel):
+    await channel.send(f'{random.choice(error_flavor)} ({error})')
