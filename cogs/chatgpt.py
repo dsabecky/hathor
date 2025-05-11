@@ -46,6 +46,57 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
     def __init__(self, bot):
         self.bot = bot
 
+
+    ####################################################################
+    # Cog 'on_' listeners
+    ####################################################################
+
+    ### on_message() ###################################################
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        
+        if message.author.bot or not message.guild or message.reference is None:     # ignore bots, DMs, and non-replies
+            return
+
+        if not message.content.lower().startswith("@grok "):    # we only want the twitter meme
+            return
+
+        reply_reference = message.reference
+        try:
+            grok_reference = await message.channel.fetch_message(reply_reference.message_id)
+        except Exception:
+            await message.reply("Hmm, looks like I can’t unearth that mystery message—did it vanish into the void?", mention_author=True); return
+
+        prompt = grok_reference.content.strip()
+
+        if not prompt and not grok_reference.attachments:
+            await message.reply("Wow, that reply was so profound... it contained absolutely nothing.", mention_author=True); return
+
+        async with message.channel.typing():
+            conversation = [
+                { "role": "system", "content":(
+                    "You are Grok, the snarky Twitter AI... "
+                    "Provide a response to the prompt like you're talking directly to me. "
+                    "Be oblivious to your own attitude, you know you're always correct. "
+                    "Always provide an answer.") },
+                { "role": "user", "content": f"The following is a statement made by someone online, is it true?: {prompt}" }
+            ]
+
+            try:
+                response = await asyncio.to_thread(client.chat.completions.create,
+                    model=config.BOT_CHATGPT_MODEL,
+                    messages=conversation,
+                    temperature=config.BOT_OPENAI_TEMPERATURE,
+                    max_completion_tokens=1000
+                )
+            except Exception:
+                return await message.reply("I would love to answer you, but I'm running into API problems. Sorry.. I guess?", mention_author=True); return
+
+        log_chatgpt.info(f"DEBUG: {response.choices[0]}")
+
+        await message.reply(response.choices[0].message.content, mention_author=True)
+        
+
     ####################################################################
     # Command triggers
     ####################################################################
