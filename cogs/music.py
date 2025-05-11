@@ -146,14 +146,14 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
             allstates = self.settings[guild.id]     # load / init per server settings
             guild_str = str(guild.id)               # json is stupid and forces the key to be a string
 
-            if not guild_str in song_history:   # init song history (if required)
+            if not guild_str in song_history:       # init song history (if required)
                 song_history[guild_str] = []
 
         SaveHistory() # save our song history
 
-        self.loop_voice_monitor.start()                 # monitors voice activity for idle, broken playing, etc
-        self.loop_radio_monitor.start()                 # monitors radio queue generation
-        self.loop_spotify_key_creation.start()          # generate a spotify key
+        self.loop_voice_monitor.start()             # monitors voice activity for idle, broken playing, etc
+        self.loop_radio_monitor.start()             # monitors radio queue generation
+        self.loop_spotify_key_creation.start()      # generate a spotify key
 
     ### on_guild_join() ################################################
     @commands.Cog.listener()
