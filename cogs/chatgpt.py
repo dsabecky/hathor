@@ -1,43 +1,58 @@
+####################################################################
+# Library & Modules
+####################################################################
+
+# discord imports
 import discord
 from discord.ext import commands
-import openai
-from openai import OpenAI
-import asyncio
-import requests
-from io import BytesIO
-import base64
-import imghdr
-import re
-import ast
 
-import config
-import func
-from func import FancyErrors
+# system level stuff
+import asyncio          # prevents thread locking
+import requests         # grabbing raw data from url
+
+
+# data analysis
+import ast              # parsing json error codes from openai
+import base64           # image data conversion
+import imghdr           # grab image header / x-image-type
+from io import BytesIO  # raw image data handling
+import re               # regex for various filtering
+
+# openai libraries
+import openai               # ai playlist generation, etc
+from openai import OpenAI   # cleaner than manually calling openai.OpenAI()
+
+# hathor internals
+import config                   # bot config
+import func                     # bot specific functions (@decorators, err_classes, etc)
+from logs import log_chatgpt    # logging
+
+
+####################################################################
+# OpenAPI key validation
+####################################################################
 
 if not config.BOT_OPENAI_KEY:
     sys.exit("Missing OpenAI key. This is configured in hathor/config.py")
 
 client = OpenAI(api_key=config.BOT_OPENAI_KEY)
 
-# define the class
+
+####################################################################
+# Classes
+####################################################################
+
 class ChatGPT(commands.Cog, name="ChatGPT"):
     def __init__(self, bot):
         self.bot = bot
 
     ####################################################################
-    # on_ready()
+    # Command triggers
     ####################################################################
 
-    # @commands.Cog.listener()
-    # async def on_ready(self):
-
-    ####################################################################
-    # trigger: !chatgpt
-    # ----
-    # Sends a request to chatgpt.
-    ####################################################################
+    ### !chatgpt #######################################################
     @commands.command(name='chatgpt')
-    async def ask_chatgpt(
+    async def trigger_chatgpt(
         self, ctx, *,
         request = commands.parameter(default=None, description="Prompt request")
     ):
@@ -54,7 +69,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             raise func.err_syntax(); return
         
         # what are you asking that's shorter, really
-        if len(request) < 3 and not ctx.message.attachments:
+        if len(request) < 3 or not ctx.message.attachments:
             raise func.err_message_short(); return
         
         # prep our message
@@ -79,12 +94,12 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
                 image_type = imghdr.what(None, h=image_data)
 
                 conversation = [
-                    { "role": "system", "content": f"Limit response length to 1000 characters. {system_request}" },
+                    { "role": "system", "content": f"Limit response length to 500 characters. {system_request}" },
                     { "role": "user", "content": [ { "type": "text", "text": user_request }, { "type": "image_url", "image_url": { "url": f"data:image/{image_type};base64,{image_base64}" } } ] }
                 ]
             else:
                 conversation = [
-                    { "role": "system", "content": f"Limit response length to 1000 characters. {system_request}" },
+                    { "role": "system", "content": f"Limit response length to 500 characters. {system_request}" },
                     { "role": "user", "content": user_request }
                 ]
 
@@ -168,8 +183,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         """
 
         if not prompt:
-            await FancyErrors("SYNTAX", ctx.channel)
-            return
+            raise func.err_syntax(); return
 
         # collect up to 4 image attachments
         buffers = []
@@ -183,8 +197,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             buffers.append(buf)
 
         if not buffers:
-            await FancyErrors("NO_IMAGE", ctx.channel)
-            return
+            raise func.err_no_image(); return
 
         # send the “Generating edit…” embed
         waiting = discord.Embed(
@@ -218,13 +231,11 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         
         # did you even ask anything
         if not request:
-            await FancyErrors("SYNTAX", ctx.channel)
-            return
+            raise func.err_syntax(); return
         
         # what are you asking that's shorter, really
         if len(request) < 5:
-            await FancyErrors("SHORT", ctx.channel)
-            return
+            raise func.err_message_short(); return
 
         # build your embed
         output = discord.Embed(title="OpenAI Generation", description="Generating request...")
@@ -279,17 +290,11 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             !imagine <prompt>
         """
 
-        if not config.BOT_OPENAI_KEY:
-            await FancyErrors("DISABLED_FEATURE", ctx.channel)
-            return
-
         if not request:
-            await FancyErrors("SYNTAX", ctx.channel)
-            return
+            raise func.err_syntax(); return
 
         if len(request) < 10:
-            await FancyErrors("SHORT", ctx.channel)
-            return
+            raise func.err_message_short(); return
 
         # 1) build and send the "Generating..." embed
         embed = discord.Embed(title="Image Generation", description="Generating image request...")
