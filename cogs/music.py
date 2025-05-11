@@ -16,13 +16,13 @@ import asyncio      # prevents thread locking
 import io           # read/write
 import json         # logging (song history, settings, etc)
 import os           # system access
+import requests     # grabbing raw data from url
 import sys          # failure condition quits
 import uuid         # we create uuid's for downloaded media instead of file names (lazy sanitization)
-import requests     # grabbing raw data from url
 
 # data analysis
 import re                                                   # regex for various filtering
-from typing import List, Literal, Optional, TypedDict       # this is supposed to be "cleaner" for array pre-definition
+from typing import Any, List, Literal, Optional, TypedDict  # this is supposed to be "cleaner" for array pre-definition
 from collections import defaultdict                         # type hints
 
 # date, time, numbers
@@ -153,8 +153,7 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
         self.loop_voice_monitor.start()                 # monitors voice activity for idle, broken playing, etc
         self.loop_radio_monitor.start()                 # monitors radio queue generation
-
-        asyncio.create_task(self.CreateSpotifyKey())    # generate a spotify key
+        self.loop_spotify_key_creation.start()          # generate a spotify key
 
     ### on_guild_join() ################################################
     @commands.Cog.listener()
@@ -260,26 +259,29 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         await self.bot.wait_until_ready()
 
     ### CreateSpotifyKey() #############################################
-    async def CreateSpotifyKey(self):
-        global BOT_SPOTIFY_KEY # write access for global
+    @tasks.loop(seconds=config.SPOTIFY_KEY_REFRESH)
+    async def loop_spotify_key_creation(self):
 
-        while True:
-            def blocking_call():
-                return requests.post(
-                    "https://accounts.spotify.com/api/token", headers={"Content-Type": "application/x-www-form-urlencoded"},
-                    data={ "grant_type": "client_credentials", "client_id": config.BOT_SPOTIFY_CLIENT, "client_secret": config.BOT_SPOTIFY_SECRET }
-                )
+        global BOT_SPOTIFY_KEY      # write access for global
 
-            try:
-                response = await asyncio.to_thread(blocking_call)
-                data = response.json()
-                log_music.info("Generated new Spotify API Access Token.")
-                BOT_SPOTIFY_KEY = data['access_token']
-            
-            except Exception as e:
-                log_music.error(f"Failed to generate Spotify API Access Token: {e}")
+        def blocking_call():
+            return requests.post(
+                "https://accounts.spotify.com/api/token", headers={"Content-Type": "application/x-www-form-urlencoded"},
+                data={ "grant_type": "client_credentials", "client_id": config.BOT_SPOTIFY_CLIENT, "client_secret": config.BOT_SPOTIFY_SECRET }
+            )
 
-            await asyncio.sleep(config.SPOTIFY_KEY_REFRESH)
+        try:
+            response = await asyncio.to_thread(blocking_call)
+            data = response.json()
+            log_music.info("Generated new Spotify API Access Token.")
+            BOT_SPOTIFY_KEY = data['access_token']
+        
+        except Exception as e:
+            log_music.error(f"Failed to generate Spotify API Access Token: {e}"); return
+
+    @loop_spotify_key_creation.before_loop
+    async def _before_spotify_key_creation(self):
+        await self.bot.wait_until_ready()
 
 
     ####################################################################
@@ -304,80 +306,83 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
             response = await asyncio.to_thread(blocking_call)
 
         except Exception as e:
-            log_music.error(f"ChatGPT(): {e}")
+            log_music.error(f"ChatGPT(): {e}"); return
 
         return response.choices[0].message.content
 
     ### DownloadSong() #################################################
-    async def DownloadSong(self, payload: str, payload_type: str, item: Optional[int] = None):
-        if payload.endswith(" audio"):
+    async def DownloadSong(self, payload: str, payload_type: Literal['link', 'search'], item_index: Optional[int] = None):
+        if payload.endswith(" audio"):  # filter specific song search
             strip_audio = payload.rstrip(" audio")
-            split_payload = "-" in strip_audio and strip_audio.split(" - ", 1) or strip_audio
-            song_artist, song_title = split_payload[0], split_payload[1]
-        else:
+            song_artist, song_title = strip_audio.split(" - ", 1)   # splice artist - title
+
+        else:   # there has to be a better way to do this
             strip_audio = payload
             song_artist = ""
             song_title = payload
 
-        payload = payload_type == "search" and f"ytsearch:{payload}" or payload
-        id = uuid.uuid4()
+        payload = payload_type == "search" and f"ytsearch:{payload}" or payload     # inject ytsearch: for non-links
+        id = uuid.uuid4()   # create uuid for future filename assignment
 
-        if item:
-            opts = {
-                "format": "bestaudio/best",
-                "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}],
-                "outtmpl": f'db/{id}',
-                "playlist_items": f"{item}",
-                "ignoreerrors": True,
-                "quiet": True,
-            }
-        else:
-            opts = {
-                "format": "bestaudio/best",
-                "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}],
-                "outtmpl": f'db/{id}',
-                "ignoreerrors": True,
-                "quiet": True,
-            }
+        ytdlp_opts: Dict[str, Any] = {      # ytdlp options
+            "format": "bestaudio/best",
+            "postprocessors": [{ "key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192" }],
+            "outtmpl": f'db/{id}',
+            "ignoreerrors": True,
+            "quiet": True,
+        }
 
-        loop = asyncio.get_event_loop()
-        
-        async def download():
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = await loop.run_in_executor(None, ydl.extract_info, payload, True)
-                if info:
-                    if '_type' in info and info['_type'] == "playlist":
-                        song_list = []
-                        for info in info['entries']:
-                            if info['duration'] <= config.MUSIC_MAX_DURATION:
-                                song_list.append({
-                                    "title": info['title'],
-                                    "path": f"db/{id}.mp3",
-                                    "duration": info['duration'],
-                                    "thumbnail": info['thumbnail'],
-                                    "song_artist": song_artist,
-                                    "song_title": song_title,
-                                    "url": info['webpage_url'],
-                                    "radio_title": strip_audio or payload
-                                })
-                        return song_list
+        if item_index is not None:      # inject playlist_items if we're provided item_index
+            ytdlp_opts["playlist_items"] = str(item_index)
 
-                    else:
-                        if info['duration'] <= config.MUSIC_MAX_DURATION:
-                            return [{
-                                "title": info['title'],
-                                "path": f"db/{id}.mp3",
-                                "duration": info['duration'],
-                                "thumbnail": info['thumbnail'],
-                                "song_artist": song_artist,
-                                "song_title": song_title,
-                                "url": info['webpage_url'],
-                                "radio_title": strip_audio or payload
-                            }]
-                else:
-                    return None
-        
-        return await download()
+
+        loop = asyncio.get_running_loop()
+
+        def download():
+            with yt_dlp.YoutubeDL(ytdlp_opts) as ydl:
+                return ydl.extract_info(payload)
+
+        try:
+            info: Union[Dict[str, Any], None] = await loop.run_in_executor(None, download)
+        except Exception as e:
+            log_music.exception(f"DownloadSong(): {e}"); return
+
+        if not info:    # we didn't get anything from yt_dlp
+            return
+
+        if info.get("_type") == "playlist": # filter playlist info
+            results: List[Dict[str, Any]] = []
+            for entry in info.get("entries", []):
+
+                if not entry or entry.get("duration", 0) > config.MUSIC_MAX_DURATION:   # song is too long
+                    continue
+
+                results.append({    # build our response
+                    "title": entry["title"],
+                    "path": f"db/{id}.mp3",
+                    "duration": entry["duration"],
+                    "thumbnail": entry.get("thumbnail"),
+                    "song_artist": song_artist,
+                    "song_title": song_title,
+                    "url": entry["webpage_url"],
+                    "radio_title": strip_audio,
+                })
+
+            return results
+
+        if info.get("duration", 0) <= config.MUSIC_MAX_DURATION:    # song isn't too long
+            return [{   # build our response
+                "title": info["title"],
+                "path": f"db/{id}.mp3",
+                "duration": info["duration"],
+                "thumbnail": info.get("thumbnail"),
+                "song_artist": song_artist,
+                "song_title": song_title,
+                "url": info["webpage_url"],
+                "radio_title": strip_audio,
+            }]
+
+        return
 
     ### GetQueue() #####################################################
     async def GetQueue(self, ctx: Context):
@@ -462,83 +467,54 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     ### PlayNextSong() ############################################
-    async def PlayNextSong(self, channel):
+    async def PlayNextSong(self, voice_client: discord.VoiceClient):
 
-        allstates = self.settings[channel.guild.id]
-        guild_str = str(channel.guild.id)
+        allstates = self.settings[voice_client.guild.id]
+        guild_str = str(voice_client.guild.id)
+        cfg       = config.settings[guild_str]
 
-        if channel.is_playing() or channel.is_paused():    # stop trying if we're playing something (or paused)
+        if voice_client.is_playing() or voice_client.is_paused():    # stop trying if we're playing something (or paused)
             return
 
-        if allstates.queue:
-            song = allstates.queue.pop(0)
-            path, title, song_artist, song_title = song['path'], song['title'], song['song_artist'], song['song_title']
-            allstates.start_time = time.time()
-            volume = config.settings[guild_str]['volume'] / 100
-            intro_volume = config.settings[guild_str]['volume'] < 80 and (config.settings[guild_str]['volume'] + 15) / 100
-
-            ### TODO: this should be in config.py
-            intros = [  # standard song introductions
-                f"Ladies and gentlemen, hold onto your seats because we're about to unveil the magic of {song_title} by {song_artist}. Only here at {channel.guild.name} radio.",
-                f"Turning it up to 11! brace yourselves for {song_artist}'s masterpiece {song_title}. Here on {channel.guild.name} radio.",
-                f"Rock on, warriors! We're cranking up the intensity with {song_title} by {song_artist} on {channel.guild.name} radio.",
-                f"Welcome to the virtual airwaves! Get ready for a wild ride with a hot track by {song_artist} on {channel.guild.name} radio.",
-                f"Buckle up, folks! We're about to take you on a musical journey through the neon-lit streets of {channel.guild.name} radio.",
-                f"Hello, virtual world! It's your DJ, {self.bot.user.display_name or self.bot.user.name}, in the house, spinning {song_title} by {song_artist}. Only here on {channel.guild.name} radio.",
-                f"Greetings from the digital realm! Tune in, turn up, and let the beats of {song_artist} with {song_title} take over your senses, here on {channel.guild.name} radio.",
-                f"Time to crank up the volume and immerse yourself in the eclectic beats of {channel.guild.name} radio. Let the madness begin with {song_title} by {song_artist}!"
-            ]
-
-            ### TODO: this should only be ran if we decided we're going to use it
-            special_response = await self.ChatGPT(# special song introductions
-                "Return only the information requested with no additional words or context.",
-                f'Give me a short talking point about the song "{song_artist} - {song_title}" that I can use before playing it on my radio station. No longer than two sentences. Use the tone and cadance of a radio DJ.')
-            special_intro = special_response
-
-            def remove_song(error):     # delete song after playing
-                if allstates.repeat:
-                    allstates.queue.insert(0, song)
-                else:
-                    os.remove(path)
-
-            def play_after_intro(junk):     # wait for intro to finish (if enabled)
-                allstates.intro_playing = False
-
-            ### TODO: is there a better way to do this??
-            if song_artist != "" and config.settings[guild_str]['radio_intro'] and random.randint(1, 5) != 5:   # add an intro (if radio is enabled)
-                allstates.intro_playing = True
-
-                ### TODO: if we make special intro run only when needed, this needs to change (to include intro.mp3 to something linked to the queue / song specifically)
-                intro = gTTS(f"{random.choice([random.choice(intros), f'{special_intro} Here on {channel.guild.name} radio.'])}", lang='en', slow=False)
-                intro.save("db/intro.mp3")
-
-                ### TODO: if we make special intro run only when needed, this needs to change to something linked to the song specifically
-                # actually play the song
-                channel.play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio("db/intro.mp3"), volume=intro_volume), after=play_after_intro)
-
-            ### TODO: There has to be a better way to manage this, cause this is buggy (sometimes)
-            while allstates.intro_playing == True:
-                await asyncio.sleep(0.5)
-
-            # actually play the song
-            channel.play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(path), volume=volume), after=remove_song)
-
-            # add to song history
-            song_history[guild_str].append({"timestamp": time.time(), "title": title, "radio_title": song['radio_title']})
-            SaveHistory()
-
-            allstates.currently_playing = {
-                "title": title,
-                "duration": song["duration"],
-                "path": path,
-                "thumbnail": song["thumbnail"],
-                "url": song["url"],
-                "song_artist": song_artist,
-                "song_title": song_title
-            }
-
-        else:
+        if not allstates.queue:     # nothing to play
             allstates.currently_playing = None
+            return
+
+        song = allstates.queue.pop(0)   # pop the next queued song
+        path, title, song_artist, song_title = (
+            song['path'], song['title'], song['song_artist'], song['song_title']
+        )
+
+        allstates.start_time = time.time()
+        volume = cfg['volume'] / 100
+        intro_volume = cfg['volume'] < 80 and (cfg['volume'] + 15) / 100  # slightly bump intro volume
+
+        if song_artist and cfg['radio_intro'] and random.random() < 0.5:   # add an intro (if radio is enabled)
+            self._play_radio_intro(voice_client, song_artist, song_title, volume)
+
+        def song_cleanup(error):    # song file cleanup
+            if allstates.repeat:    # don't cleanup if we're on repeat
+                allstates.queue.insert(0, song)
+            else:
+                try:
+                    os.remove(path)
+                except Exception as e:
+                    log_music.exception(f"song_cleanup(): {e}")
+
+        voice_client.play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(path), volume=volume), after=song_cleanup)    # actually play the song, cleanup after=
+
+        song_history[guild_str].append({ "timestamp": time.time(), "title": title, "radio_title": song['radio_title'] })
+        SaveHistory()
+
+        allstates.currently_playing = {
+            "title": title,
+            "duration": song["duration"],
+            "path": path,
+            "thumbnail": song["thumbnail"],
+            "url": song["url"],
+            "song_artist": song_artist,
+            "song_title": song_title
+        }
 
     ### QueueSong() ####################################################
     async def QueueSong(self,
@@ -569,6 +545,50 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
     ####################################################################
     # Internal: Helper Functions
     ####################################################################
+
+    ### _play_radio_intro() ############################################
+    async def _play_radio_intro(self, voice_client: discord.VoiceClient, artist: str, title: str, volume: float) -> None:
+
+        allstates = self.settings[voice_client.guild.id]
+
+        is_special = random.random() < 0.4  # 40% odds we use a song specific intro
+        text = ""   # initiate the intro string
+
+        if is_special:  # special intro
+            text = await self.ChatGPT(
+                'Return only the information requested with no additional words or context.',
+                f'Give me a short DJ‐style intro for "{artist} - {title}".'
+            )
+        
+        else:   # regular intro
+            regular_intros = [
+                f"Ladies and gentlemen, hold onto your seats because we're about to unveil the magic of {title} by {artist}. Only here at {voice_client.guild.name} radio.",
+                f"Turning it up to 11! brace yourselves for {artist}'s masterpiece {title}. Here on {voice_client.guild.name} radio.",
+                f"Rock on, warriors! We're cranking up the intensity with {title} by {artist} on {voice_client.guild.name} radio.",
+                f"Welcome to the virtual airwaves! Get ready for a wild ride with a hot track by {artist} on {voice_client.guild.name} radio.",
+                f"Buckle up, folks! We're about to take you on a musical journey through the neon-lit streets of {voice_client.guild.name} radio.",
+                f"Hello, virtual world! It's your DJ, {self.bot.user.display_name or self.bot.user.name}, in the house, spinning {title} by {artist}. Only here on {voice_client.guild.name} radio.",
+                f"Greetings from the digital realm! Tune in, turn up, and let the beats of {artist} with {title} take over your senses, here on {voice_client.guild.name} radio.",
+                f"Time to crank up the volume and immerse yourself in the eclectic beats of {voice_client.guild.name} radio. Let the madness begin with {title} by {artist}!"
+            ]
+            text = random.choice(regular_intros)    # pick a random intro
+
+        tts = gTTS(text, lang="en")
+        intro_path = f"db/intro_{voice_client.guild.id}.mp3"
+        tts.save(intro_path)
+
+        done = asyncio.Event()  # event waiter (for intro completion)
+        def _on_done(_):
+            done.set()
+
+        vc.play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(intro_path), volume=volume), after=_on_done)
+
+        await done.wait()   # wait for song completion
+
+        try:    # file cleanup
+            os.remove(intro_path)
+        except Exception:
+            log_music.exception("Failed to remove intro file.")
 
     ### _queue_chatgpt_playlist() ######################################
     async def _queue_chatgpt_playlist(self, voice_client: discord.VoiceClient, payload: str, message: Optional[discord.Message] = None):
@@ -867,7 +887,7 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
     ### !fuse ##########################################################
     # @commands.command(name='fuse')
-    # async def radio_fusions(self, ctx, *, args=None):
+    # async def trigger_fuse(self, ctx, *, args=None):
     #     """
     #     Fuses a new radio station into the current station(s).
     #     You can add multiple fusions by separating with: |
@@ -1124,7 +1144,6 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
             raise func.err_syntax(); return
 
         args = int(args)
-
         if not allstates.queue[(args - 1)]:
             raise func.err_queue_range(); return
 
