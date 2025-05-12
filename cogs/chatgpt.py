@@ -59,7 +59,11 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         if message.author.bot or message.guild is None: # ignore bots and DMs
             return
 
-        if not message.content.lower().startswith("@grok"):     # we only want the twitter man
+        if message.content.lower().startswith("@grok"):     # did they raw post @grok
+            trigger_len = len("@grok")
+        elif message.content.startswith(self.bot.user.mention):     # or did they mention the bot
+            trigger_len = len(self.bot.user.mention)
+        else:
             return
 
         # 3) determine prompt source
@@ -82,7 +86,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             return await message.reply("There's nothing to process—no text or images found.", mention_author=False)
 
         # 5) build prompt (text + optional follow-up)
-        follow_up = message.content[len("@grok"):].strip()
+        follow_up = message.content[trigger_len:].strip()
         full_prompt = prompt_text
         if follow_up:
             full_prompt += "\n\nFollow-up: " + follow_up
