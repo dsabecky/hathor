@@ -169,6 +169,13 @@ async def on_message(ctx):
     # required to process @bot.command
     await bot.process_commands(ctx)
 
+@bot.event
+async def on_command_error(ctx, exc):
+    if isinstance(exc, func.Error):
+        return await FancyErrors(exc.code, ctx.channel)
+    else:
+        raise exc
+
 ########################################################################################################################################
 
 

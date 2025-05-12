@@ -9,7 +9,7 @@ import json
 
 import config
 import func
-from func import FancyErrors, CheckPermissions
+from func import CheckPermissions
 
 queue = {}
 currently_playing = {}
@@ -86,6 +86,7 @@ class Voice(commands.Cog, name="Voice"):
         Syntax:
             !join
         """
+        
         await JoinVoice(self.bot, ctx)
 
     ####################################################################
@@ -127,6 +128,7 @@ class Voice(commands.Cog, name="Voice"):
         Syntax:
             !volume <1-100>
         """
+
         guild_id, guild_str = ctx.guild.id, str(ctx.guild.id)
         voice = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
 

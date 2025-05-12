@@ -1,32 +1,38 @@
+####################################################################
+# Library & Modules
+####################################################################
+
+#discord imports
 import discord
 from discord import app_commands
 from discord.ext import commands
-from typing import Optional
 
+# data analysis
+from typing import Optional     # this is supposed to be "cleaner" for array pre-definition
+
+# numbers
 import random
 
-# logging
-from func import err
+# hathor internals
+import func
 from logs import log_gamba
 
-# define the class
-class Gamba(commands.Cog, name="Gamba"):
-    def __init__(self, bot):
+####################################################################
+# Classes
+####################################################################
+
+class Gamba(commands.Cog, name="Gamba"):    # main class for cog
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.tree = bot.tree
 
-    ####################################################################
-    # on_ready()
-    ####################################################################
-
-    # @commands.Cog.listener()
-    # async def on_ready(self):
-
+    ### /roll ##########################################################
     @app_commands.command(name="roll", description="Your favorite number game. 🙂")
     async def roll_command(self, interaction: discord.Interaction, limit: Optional[int] = 100):
 
         if limit < 2:
-            await interaction.response.send_message(f"{random.choice(err['quote'])} ({err['code']['QUEUE_RANGE']})")
-            return
+            await interaction.response.send_message(f"Roll too low."); return
+
         else:
             number = random.randint(1,limit)
             output = discord.Embed(title="Roll!", description=f"{interaction.user.nick} rolls {number} (1-{limit})")
