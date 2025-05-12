@@ -20,7 +20,7 @@ import config
 # Quotable References
 ###############################################################
 
-error_flavor = {
+error_flavor = [
         "You must construct additional pylons.",
         "Not enough mana.",
         "Minions have spawned.",
@@ -31,7 +31,7 @@ error_flavor = {
         "Mission failure, we'll get them next time.",
         "What do the numbers mean, Mason?",
         "What a horrible night to have a curse..."
-}
+]
 
 ###############################################################
 # Errors: Cases & Linker References
@@ -165,4 +165,5 @@ async def CheckPermissions(bot, guild_id, user_id, user_roles):
 # Returns prewritten errors.
 ####################################################################
 async def FancyErrors(error: str, channel):
-    await channel.send(f'{random.choice(error_flavor)} ({error})')
+    flavor = random.choice(error_flavor)
+    await channel.send(f'{flavor} ({error})')
