@@ -66,8 +66,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         else:
             return
 
-        # 3) determine prompt source
-        if message.reference and message.reference.message_id:
+        if message.reference and message.reference.message_id:  # check for and (optional) find replies
             try:
                 source = await message.channel.fetch_message(message.reference.message_id)
             except discord.NotFound:
@@ -75,9 +74,8 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         else:
             source = message
 
-        # 4) extract text and images from source
-        prompt_text = source.content.strip()
-        image_urls = [
+        prompt_text = source.content.strip()    # grab text
+        image_urls = [      # grab images
             att.url for att in source.attachments
             if att.content_type and att.content_type.startswith("image/")
         ]
@@ -85,13 +83,11 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         if not prompt_text and not image_urls:
             return await message.reply("There's nothing to process—no text or images found.", mention_author=False)
 
-        # 5) build prompt (text + optional follow-up)
         follow_up = message.content[trigger_len:].strip()
         full_prompt = prompt_text
         if follow_up:
             full_prompt += "\n\nFollow-up: " + follow_up
 
-        # 6) call ChatGPT helper
         response_text = await self._invoke_chatgpt(
             message.channel,
             "You are Grok, the snarky Twitter AI...",
@@ -99,7 +95,6 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             att=image_urls
         )
 
-        # 7) reply
         if not response_text.strip():
             return await message.reply("Grok is speechless… must be on coffee break.",mention_author=False
 )
