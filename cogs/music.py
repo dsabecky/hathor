@@ -757,7 +757,6 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
     ### !aiplaylist ####################################################
     @commands.command(name="aiplaylist", aliases=['smartplaylist'])
     @func.requires_author_voice()
-    @func.requires_message_length(3)
     async def trigger_aiplaylist(self, ctx, *, args: str):
         """
         Generates a ChatGPT 10 song playlist based off context.
@@ -767,7 +766,10 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
         Aliases:
             !smartplaylist
-        """       
+        """
+
+        if not args or len(args) < 3:
+            raise func.err_syntax(); return
 
         if not ctx.guild.voice_client: # we're not in voice, lets change that
             await JoinVoice(self.bot, ctx)

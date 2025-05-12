@@ -96,8 +96,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         )
 
         if not response_text.strip():
-            return await message.reply("Grok is speechless… must be on coffee break.",mention_author=False
-)
+            return await message.reply("Grok is speechless… must be on coffee break.",mention_author=False)
 
         await message.reply(response_text, mention_author=False)
 
