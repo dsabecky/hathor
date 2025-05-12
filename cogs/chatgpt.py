@@ -257,11 +257,9 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         if not request: # did you even ask anything
             raise func.err_syntax(); return
         
-        # what are you asking that's shorter, really
-        if len(request) < 3:
+        if len(request) < 3:    # what are you asking that's shorter, really
             raise func.err_message_short(); return
         
-        # prep our message
         embed = discord.Embed(title="ChatGPT", description="Sending request to ChatGPT...")
 
         if "|" in request:  # check for explicit tone
