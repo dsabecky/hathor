@@ -61,6 +61,8 @@ class err_no_playing(Error):
     code = "There is nothing playing"
 class err_no_radio(Error):
     code = "There is no active radio"
+class err_no_song_found(Error):
+    code = "I couldn't find that song."
 class err_queue_range(Error):
     code = "Request is out of range"
 class err_radio_exist(Error):
@@ -119,6 +121,14 @@ def requires_message_length(min_len: int):
         if len(val.strip()) < min_len:
             raise err_message_short()
         return True
+    return commands.check(predicate)
+
+def requires_owner_perms():
+    async def predicate(ctx: commands.Context):
+        if ctx.author.id == config.BOT_ADMIN:
+            return True
+        else:
+            raise err_author_perms()
     return commands.check(predicate)
 
 def requires_queue():

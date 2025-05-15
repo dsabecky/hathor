@@ -87,10 +87,11 @@ async def on_ready():
     # log connection to console
     log_sys.info(f"connected as \033[38;2;152;255;152m{bot.user}\033[0m")
 
+    ### TODO: change this to some kind of limit
     # clean up temp folder
-    log_sys.info(f"removing \033[38;2;152;255;152m{len([f for f in os.listdir('db/')])}\033[0m stale song files")
-    for filename in os.listdir("db/"):
-        os.remove(f"db/{filename}")
+    # log_sys.info(f"removing \033[38;2;152;255;152m{len([f for f in os.listdir('db/')])}\033[0m stale song files")
+    # for filename in os.listdir("db/"):
+    #     os.remove(f"db/{filename}")
 
     # build default settings into config if neccesary
     for guild in bot.guilds:

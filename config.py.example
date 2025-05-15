@@ -41,6 +41,8 @@ RADIO_QUEUE = 5
 BILLBOARD_HOT_100 = 'https://api.spotify.com/v1/playlists/37i9dQZF1DXcBWIGoYBM5M'
 SPOTIFY_KEY_REFRESH = 1800
 
+SONGDB_PATH = 'db'
+
 def LoadSettings():
     try:
         with open('settings.json', 'r') as file:
