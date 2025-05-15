@@ -676,7 +676,7 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
         log_music.info(f"QueuePlaylist(): Playlist ({playlist_id}) true length {playlist_length}")
 
-        temp = ""   # temp playlist for text output
+        lines = []   # temp playlist for text output
         for i, item in enumerate((playlist[:playlist_length]), start=1):
 
             if message:     # update associated message if applicable
@@ -713,16 +713,24 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
                 try:
                     song = await self.DownloadSong(f"https://youtube.com/watch?v={metadata['id']}", track, None)
                 except Exception:   # fail gracefully
-                    embed = discord.Embed(description=f"❌ I ran into an issue downloading {item}. 😢\nMoving onto the next song. 🫡")
+                    embed = discord.Embed(description=f"❌ I ran into an issue downloading {track}. 😢\nMoving onto the next song. 🫡")
                     await message.edit(content=None, embed=embed)
                     log_music.error(f"QueuePlaylist() -> DownloadSong():\n{e}"); return None
 
             allstates.queue.append(song)    # add song to the queue
-            temp += f"{i}. {item}\n"
+            lines.append(f"{i}. {track}")
 
         if message: # if we bound a message, complete it.
+            if playlist_length > 10:
+                shown = lines[:10]
+                not_shown = playlist_length - 10
+                shown.append(f"... and {not_shown} more.")
+            else:
+                shown = lines
+
+            embed_list = "\n".join(shown)
             embed = discord.Embed(description=f"✅ Your {playlist_type} playlist has been added to queue!")
-            embed.add_field(name="Added:", value=f"{temp}", inline=False)
+            embed.add_field(name="Added:", value=embed_list, inline=False)
 
             await message.edit(content=None, embed=embed)
 
@@ -1285,8 +1293,8 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         random.shuffle(allstates.queue)     # actually shuffles the queue
         allstates.shuffle = not allstates.shuffle   # update the shuffle variable
 
-        info_embed = discord.Embed(description=f"🔀 Shuffle mode {allstates.shuffle and 'enabled' or 'disabled'}.")
-        message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
+        embed = discord.Embed(description=f"🔀 Shuffle mode {allstates.shuffle and 'enabled' or 'disabled'}.")
+        message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     ### !skip ##########################################################
     @commands.command(name='skip')
@@ -1302,8 +1310,8 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         """
 
         allstates = self.settings[ctx.guild.id]
-        
-        await ctx.channel.send(f"Skipping {allstates.currently_playing['title']}.")
+        embed = discord.Embed(description=f"⏭️ Skipping {allstates.currently_playing['title']}")
+        message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
         ctx.guild.voice_client.stop()   # actually skip the song
         if allstates.repeat:

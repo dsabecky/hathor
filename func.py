@@ -102,7 +102,7 @@ def requires_author_voice():
 def requires_bot_playing():
     async def predicate(ctx: commands.Context):
         vc = ctx.guild.voice_client
-        if not vc or not vc.is_playing():
+        if not vc or (not vc.is_playing() and not vc.is_paused()):
             raise err_no_playing()
         return True
     return commands.check(predicate)
