@@ -341,6 +341,7 @@ async def trigger_permissions(
     
     await ctx.reply(f"Successfully {action}ed {target} to {group}.", allowed_mentions=discord.AllowedMentions.none()); return
 
+
 ####################################################################
 # Launch
 ####################################################################
