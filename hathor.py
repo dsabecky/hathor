@@ -290,7 +290,7 @@ async def trigger_permissions(
     guild_str = str(ctx.guild.id)
 
     if not action:    # print permissions for server
-        user_lines = [
+        user_lines = [   # build users list
             f"{(await bot.fetch_user(u)).display_name} (id:{u})"
             for u in config.settings[guild_str]["perms"]["user_id"]
         ]
@@ -302,7 +302,7 @@ async def trigger_permissions(
             for id in config.settings[guild_str]["perms"]["role_id"]
         )
 
-        channels = "\n".join(
+        channels = "\n".join(   # build channels list
             f"#{(channel := bot.get_channel(id)).name} (id: {id})"
             for id in config.settings[guild_str]["perms"]["channel_id"]
         )
