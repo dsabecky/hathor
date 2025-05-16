@@ -22,7 +22,7 @@ import uuid         # we create uuid's for downloaded media instead of file name
 
 # data analysis
 import re                                                                   # regex for various filtering
-from typing import Any, Dict, List, Literal, Optional, TypedDict, Union     # this is supposed to be "cleaner" for array pre-definition
+from typing import Any, TypedDict, Union     # this is supposed to be "cleaner" for array pre-definition
 from collections import defaultdict                                         # type hints
 
 # date, time, numbers
@@ -125,20 +125,20 @@ class CurrentlyPlaying(TypedDict):      # Dictionary structure for CurrentlyPlay
 
 class Settings:     # volatile settings, called as 'allstates' in functions
     def __init__(self):
-        self.currently_playing: Optional[CurrentlyPlaying] = None
+        self.currently_playing: CurrentlyPlaying | None = None
 
-        self.queue: List[str] = []
+        self.queue: list[str] = []
         self.repeat: bool = False
         self.shuffle: bool = False
 
-        self.radio_station: Optional[str] = None
-        self.radio_fusions: Optional[List[str]] = None
-        self.radio_fusions_playlist: Optional[List[str]] = None
+        self.radio_station: str | None = None
+        self.radio_fusions: list[str] | None = None
+        self.radio_fusions_playlist: list[str] | None = None
         self.radio_building: bool = False
 
-        self.start_time: Optional[float] = None
-        self.pause_time: Optional[float] = None
-        self.last_active: Optional[float] = None
+        self.start_time: float | None = None
+        self.pause_time: float | None = None
+        self.last_active: float | None = None
         self.intro_playing: bool = False
 
 class Music(commands.Cog, name="Music"):    # Core cog for music functionality
@@ -180,7 +180,8 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
             song_history[guild_str] = []
             SaveHistory()
 
-        Path(f"{config.SONGDB_PATH}/{guild.id}").mkdir(parents=True, exist_ok=True)
+        if not os.path.exists(f"{config.SONGDB_PATH}/{guild.id}"):
+            os.makedirs(f"{config.SONGDB_PATH}/{guild.id}", exist_ok=True, parents=True)
 
     ### on_voice_state_update() ########################################
     @commands.Cog.listener()
@@ -240,7 +241,7 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
                 continue
 
             elif allstates.radio_fusions and len(allstates.queue) < config.RADIO_QUEUE:     # fuse radio checkpoint🔞
-                playlist = random.sample(allstates.radio_fusions_playlist, bot.RADIO_QUEUE+1)
+                playlist = random.sample(allstates.radio_fusions_playlist, config.RADIO_QUEUE+1)
                 await self.QueueSong(voice_client, playlist, 'radio', False, None)
 
             elif allstates.radio_station.lower() in radio_playlists and len(allstates.queue) < config.RADIO_QUEUE:  # known theme
@@ -337,8 +338,8 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
     async def FetchSongMetadata(
         self,
         query: str,
-        index: Optional[int] = None
-    ) -> Optional[Dict[str, Any]]:
+        index: int | None = None
+    ) -> dict[str, Any] | None:
 
         """
         Wrapper for Youtube-DLP.
@@ -374,9 +375,9 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
     async def DownloadSong(
         self,
         query: str,
-        query_context: Optional[str] = None,
-        index: Optional[int] = None
-    ) -> Optional[Dict[str, Any]]:
+        query_context: str | None = None,
+        index: int | None = None
+    ) -> dict[str, Any] | None:
         """
         Wrapper for YouTube-DLP.
         
@@ -421,7 +422,7 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         else:
             song_artist, song_title = None, None
 
-        result: Dict[str, Any] = {  # build our response
+        result: dict[str, Any] = {  # build our response
             "id":          info['id'],
             "title":       info['title'],
             "file_path":   f"{config.SONGDB_PATH}/{info['id']}.mp3",
@@ -628,7 +629,7 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         self,
         voice_client: discord.VoiceClient,
         payload: str,
-        message: Optional[discord.Message] = None
+        message: discord.Message | None = None
     ) -> None:
         """
         Helper function that queues playlists for the radio.
@@ -666,7 +667,7 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
             response_json = response.json()
             playlist = response_json['tracks']['items']     # just get the tracklist
-            playlist_length = data['items'][0]['contentDetails']['itemCount'] if data['items'][0]['contentDetails']['itemCount'] <= config.MUSIC_MAX_PLAYLIST else config.MUSIC_MAX_PLAYLIST
+            playlist_length = response['items'][0]['contentDetails']['itemCount'] if response['items'][0]['contentDetails']['itemCount'] <= config.MUSIC_MAX_PLAYLIST else config.MUSIC_MAX_PLAYLIST
 
         else:
             playlist_type = "ChatGPT"
@@ -740,7 +741,7 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         voice_client: discord.VoiceClient,
         payload: str,
         is_priority: bool,
-        message: Optional[discord.Message] = None
+        message: discord.Message | None = None
     ) -> None:
         """
         Helper function for queueing individual songs.
@@ -810,10 +811,10 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
     ### QueueSong() ####################################################
     async def QueueSong(self,
         voice_client: discord.VoiceClient,
-        payload: Union[str, List[str]],
-        payload_type: Optional['radio'],
+        payload: str | list[str],
+        payload_type: str | None = None,
         is_priority: bool = False,
-        message: Optional[discord.Message] = None,
+        message: discord.Message | None = None,
     ) -> None:
         """
         Handler function for queue management.
@@ -1071,7 +1072,7 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
             !intro
         """
 
-        guild_str = str(guild.id)   # str() the guild id for json purposes
+        guild_str = str(ctx.guild.id)   # str() the guild id for json purposes
         
         config.settings[guild_str]['radio_intro'] = not config.settings[guild_str]['radio_intro']
         config.SaveSettings()
