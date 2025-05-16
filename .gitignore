@@ -1,6 +1,8 @@
 config.py
 settings.json
 song_history.json
+song_db.json
+radio_playlists.json
 pycache/
 __pycache__/
 *.pyc
