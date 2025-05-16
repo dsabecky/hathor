@@ -297,11 +297,11 @@ class Music(commands.Cog, name="Music"):
 
             elif allstates.radio_fusions and len(allstates.queue) < config.RADIO_QUEUE:     # fuse radio checkpoint🔞
                 playlist = random.sample(allstates.radio_fusions_playlist, config.RADIO_QUEUE+1)
-                await self.QueueSong(voice_client, playlist, 'radio', False, None)
+                await self.QueuePlaylist(voice_client, playlist, None)
 
             elif allstates.radio_station.lower() in radio_playlists and len(allstates.queue) < config.RADIO_QUEUE:  # known theme
                 playlist = random.sample(radio_playlists[allstates.radio_station.lower()], config.RADIO_QUEUE+1)
-                await self.QueueSong(voice_client, playlist, 'radio', False, None)
+                await self.QueuePlaylist(voice_client, playlist, None)
 
             elif len(allstates.queue) < config.RADIO_QUEUE:   # previously ungenerated radio station
                 allstates.radio_building = True     # block the loop until we're done
@@ -325,7 +325,7 @@ class Music(commands.Cog, name="Music"):
                 SaveRadio()     # write the new playlist to json file
 
                 playlist = random.sample(radio_playlists[allstates.radio_station.lower()], config.RADIO_QUEUE+1)
-                await self.QueueSong(voice_client, playlist, 'radio', False, None)
+                await self.QueuePlaylist(voice_client, playlist, None)
 
                 allstates.radio_building = False    # free up the loop
 
@@ -865,29 +865,6 @@ class Music(commands.Cog, name="Music"):
 
         await message.edit(content=None, embed=embed)   # send our final message
 
-    async def QueueSong(
-        self,
-        voice_client: discord.VoiceClient,
-        payload: str | list[str],
-        payload_type: str | None = None,
-        is_priority: bool = False,
-        message: discord.Message | None = None,
-    ) -> None:
-        """
-        Handler function for queue management.
-        """
-
-        allstates = self.settings[voice_client.guild.id]
-
-        if 'list=' in payload or 'open.spotify.com/playlist/' in payload:    # playlist
-            await self.QueuePlaylist(voice_client, payload, message)
-
-        elif payload_type == 'radio':   # it's chatgpt dude
-            await self.QueuePlaylist(voice_client, payload, message)
-
-        else:   # just an individial song
-            await self.QueueIndividualSong(voice_client, payload, is_priority, message)
-
 
     ####################################################################
     # Command triggers
@@ -937,7 +914,7 @@ class Music(commands.Cog, name="Music"):
             embed = discord.Embed(description=f"❌ I ran into an issue. 😢")
             await message.edit(content=None, embed=embed); return
 
-        await asyncio.create_task(self.QueueSong(ctx.guild.voice_client, playlist, 'radio', False, message))
+        await asyncio.create_task(self.QueuePlaylist(ctx.guild.voice_client, playlist, message))
 
     @commands.command(name='bump')
     @func.requires_author_perms()
@@ -1173,39 +1150,43 @@ class Music(commands.Cog, name="Music"):
         embed = discord.Embed(description=f"🔎 Searching for {payload}")
         message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
-        await asyncio.create_task(self.QueueSong(ctx.guild.voice_client, payload, None, False, message))
+        if '&list=' in payload or 'open.spotify.com/playlist' in payload:
+            await asyncio.create_task(self.QueuePlaylist(ctx.guild.voice_client, payload, message))
+        else:
+            await asyncio.create_task(self.QueueIndividualSong(ctx.guild.voice_client, payload, False, message))
+
 
     @commands.command(name='playnext', aliases=['playbump'])
     @func.requires_author_perms()
     @func.requires_author_voice()
-    async def trigger_playnext(self, ctx, *, args=None):
+    async def trigger_playnext(self, ctx, *, payload=None):
         """
         Adds a song to the top of the queue (no playlists).
 
         Syntax:
-            !play [ <search query> | <link> ]
+            !playnext [ <search query> | <link> ]
 
         Aliases:
             !playbump
         """
 
-        is_playlist = ('&list=' in args or 'open.spotify.com/playlist' in args) and True or False
+        is_playlist = ('&list=' in payload or 'open.spotify.com/playlist' in payload) and True or False
         
         if is_playlist:     # playlists not supported with playnext
             raise func.err_shuffle_no_playlist(); return
         
-        if not args:    # no data provided
+        if not payload:    # no data provided
             raise func.err_syntax(); return
 
         if not ctx.guild.voice_client: # we're not in voice, lets change that
             await JoinVoice(self.bot, ctx)
         
-        song_type = args.startswith('https://') and 'link' or 'search' # lazy filter to determine if it's a direct link or if we're searching
+        song_type = payload.startswith('https://') and 'link' or 'search' # lazy filter to determine if it's a direct link or if we're searching
 
-        info_embed = discord.Embed(description=f"Searching for {args}")
+        info_embed = discord.Embed(description=f"Searching for {payload}")
         message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
 
-        await asyncio.create_task(self.QueueSong(ctx.guild.voice_client, args, song_type, True, message))
+        await asyncio.create_task(self.QueueIndividualSong(ctx.guild.voice_client, payload, True, message))
 
     @commands.command(name='queue', aliases=['q', 'np', 'nowplaying', 'song'])
     async def trigger_queue(self, ctx):
