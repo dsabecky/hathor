@@ -5,6 +5,7 @@ song_db.json
 radio_playlists.json
 pycache/
 __pycache__/
+db/*
 *.pyc
 *.pyo
 *.pyd
