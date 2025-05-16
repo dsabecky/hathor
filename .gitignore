@@ -1,2 +1,10 @@
-
 config.py
+settings.json
+song_history.json
+pycache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+*.pyz

@@ -21,9 +21,9 @@ import sys          # failure condition quits
 import uuid         # we create uuid's for downloaded media instead of file names (lazy sanitization)
 
 # data analysis
-import re                                                                   # regex for various filtering
+import re                                    # regex for various filtering
 from typing import Any, TypedDict, Union     # this is supposed to be "cleaner" for array pre-definition
-from collections import defaultdict                                         # type hints
+from collections import defaultdict          # type hints
 
 # date, time, numbers
 import datetime     # timestamps for song history
