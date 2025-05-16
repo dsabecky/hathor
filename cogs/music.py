@@ -18,11 +18,10 @@ import json         # logging (song history, settings, etc)
 import os           # system access
 import requests     # grabbing raw data from url
 import sys          # failure condition quits
-import uuid         # we create uuid's for downloaded media instead of file names (lazy sanitization)
 
 # data analysis
 import re                             # regex for various filtering
-from typing import Any, TypedDict     # this is supposed to be "cleaner" for array pre-definition
+from typing import Any, TypedDict     # legacy type hints
 from collections import defaultdict   # type hints
 
 # date, time, numbers
@@ -32,7 +31,6 @@ import math         # cut playlists down using math.ceil() for fusion
 import random       # pseudorandom selection (for shuffle, fusion playlist compilation, etc)
 
 # openai libraries
-import openai                    # ai playlist generation, etc
 from openai import AsyncOpenAI   # cleaner than manually calling openai.OpenAI()
 
 # hathor internals

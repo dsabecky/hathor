@@ -4,7 +4,6 @@
 
 # discord imports
 import discord
-from discord import app_commands
 from discord.ext import commands
 from discord.ext.commands import Greedy, Context
 
@@ -13,20 +12,19 @@ import asyncio  # prevents thread locking
 import os       # system access
 
 # data analysis
-import json
-from typing import Literal, Optional
-import pprint
+from typing import Literal, Optional     # legacy type hints
+import pprint                            # pretty print
 
 # hathor internals
-import config
-import func
-from func import FancyErrors, CheckPermissions
-from logs import log_sys, log_cogs, log_msg, log_voice, log_gamba
-from cogs.voice import Voice
-from cogs.music import Music
-from cogs.chatgpt import ChatGPT
-from cogs.raiderio import RaiderIO
-from cogs.gamba import Gamba
+import config                                           # bot config
+import func                                             # bot specific functions (@decorators, err_ classes, etc)
+from func import FancyErrors                            # error handling
+from logs import log_sys, log_cogs, log_msg, log_voice  # logging
+from cogs.voice import Voice                            # voice handling
+from cogs.music import Music                            # music handling
+from cogs.chatgpt import ChatGPT                        # chatgpt handling
+from cogs.raiderio import RaiderIO                      # raiderio handling
+from cogs.gamba import Gamba                            # gamba handling
 
 
 ####################################################################
