@@ -17,7 +17,8 @@ import base64                       # image data conversion
 import imghdr                       # grab image header / x-image-type
 from io import BytesIO              # raw image data handling
 import re                           # regex for various filtering
-from typing import List, Optional   # this is supposed to be "cleaner" for array pre-definition
+import sys                          # failure condition quits
+from typing import List, Optional   # legacy type hints
 
 # openai libraries
 import openai                   # ai playlist generation, etc
