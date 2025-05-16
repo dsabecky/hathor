@@ -65,6 +65,8 @@ class err_no_song_found(Error):
     code = "I couldn't find that song."
 class err_queue_range(Error):
     code = "Request is out of range"
+class err_permissions_exist(Error):
+    code = "Permissions already exist"
 class err_radio_exist(Error):
     code = "Radio station already exists"
 class err_shuffle_no_playlist(Error):

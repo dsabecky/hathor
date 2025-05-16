@@ -1,18 +1,37 @@
+####################################################################
+# Library & Modules
+####################################################################
+
+# discord imports
 import discord
 from discord import app_commands
 from discord.ext import commands
 from discord.ext.commands import Greedy, Context
 
-# extra functionality to manage bot / system files
-import asyncio
-import os
+# system level stuff
+import asyncio  # prevents thread locking
+import os       # system access
+
+# data analysis
 import json
 from typing import Literal, Optional
-
-# logging
 import pprint
-import logging
+
+# hathor internals
+import config
+import func
+from func import FancyErrors, CheckPermissions
 from logs import log_sys, log_cogs, log_msg, log_voice, log_gamba
+from cogs.voice import Voice
+from cogs.music import Music
+from cogs.chatgpt import ChatGPT
+from cogs.raiderio import RaiderIO
+from cogs.gamba import Gamba
+
+
+####################################################################
+# Console logging
+####################################################################
 
 osend  = Context.send
 oreply = Context.reply
@@ -32,76 +51,52 @@ async def lreply(self, *args, **kwargs):
 Context.send  = lsend
 Context.reply = lreply
 
-# we need our config
-import config
 
-# get our special functions
-import func
-from func import FancyErrors, CheckPermissions
+####################################################################
+# Bot initialization
+####################################################################
 
-# set intents
 intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True
 
-# intialize
 bot = commands.Bot(command_prefix=config.BOT_PREFIX, intents=intents, case_insensitive=True)
 
-# add voice category
-log_cogs.info("loading 'Voice' cog")
-from cogs.voice import Voice
-asyncio.run(bot.add_cog(Voice(bot)))
+log_cogs.info("loading 'Voice' cog"); asyncio.run(bot.add_cog(Voice(bot)))
+log_cogs.info("loading 'Music' cog"); asyncio.run(bot.add_cog(Music(bot)))
+log_cogs.info("loading 'ChatGPT' cog"); asyncio.run(bot.add_cog(ChatGPT(bot)))
+log_cogs.info("loading 'RaiderIO' cog"); asyncio.run(bot.add_cog(RaiderIO(bot)))
+log_cogs.info("loading 'Gamba' cog"); asyncio.run(bot.add_cog(Gamba(bot)))
 
-# add music category
-if config.BOT_YOUTUBE_KEY and config.BOT_SPOTIFY_CLIENT and config.BOT_SPOTIFY_SECRET:
-    log_cogs.info("loading 'Music' cog")
-    from cogs.music import Music
-    asyncio.run(bot.add_cog(Music(bot)))
-
-# add chatgpt category (if enabled)
-if config.BOT_OPENAI_KEY:
-    log_cogs.info("loading 'ChatGPT' cog")
-    from cogs.chatgpt import ChatGPT
-    asyncio.run(bot.add_cog(ChatGPT(bot)))
-
-# add raiderio category
-log_cogs.info("loading 'RaiderIO' cog")
-from cogs.raiderio import RaiderIO
-asyncio.run(bot.add_cog(RaiderIO(bot)))
-
-# add gamba category
-log_cogs.info("loading 'Gamba' cog")
-from cogs.gamba import Gamba
-asyncio.run(bot.add_cog(Gamba(bot)))
 
 ####################################################################
-# on_ready()
+# 'on_' listeners
 ####################################################################
+
 @bot.event
-async def on_ready():
+async def on_ready() -> None:
+    """
+    Runs when the bot is ready.
+    """
 
-    # am i in maintenance mode?
-    if config.MAINTENANCE:
+    if config.MAINTENANCE:  # am i in maintenance mode?
         await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.competing, name="maintenance!!!1"), status=discord.Status.do_not_disturb)
 
-    # log connection to console
-    log_sys.info(f"connected as \033[38;2;152;255;152m{bot.user}\033[0m")
+    log_sys.info(f"connected as \033[38;2;152;255;152m{bot.user}\033[0m")   # log connection to console
 
     ### TODO: change this to some kind of limit
-    # clean up temp folder
     # log_sys.info(f"removing \033[38;2;152;255;152m{len([f for f in os.listdir('db/')])}\033[0m stale song files")
     # for filename in os.listdir("db/"):
     #     os.remove(f"db/{filename}")
 
-    # build default settings into config if neccesary
-    for guild in bot.guilds:
+    for guild in bot.guilds:    # build default settings into config if neccesary
         guild_str = str(guild.id)
 
         if guild_str not in config.settings:
             config.settings[guild_str] = {}
         if 'perms' not in config.settings[guild_str]:
             config.settings[guild_str]['perms'] = {}
-            config.settings[guild_str]['perms'] = { 'user_id': [], 'role_id': [], 'channels': [] }
+            config.settings[guild_str]['perms'] = { 'user_id': [], 'role_id': [], 'channel_id': [] }
         if 'volume' not in config.settings[guild_str]:
             config.settings[guild_str]['volume'] = 20
         if 'voice_idle' not in config.settings[guild_str]:
@@ -111,21 +106,20 @@ async def on_ready():
             
     config.SaveSettings()
 
-####################################################################
-# on_guild_join()
-####################################################################
 @bot.event
-async def on_guild_join(guild):
+async def on_guild_join(guild: discord.Guild) -> None:
+    """
+    Runs when the bot joins a new guild.
+    """
 
-    # build default settings into config if neccesary
-    for guild in bot.guilds:
+    for guild in bot.guilds:    # build default settings into config if neccesary
         guild_str = str(guild.id)
 
         if guild_str not in config.settings:
             config.settings[guild_str] = {}
         if 'perms' not in config.settings[guild_str]:
             config.settings[guild_str]['perms'] = {}
-            config.settings[guild_str]['perms'] = { 'user_id': [], 'role_id': [], 'channels': [] }
+            config.settings[guild_str]['perms'] = { 'user_id': [], 'role_id': [], 'channel_id': [] }
         if 'volume' not in config.settings[guild_str]:
             config.settings[guild_str]['volume'] = 20
         if 'voice_idle' not in config.settings[guild_str]:
@@ -135,11 +129,12 @@ async def on_guild_join(guild):
             
     config.SaveSettings()
 
-####################################################################
-# on_voice_state_update()
-####################################################################
 @bot.event
-async def on_voice_state_update(author, before, after):
+async def on_voice_state_update(author: discord.Member, before: discord.VoiceState, after: discord.VoiceState) -> None:
+    """
+    Runs when a user joins or leaves a voice channel.
+    """
+
     if before.channel is None and after.channel is not None: # joined
         log_voice.info(f"\033[38;2;152;255;152m{author}\033[0m: joined {after.channel.guild.name}/{after.channel}")
     elif before.channel is not None and after.channel is None: # left
@@ -147,56 +142,53 @@ async def on_voice_state_update(author, before, after):
     elif before.channel != after.channel: # changed
         log_voice.info(f"\033[38;2;152;255;152m{author}\033[0m: moved in {before.channel.guild.name}: {before.channel} -> {after.channel}")
 
-####################################################################
-# on_message()
-####################################################################
 @bot.event
-async def on_message(ctx):
+async def on_message(ctx: commands.Context) -> None:
+    """
+    Runs when a message is sent in a server or DM.
+    """
 
-    # log messages to console
-    if ctx.guild:
+    if ctx.guild:   # log server messages to console
         log_msg.info(f"\033[38;2;152;255;152m{ctx.author}@{ctx.guild.name}#{ctx.channel.name}\033[0m: {ctx.content}")
-    else:
+    else:   # log DMs to console
         log_msg.info(f"\033[38;2;152;255;152m{ctx.author}\033[0m: {ctx.content}")
     
-    # new ignore
-    if ctx.author == bot.user or not ctx.guild or (len(config.settings[str(ctx.guild.id)]['perms']['channels']) > 0 and ctx.channel.id not in config.settings[str(ctx.guild.id)]['perms']['channels']):
+    if ctx.author == bot.user or not ctx.guild or (len(config.settings[str(ctx.guild.id)]['perms']['channel_id']) > 0 and ctx.channel.id not in config.settings[str(ctx.guild.id)]['perms']['channel_id']):
         return
 
-    # test message
-    if ctx.content.lower() == "foxtest":
+    if ctx.content.lower() == "foxtest":    # test message
         await ctx.reply(f'The quick brown fox jumps over the lazy dog 1234567890 ({bot.latency * 1000:.2f}ms)')
 
-    # required to process @bot.command
-    await bot.process_commands(ctx)
+    await bot.process_commands(ctx) # required to process @bot.command
 
 @bot.event
-async def on_command_error(ctx, exc):
+async def on_command_error(ctx: commands.Context, exc: Exception) -> None:
+    """
+    Runs when an error occurs during a command.
+    """
+
     if isinstance(exc, func.Error):
         return await FancyErrors(exc.code, ctx.channel)
     else:
         raise exc
 
-########################################################################################################################################
-
 
 ####################################################################
-# trigger: !botleave
-# ----
-# Force the bot to leave a server.
+# Command triggers
 ####################################################################
+
 @bot.command(name="botleave")
-async def leave_guild(ctx: commands.Context, guild_id: Optional[int] = None):
+@func.requires_owner_perms()
+async def trigger_botleave(
+    ctx: commands.Context,
+    guild_id: Optional[int] = None
+) -> None:
     """
     BOT OWNER. Leave the provided discord server.
     
     Syntax:
         !botleave <guildID>
     """
-    # permission check
-    if ctx.author.id != config.BOT_ADMIN:
-        await FancyErrors("AUTHOR_PERMS", ctx.channel)
-        return
 
     if not guild_id:
         await FancyErrors("SYNTAX", ctx.channel)
@@ -210,23 +202,17 @@ async def leave_guild(ctx: commands.Context, guild_id: Optional[int] = None):
     # bye felicia
     await guild.leave()
 
-####################################################################
-# trigger: !botservers
-# ----
-# Displays all servers the bot is in.
-####################################################################
 @bot.command(name="botservers")
-async def show_guilds(ctx: commands.Context):
+@func.requires_owner_perms()
+async def trigger_botservers(
+    ctx: commands.Context
+) -> None:
     """
     BOT OWNER. Lists all guilds the bot is currently in.
 
     Syntax:
         !botservers
     """
-    # permission check
-    if ctx.author.id != config.BOT_ADMIN:
-        await FancyErrors("AUTHOR_PERMS", ctx.channel)
-        return
 
     # build a list of lines "Name (ID: ...)"
     lines = [f"{g.name} (ID: {g.id})" for g in bot.guilds]
@@ -242,13 +228,9 @@ async def show_guilds(ctx: commands.Context):
     # send to channel
     await ctx.send(embed=embed)
 
-####################################################################
-# trigger: !botsync
-# ----
-# Syncs /commands
-####################################################################
 @bot.command(name="botsync")
-async def sync(
+@func.requires_owner_perms()
+async def trigger_botsync(
     ctx: Context,
     guilds: Greedy[discord.Object],
     spec: Optional[Literal["guild", "globalguild", "clearguild"]] = None
@@ -259,9 +241,6 @@ async def sync(
     Syntax:
         !botsync [ guild | globalguild | clearguild ]
     """
-    
-    if ctx.author.id != config.BOT_ADMIN:
-        FancyErrors("AUTHOR_PERMS", ctx.channel)
 
     if not guilds:
         if spec == "guild":
@@ -290,169 +269,80 @@ async def sync(
 
     await ctx.send(f"Synced the tree to {ret}/{len(guilds)}.")
 
-####################################################################
-# trigger: !permissions
-# alias: !perms, !roles
-# ----
-# TBD
-####################################################################
 @bot.command(name='permissions', aliases=['perms', 'roles'])
-async def set_perms(ctx, opts=None, id_type=None, discord_id=None):
+@func.requires_author_perms()
+async def trigger_permissions(
+    ctx: commands.Context,
+    action: Literal["add", "remove"] | None = None,
+    group: Literal["channel", "role", "user"] | None = None,
+    target: int | None = None
+) -> None:
     """
     BOT MOD. Modifies bot permissions for the server.
 
     Syntax:
-        !permissions [ add | remove ] channel <chanID>
-        !permissions [ add | remove ] group <groupID>
         !permissions [ add | remove ] user <userID>
+        !permissions [ add | remove ] role <roleID>
+        !permissions [ add | remove ] channel <chanID>
     """
     global settings
 
-    guild = await bot.fetch_guild(ctx.guild.id) # why cant i get this from ctx.guild???
-    guild_id, guild_str = guild.id, str(guild.id)
-    owner = await bot.fetch_user(guild.owner_id)
-    owner_name = owner.name
+    guild_str = str(ctx.guild.id)
 
-    # are you even allowed to use this command?
-    if not await CheckPermissions(bot, guild_id, ctx.author.id, ctx.author.roles):
-        await FancyErrors("AUTHOR_PERMS", ctx.channel)
-        return
+    if not action:    # print permissions for server
+        user_lines = [
+            f"{(await bot.fetch_user(u)).display_name} (id:{u})"
+            for u in config.settings[guild_str]["perms"]["user_id"]
+        ]
+        user_lines.insert(0, f"{ctx.guild.owner.display_name} (id: {ctx.guild.owner_id})")
+        users = "\n".join(user_lines)
+
+        roles = "\n".join(   # build roles list
+            f"#{(role := discord.utils.get(ctx.guild.roles, id=id)).name} (id: {id})"
+            for id in config.settings[guild_str]["perms"]["role_id"]
+        )
+
+        channels = "\n".join(
+            f"#{(channel := bot.get_channel(id)).name} (id: {id})"
+            for id in config.settings[guild_str]["perms"]["channel_id"]
+        )
+
+        embed = discord.Embed(    # build embed
+            title=f"Permissions for {ctx.guild.name}",
+            description="The following channels are enabled for bot commands, and the following users and roles are permitted for elevated permissions."
+        )
+        embed.add_field(name="Users:", value=users, inline=False)
+        embed.add_field(name="Roles:", value=roles, inline=False)
+        embed.add_field(name="Channels:", value=channels, inline=False)
+        await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none()); return
+
+
+    if not group or not target:    # syntax error
+        raise func.err_syntax(); return
+
+    target = int(target)    # convert to int
     
-    # display permissions for server
-    if not opts:
+    if action == "add":    # add permission
+        if target in config.settings[guild_str]["perms"][f"{group}_id"]:
+            raise func.err_permissions_exist(); return
 
-        users, roles, channels = "", "", ""
-        for id in config.settings[guild_str]['perms']['user_id']:
-            user = await bot.fetch_user(id)
-            users += f"{user.name} (id:{id})\n"
-        users = users == "" and f"{owner_name} (id:{owner.id})" or f"{owner_name} (id:{owner.id})\n{users}"
+        config.settings[guild_str]["perms"][f"{group}_id"].append(target)
+        config.SaveSettings()
 
-        for id in config.settings[guild_str]['perms']['role_id']:
-            role = discord.utils.get(guild.roles, id=id)
-            roles += f" {role.name} (id:{role.id})\n"
-        roles = roles == "" and "None" or roles
+    elif action == "remove":    # remove permission
+        if target not in config.settings[guild_str]["perms"][f"{group}_id"]:
+            raise func.err_permissions_exist(); return
 
-        for id in config.settings[guild_str]['perms']['channels']:
-            channel = bot.get_channel(id)
-            channels += f" #{channel.name} (id:{channel.id})\n"
-        channels = channels == "" and "All channels." or channels
+        config.settings[guild_str]["perms"][f"{group}_id"].remove(target)
+        config.SaveSettings()
 
-        output = discord.Embed(title=f"Permissions for {guild.name}", description="The following channels are enabled for bot commands, and the following users and roles are permitted for elevated permissions.")
-        output.add_field(name="Channels:", value=channels, inline=False)
-        output.add_field(name="Users:", value=users, inline=False)
-        output.add_field(name="Roles:", value=roles, inline=False)
-        await ctx.send(embed=output)
-        return
+    else:    # syntax error
+        raise func.err_syntax(); return
     
-    if (opts and not discord_id) or not discord_id.isdigit():
-        await FancyErrors("SYNTAX", ctx.channel)
-        return
-    
-    # make this an int cause python isnt smart enough to figure it out
-    discord_id = int(discord_id)
-    
-    if opts == "add":
+    await ctx.reply(f"Successfully {action}ed {target} to {group}.", allowed_mentions=discord.AllowedMentions.none()); return
 
-        if id_type == "user":
-            # check if permissions already exist
-            if discord_id in config.settings[guild_str]['perms']['user_id']:
-                await FancyErrors("PERMISSIONS_EXIST", ctx.channel)
-                return
+####################################################################
+# Launch
+####################################################################
 
-            # update our settings and save file
-            user = await bot.fetch_user(discord_id)
-            config.settings[guild_str]['perms']['user_id'].append(discord_id)
-            config.SaveSettings()
-
-            # return a message so we know it works
-            output = discord.Embed(title="Permissions Updated", description=f"Added {user.name} (id:{user.id}) to the permissions list.")
-            await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
-
-        elif id_type == "group":
-            # check if permissions already exist
-            if discord_id in config.settings[guild_str]['perms']['role_id']:
-                await FancyErrors("PERMISSIONS_EXIST", ctx.channel)
-                return
-            
-            # update our settings and save file
-            role = discord.utils.get(guild.roles, id=discord_id)
-            config.settings[guild_str]['perms']['role_id'].append(discord_id)
-            config.SaveSettings()
-
-            # return a message so we know it works
-            output = discord.Embed(title="Permissions Updated", description=f"Added {role.name} (id:{role.id}) to the permissions list.")
-            await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
-
-        elif id_type == "channel":
-            # check if permissions already exist
-            if discord_id in config.settings[guild_str]['perms']['channels']:
-                await FancyErrors("PERMISSIONS_EXIST", ctx.channel)
-                return
-            
-            # update our settings and save file
-            channel = bot.get_channel(discord_id)
-            config.settings[guild_str]['perms']['channels'].append(discord_id)
-            config.SaveSettings()
-
-            # return a message so we know it works
-            output = discord.Embed(title="Permissions Updated", description=f"Added #{channel.name} (id:{discord_id}) to the permissions list.")
-            await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
-
-        else:
-            await FancyErrors("SYNTAX", ctx.channel)
-
-    if opts == "remove":
-
-        if id_type == "user":
-            # check if permission even exists
-            if discord_id not in config.settings[guild_str]['perms']['user_id']:
-                await FancyErrors("NO_PERMISSIONS_EXIST", ctx.channel)
-                return
-            
-            # update our settings and save file
-            user = await bot.fetch_user(discord_id)
-            config.settings[guild_str]['perms']['user_id'].remove(discord_id)
-            config.SaveSettings()
-
-            # return a message so we know it works
-            output = discord.Embed(title="Permissions Updated", description=f"Removed {user.name} (id:{user.id}) from the permissions list.")
-            await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
-
-        elif id_type == "group":
-            # check if permission even exists
-            if discord_id not in config.settings[guild_str]['perms']['role_id']:
-                await FancyErrors("NO_PERMISSIONS_EXIST", ctx.channel)
-                return
-            
-            # update our settings and save file
-            role = discord.utils.get(guild.roles, id=discord_id)
-            config.settings[guild_str]['perms']['role_id'].remove(discord_id)
-            config.SaveSettings()
-
-            # return a message so we know it works
-            output = discord.Embed(title="Permissions Updated", description=f"Removed {role.name} (id:{role.id}) from the permissions list.")
-            await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
-
-        elif id_type == "group":
-            # check if permission even exists
-            if discord_id not in config.settings[guild_str]['perms']['channels']:
-                await FancyErrors("NO_PERMISSIONS_EXIST", ctx.channel)
-                return
-            
-            # update our settings and save file
-            channel = bot.get_channel(discord_id)
-            config.settings[guild_str]['perms']['channels'].remove(discord_id)
-            config.SaveSettings()
-
-            # return a message so we know it works
-            output = discord.Embed(title="Permissions Updated", description=f"Removed {channel.name} (id:{discord_id}) from the permissions list.")
-            await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
-
-        else:
-            await FancyErrors("SYNTAX", ctx.channel)
-
-
-########################################################################################################################################
-
-# all systems launch
 bot.run(config.BOT_TOKEN)
