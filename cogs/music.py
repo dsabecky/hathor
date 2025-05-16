@@ -21,9 +21,9 @@ import sys          # failure condition quits
 import uuid         # we create uuid's for downloaded media instead of file names (lazy sanitization)
 
 # data analysis
-import re                                    # regex for various filtering
-from typing import Any, TypedDict, Union     # this is supposed to be "cleaner" for array pre-definition
-from collections import defaultdict          # type hints
+import re                             # regex for various filtering
+from typing import Any, TypedDict     # this is supposed to be "cleaner" for array pre-definition
+from collections import defaultdict   # type hints
 
 # date, time, numbers
 import datetime     # timestamps for song history
@@ -157,7 +157,6 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
         for guild in self.bot.guilds:
 
-            allstates = self.settings[guild.id]     # load / init per server settings
             guild_str = str(guild.id)               # json is stupid and forces the key to be a string
 
             if not guild_str in song_history:       # init song history (if required)
@@ -1316,7 +1315,7 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
         ctx.guild.voice_client.stop()   # actually skip the song
         if allstates.repeat:
-            await self.PlayNextSong(ctx.guild.id, ctx.guild.voice_client)
+            await self.PlayNextSong(ctx.guild.voice_client)
 
 
 ### FuseRadio() ####################################################
