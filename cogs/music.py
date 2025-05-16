@@ -36,10 +36,10 @@ import openai                    # ai playlist generation, etc
 from openai import AsyncOpenAI   # cleaner than manually calling openai.OpenAI()
 
 # hathor internals
-import config                                   # bot config
-import func                                     # bot specific functions (@decorators, err_ classes, etc)
-from cogs.voice import JoinVoice                # cleaner than cogs.voice.JoinVoice()
-from logs import log_music                      # logging
+import config                       # bot config
+import func                         # bot specific functions (@decorators, err_ classes, etc)
+from cogs.voice import JoinVoice    # cleaner than cogs.voice.JoinVoice()
+from logs import log_music          # logging
 
 
 ####################################################################
@@ -56,7 +56,11 @@ client = AsyncOpenAI(api_key=config.BOT_OPENAI_KEY)
 # JSON -> global loading
 ####################################################################
 
-def LoadHistory():
+def LoadHistory() -> dict[str, list[dict[str, Any]]]:
+    """
+    Loads the song history from the JSON file.
+    """
+
     try:
         with open('song_history.json', 'r') as file:
             return json.load(file)
@@ -66,11 +70,19 @@ def LoadHistory():
             json.dump(default, file, indent=4)
             return default
         
-def SaveHistory():
+def SaveHistory() -> None:
+    """
+    Saves the song history to the JSON file.
+    """
+
     with open('song_history.json', 'w') as file:
         json.dump(song_history, file, ensure_ascii=False, indent=4)
 
-def LoadSongDB():
+def LoadSongDB() -> dict[str, list[dict[str, Any]]]:
+    """
+    Loads the song database from the JSON file.
+    """
+
     try:
         with open('song_db.json', 'r') as file:
             return json.load(file)
@@ -80,11 +92,19 @@ def LoadSongDB():
             json.dump(default, file, indent=4)
             return default
         
-def SaveSongDB():
+def SaveSongDB() -> None:
+    """
+    Saves the song database to the JSON file.
+    """
+
     with open('song_db.json', 'w') as file:
         json.dump(song_db, file, ensure_ascii=False, indent=4)
 
-def LoadRadio():
+def LoadRadio() -> dict[str, list[str]]:
+    """
+    Loads the radio playlists from the JSON file.
+    """
+
     try:
         with open('radio_playlists.json', 'r') as file:
             return json.load(file)
@@ -94,7 +114,11 @@ def LoadRadio():
             json.dump(default, file, indent=4)
             return default
         
-def SaveRadio():
+def SaveRadio() -> None:
+    """
+    Saves the radio playlists to the JSON file.
+    """
+
     with open('radio_playlists.json', 'w') as file:
         json.dump(radio_playlists, file, ensure_ascii=False, indent=4)
 
@@ -113,7 +137,11 @@ radio_playlists = LoadRadio()
 # Classes
 ####################################################################
 
-class CurrentlyPlaying(TypedDict):      # Dictionary structure for CurrentlyPlaying
+class CurrentlyPlaying(TypedDict):
+    """
+    Dictionary structure for CurrentlyPlaying.
+    """
+
     title: str
     song_artist: str
     song_title: str
@@ -123,7 +151,11 @@ class CurrentlyPlaying(TypedDict):      # Dictionary structure for CurrentlyPlay
 
     duration: int
 
-class Settings:     # volatile settings, called as 'allstates' in functions
+class Settings:
+    """
+    Volatile settings, called as 'allstates' in functions.
+    """
+
     def __init__(self):
         self.currently_playing: CurrentlyPlaying | None = None
 
@@ -141,7 +173,11 @@ class Settings:     # volatile settings, called as 'allstates' in functions
         self.last_active: float | None = None
         self.intro_playing: bool = False
 
-class Music(commands.Cog, name="Music"):    # Core cog for music functionality
+class Music(commands.Cog, name="Music"):
+    """
+    Core cog for music functionality.
+    """
+
     def __init__(self, bot):
         self.bot = bot
         self.settings: dict[int, Settings] = defaultdict(Settings)
@@ -153,7 +189,10 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
     ### on_ready() #####################################################
     @commands.Cog.listener()
-    async def on_ready(self):
+    async def on_ready(self) -> None:
+        """
+        Initializes the bot when it's ready.
+        """
 
         for guild in self.bot.guilds:
 
@@ -170,7 +209,10 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
     ### on_guild_join() ################################################
     @commands.Cog.listener()
-    async def on_guild_join(self, guild):
+    async def on_guild_join(self, guild: discord.Guild) -> None:
+        """
+        Initializes server settings when the bot joins a new guild.
+        """
 
         allstates = self.settings[guild.id]     # init server settings
         guild_str = str(guild.id)               # json is stupid and forces the key to be a string
@@ -184,7 +226,15 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
     ### on_voice_state_update() ########################################
     @commands.Cog.listener()
-    async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
+    async def on_voice_state_update(
+        self,
+        member: discord.Member,
+        before: discord.VoiceState,
+        after: discord.VoiceState
+    ) -> None:
+        """
+        Handles voice state updates for the bot.
+        """
 
         if self.bot.user.id != member.id:   # ignore everyone else
             return
@@ -203,9 +253,12 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
     # Internal: Loops
     ####################################################################
 
-    ### loop_voice_monitor() ###########################################
     @tasks.loop(seconds=3)
-    async def loop_voice_monitor(self):
+    async def loop_voice_monitor(self) -> None:
+        """
+        Monitors voice activity for idle, broken playing, etc.
+        """
+
         for voice_client in self.bot.voice_clients:
             allstates = self.settings[voice_client.guild.id]
 
@@ -225,9 +278,12 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
     async def _before_voice_monitor(self):
         await self.bot.wait_until_ready()
 
-    ### loop_radio_monitor() ###########################################
     @tasks.loop(seconds=5)
-    async def loop_radio_monitor(self):
+    async def loop_radio_monitor(self) -> None:
+        """
+        Monitors radio stations for new songs.
+        """
+
         for guild in self.bot.guilds:
 
             allstates = self.settings[guild.id]
@@ -277,9 +333,11 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
     async def _before_radio_monitor(self):
         await self.bot.wait_until_ready()
 
-    ### CreateSpotifyKey() #############################################
     @tasks.loop(seconds=config.SPOTIFY_KEY_REFRESH)
-    async def loop_spotify_key_creation(self):
+    async def loop_spotify_key_creation(self) -> None:
+        """
+        Creates a new Spotify API Access Token.
+        """
 
         global BOT_SPOTIFY_KEY      # write access for global
 
@@ -307,14 +365,13 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
     # Internal: Core Functions
     ####################################################################
 
-    ### ChatGPT() ######################################################
     async def ChatGPT(
         self,
         sys_content: str,
         user_content: str
     ) -> str:
         """
-        ChatGPT wrapper.
+        ChatGPT wrapper, returns a string response.
         """
 
         conversation = [
@@ -333,7 +390,6 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
         return response.choices[0].message.content
 
-    ### FetchSongMetadata() ############################################
     async def FetchSongMetadata(
         self,
         query: str,
@@ -370,7 +426,6 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         
         return info
 
-    ### DownloadSong() #################################################
     async def DownloadSong(
         self,
         query: str,
@@ -437,8 +492,13 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
         return result
 
-    ### GetQueue() #####################################################
-    async def GetQueue(self, ctx: Context):
+    async def GetQueue(
+        self,
+        ctx: Context
+    ) -> None:
+        """
+        Displays the current song queue.
+        """
 
         allstates = self.settings[ctx.guild.id]
         current = allstates.currently_playing
@@ -524,12 +584,12 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
         await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
-    ### PlayNextSong() ############################################
     async def PlayNextSong(
         self,
         voice_client: discord.VoiceClient
     ) -> None:
         """
+        Plays the next song in the queue.
         """
 
         allstates = self.settings[voice_client.guild.id]
@@ -569,7 +629,6 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         song_history[guild_str].append({ "timestamp": time.time(), "title": song['title'] })
         SaveHistory()
 
-    ### PlayRadioIntro() ###############################################
     async def PlayRadioIntro(
         self,
         voice_client: discord.VoiceClient,
@@ -579,6 +638,7 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         volume: float
     ) -> None:
         """
+        Plays a radio intro.
         """
 
         allstates = self.settings[voice_client.guild.id]
@@ -623,7 +683,6 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         except Exception:
             log_music.exception("PlayRadioIntro(): Failed to remove intro file.")
 
-    ### QueuePlaylist() ################################################
     async def QueuePlaylist(
         self,
         voice_client: discord.VoiceClient,
@@ -734,7 +793,6 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
             await message.edit(content=None, embed=embed)
 
-    ### QueueIndividualSong() ##########################################
     async def QueueIndividualSong(
         self,
         voice_client: discord.VoiceClient,
@@ -807,8 +865,8 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
         await message.edit(content=None, embed=embed)   # send our final message
 
-    ### QueueSong() ####################################################
-    async def QueueSong(self,
+    async def QueueSong(
+        self,
         voice_client: discord.VoiceClient,
         payload: str | list[str],
         payload_type: str | None = None,
@@ -835,7 +893,6 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
     # Command triggers
     ####################################################################
 
-    ### !aiplaylist ####################################################
     @commands.command(name="aiplaylist", aliases=['smartplaylist'])
     @func.requires_author_voice()
     async def trigger_aiplaylist(self, ctx, *, args: str):
@@ -882,7 +939,6 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
         await asyncio.create_task(self.QueueSong(ctx.guild.voice_client, playlist, 'radio', False, message))
 
-    ### !bump ##########################################################
     @commands.command(name='bump')
     @func.requires_author_perms()
     @func.requires_author_voice()
@@ -908,7 +964,6 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         output = discord.Embed(description=f"Bumped {bumped['title']} to the top of the queue.")
         await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
 
-    ### !clear #########################################################
     @commands.command(name='clear')
     @func.requires_author_perms()
     @func.requires_author_voice()
@@ -928,9 +983,9 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
         allstates.queue = []
 
-    ### !defuse ########################################################
     # @commands.command(name='defuse')
-    # async def deradio_fusions(self, ctx, *, args=None):
+    # @func.requires_author_perms()
+    # async def trigger_defuse(self, ctx, *, args=None):
     #     """
     #     Removes a fused station from the mix.
 
@@ -1060,7 +1115,6 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
     #     message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
 
-    ### !intro #########################################################
     @commands.command(name='intro')
     @func.requires_author_perms()
     async def trigger_intro(self, ctx):
@@ -1079,7 +1133,6 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         info_embed = discord.Embed(description=f"📢 Radio intros {config.settings[guild_str]['radio_intro'] and 'enabled' or 'disabled'}.")
         await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
 
-    ### !pause #########################################################
     @commands.command(name='pause')
     @func.requires_author_perms()
     @func.requires_author_voice()
@@ -1101,7 +1154,6 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         info_embed = discord.Embed(description=f"⏸️ Playback paused.")
         message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
 
-    ### !play ##########################################################
     @commands.command(name='play')
     @func.requires_author_voice()
     async def trigger_play(self, ctx, *, payload=None):
@@ -1123,7 +1175,6 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
         await asyncio.create_task(self.QueueSong(ctx.guild.voice_client, payload, None, False, message))
 
-    ### !playnext ######################################################
     @commands.command(name='playnext', aliases=['playbump'])
     @func.requires_author_perms()
     @func.requires_author_voice()
@@ -1156,7 +1207,6 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
         await asyncio.create_task(self.QueueSong(ctx.guild.voice_client, args, song_type, True, message))
 
-    ### !queue #########################################################
     @commands.command(name='queue', aliases=['q', 'np', 'nowplaying', 'song'])
     async def trigger_queue(self, ctx):
         """
@@ -1171,7 +1221,6 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
 
         await self.GetQueue(ctx)
 
-    ### !radio #########################################################
     @commands.command(name='radio', aliases=['dj'])
     @func.requires_author_perms()
     @func.requires_author_voice()
@@ -1209,7 +1258,6 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         
         await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())    
 
-    ### !remove ########################################################
     @commands.command(name='remove')
     @func.requires_author_perms()
     @func.requires_queue()
@@ -1235,7 +1283,6 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
             info_embed = discord.Embed(description=f"Removed **{song['title']}** from queue.")
             await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
 
-    ### !repeat ########################################################
     @commands.command(name='repeat', aliases=['loop'])
     @func.requires_author_perms()
     async def trigger_repeat(self, ctx):
@@ -1255,7 +1302,6 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         info_embed = discord.Embed(description=f"🔁 Repeat mode {allstates.repeat and 'enabled' or 'disabled'}.")
         await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
 
-    ### !resume ########################################################
     @commands.command(name='resume')
     @func.requires_author_perms()
     @func.requires_author_voice()
@@ -1277,7 +1323,6 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         info_embed = discord.Embed(description=f"🤘 Playback resumed.")
         message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
 
-    ### !shuffle #######################################################
     @commands.command(name='shuffle')
     @func.requires_author_perms()
     async def trigger_shuffle(self, ctx):
@@ -1296,7 +1341,6 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         embed = discord.Embed(description=f"🔀 Shuffle mode {allstates.shuffle and 'enabled' or 'disabled'}.")
         message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
-    ### !skip ##########################################################
     @commands.command(name='skip')
     @func.requires_author_perms()
     @func.requires_bot_playing()
@@ -1317,8 +1361,6 @@ class Music(commands.Cog, name="Music"):    # Core cog for music functionality
         if allstates.repeat:
             await self.PlayNextSong(ctx.guild.voice_client)
 
-
-### FuseRadio() ####################################################
 # async def FuseRadio(bot, ctx, new_theme=None):
 #     guild_id = ctx.guild.id
 #     fuse_playlist[guild_id] = []
