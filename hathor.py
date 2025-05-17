@@ -292,11 +292,12 @@ async def trigger_permissions(
             f"{(await bot.fetch_user(u)).display_name} (id:{u})"
             for u in config.settings[guild_str]["perms"]["user_id"]
         ]
-        user_lines.insert(0, f"{ctx.guild.owner.display_name} (id: {ctx.guild.owner_id})")
+        owner = await bot.fetch_user(ctx.guild.owner_id)    # required to get the owner's name
+        user_lines.insert(0, f"{owner.display_name} (id: {ctx.guild.owner_id})")
         users = "\n".join(user_lines)
 
         roles = "\n".join(   # build roles list
-            f"#{(role := discord.utils.get(ctx.guild.roles, id=id)).name} (id: {id})"
+            f"{(role := discord.utils.get(ctx.guild.roles, id=id)).name} (id: {id})"
             for id in config.settings[guild_str]["perms"]["role_id"]
         )
 
