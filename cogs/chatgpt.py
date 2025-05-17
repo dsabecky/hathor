@@ -7,21 +7,14 @@ import discord
 from discord.ext import commands
 
 # system level stuff
-import asyncio          # prevents thread locking
-import requests         # grabbing raw data from url
-
+import asyncio      # prevents thread locking
+import sys          # failure condition quits
 
 # data analysis
-import ast                          # parsing json error codes from openai
 import base64                       # image data conversion
-import imghdr                       # grab image header / x-image-type
 from io import BytesIO              # raw image data handling
-import re                           # regex for various filtering
-import sys                          # failure condition quits
-from typing import List, Optional   # legacy type hints
 
 # openai libraries
-import openai                   # ai playlist generation, etc
 from openai import AsyncOpenAI  # cleaner than manually calling openai.OpenAI()
 
 # hathor internals
@@ -45,7 +38,7 @@ client = AsyncOpenAI(api_key=config.BOT_OPENAI_KEY)
 ####################################################################
 
 class ChatGPT(commands.Cog, name="ChatGPT"):
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
 
 
@@ -55,7 +48,13 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
 
     ### on_message() ###################################################
     @commands.Cog.listener()
-    async def on_message(self, message: discord.Message):
+    async def on_message(
+        self,
+        message: discord.Message
+    ) -> None:
+        """
+        Handles Grok's responses to messages.
+        """
 
         if message.author.bot or message.guild is None: # ignore bots and DMs
             return
@@ -106,13 +105,16 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
     # Internal: Helper Functions
     ####################################################################
 
-    ### _invoke_chatgpt() ##############################################
     async def _invoke_chatgpt(self,
         channel: discord.TextChannel,
         sys_content: str,
         user_content: str,
-        att: Optional[List[str]] = None
+        att: list[str] | None = None
     ) -> str:
+        """
+        Invokes the ChatGPT API.
+        Returns the response text as a string.
+        """
 
         conversation = [    # build our core prompt frame
             { "role": "system", "content":(
@@ -145,8 +147,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             except Exception as e:
                 log_chatgpt.error(f"_invoke_chatgpt(): {e}"); return
 
-    ### _invoke_image_create() #########################################
-    async def _invoke_image_create(
+    async def _invoke_gptimage(
         self,
         ctx: commands.Context,
         prompt: str,
@@ -154,6 +155,10 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         waiting_message: discord.Message,
         user_message: discord.Message
     ) -> None:
+        """
+        Invokes the GPT-Image API.
+        Returns the response image as a discord.File object.
+        """
 
         async with waiting_message.channel.typing():
             try:
@@ -190,8 +195,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
 
         await user_message.reply(embed=result_embed,file=discord.File(buffer, filename="generated.png"),allowed_mentions=discord.AllowedMentions.none())
 
-    ### _invoke_image_edit() ###########################################
-    async def _invoke_image_edit(
+    async def _invoke_gptimage_edit(
         self,
         ctx: commands.Context,
         prompt: str,
@@ -199,6 +203,11 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         waiting_msg: discord.Message,
         user_message: discord.Message
     ) -> None:
+        """
+        Invokes the GPT-Image API.
+        Returns the response image as a discord.File object.
+        """
+
         async with waiting_msg.channel.typing():
             try:
                 result = await client.images.edit(
@@ -238,7 +247,6 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
     # Command triggers
     ####################################################################
 
-    ### !chatgpt #######################################################
     @commands.command(name='chatgpt')
     async def trigger_chatgpt(
         self, ctx: commands.Context, *,
@@ -296,7 +304,6 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             embed.add_field(name="Response:", value=response, inline=False)
             await status.edit(embed=embed)
 
-    ### !gptedit #######################################################
     @commands.command(name="gptedit")
     async def trigger_gptedit(
         self,
@@ -323,7 +330,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         if not source_imgs:
             raise func.err_no_image(); return
 
-        buffers: List[BytesIO] = []
+        buffers: list[BytesIO] = []
         for att in source_imgs:
             data = await att.read()
             bio = BytesIO(data)
@@ -335,9 +342,9 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         embed.add_field(name="Prompt", value=prompt, inline=False)
         message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
-        asyncio.create_task(self._invoke_image_edit(ctx, prompt, buffers, message, ctx.message))
+        ### TODO: strip back message handling to the original function (or micro-function)
+        asyncio.create_task(self._invoke_gptimage_edit(ctx, prompt, buffers, message, ctx.message))
 
-    ### !gptimagine ####################################################
     @commands.command(name='gptimagine')
     async def trigger_gptimagine(
         self, ctx: commands.Context, *,
@@ -370,10 +377,9 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         embed.add_field(name="ChatGPT Prompt:", value=response, inline=False)
         await message.edit(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
-        asyncio.create_task(self._invoke_image_create(ctx, response, embed, message, ctx.message))
+        ### TODO: strip back message handling to the original function (or micro-function)
+        asyncio.create_task(self._invoke_gptimage(ctx, response, embed, message, ctx.message))
 
-
-    ### !imagine #######################################################
     @commands.command(name="imagine")
     async def trigger_imagine(
         self, ctx, *, 
@@ -397,5 +403,5 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         embed.add_field(name="Prompt:", value=request, inline=False)
         message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
-        # 2) fire-and-forget, passing along ctx, prompt, message & embed
-        asyncio.create_task(self._invoke_image_create(ctx, request, embed, message, ctx.message))
+        ### TODO: strip back message handling to the original function (or micro-function)
+        asyncio.create_task(self._invoke_gptimage(ctx, request, embed, message, ctx.message))
