@@ -163,16 +163,15 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
                     quality="medium"
                 )
 
-            except openai.BadRequestError as e:     # cant generate image, give feedback
-                err_msg = getattr(e, "error", {}).get("message", str(e))    # get our error text
-
+            except Exception as e:     # cant generate image, give feedback
                 await waiting_message.delete()  # delete our old message
 
-                err_embed = discord.Embed(title="Error!", description="I ran into an issue. 😢", color=discord.Color.red())
-                err_embed.add_field(name="Prompt", value=prompt, inline=False)
-                err_embed.add_field(name="Error", value=err_msg, inline=False)
+                embed = discord.Embed(title="Error!", description="I ran into an issue. 😢", color=discord.Color.red())
+                embed.add_field(name="Prompt", value=prompt, inline=False)
+                embed.add_field(name="Error", value=str(e), inline=False)
+                await user_message.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())   # respond with error
                 
-                return await user_message.reply(embed=err_embed, allowed_mentions=discord.AllowedMentions.none())   # respond with error
+                log_chatgpt.error(f"_invoke_image_create(): {e}"); return
 
         try:    # delete our old message
             await waiting_message.delete()
@@ -199,7 +198,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         image_buffers: list[BytesIO],
         waiting_msg: discord.Message,
         user_message: discord.Message
-    ):
+    ) -> None:
         async with waiting_msg.channel.typing():
             try:
                 result = await client.images.edit(
@@ -208,16 +207,16 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
                     prompt=prompt
                 )
 
-            except BadRequestError as e:
-                err_msg = getattr(e, "error", {}).get("message", str(e))    # get our error text
+            except Exception as e:
 
-                await waiting_message.delete()  # delete our old message
+                await waiting_msg.delete()  # delete our old message
 
-                error_embed = discord.Embed(title="Error!", description="I ran into an issue. 😢", color=discord.Color.red())
-                error_embed.add_field(name="Prompt", value=prompt, inline=False)
-                error_embed.add_field(name="Error", value=msg, inline=False)
+                embed = discord.Embed(title="Error!", description="I ran into an issue. 😢", color=discord.Color.red())
+                embed.add_field(name="Prompt", value=prompt, inline=False)
+                embed.add_field(name="Error", value=str(e), inline=False)
+                await user_message.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none()) # respond with error
 
-                return await user_message.reply(embed=error_embed, allowed_mentions=discord.AllowedMentions.none()) # respond with error
+                log_chatgpt.error(f"_invoke_image_edit(): {e}"); return
 
         try:    # delete our original message, to prep for new one
             await waiting_msg.delete()
