@@ -75,8 +75,8 @@ class err_song_length(Error):
     code = "Requested song is too long!"
 class err_syntax(Error):
     code = "Syntax error"
-class err_voice_full(Error):
-    code = "That voice channel is full"
+class err_voice_join(Error):
+    code = "I can't join that voice channel"
 class err_voice_mismatch(Error):
     code = "You must be in the same voice channel to do this"
 class err_vol_range(Error):
@@ -146,10 +146,6 @@ def requires_queue():
         return True
     return commands.check(predicate)
 
-
-###############################################################
-# Internal Functions
-###############################################################
 async def CheckPermissions(bot, guild_id, user_id, user_roles):
     guild = await bot.fetch_guild(guild_id) # why cant i get this from ctx.guild???
     
@@ -171,11 +167,8 @@ async def CheckPermissions(bot, guild_id, user_id, user_roles):
     else:
         return False
     
-####################################################################
-# function: FancyErrors(error)
-# ----
-# Returns prewritten errors.
-####################################################################
 async def FancyErrors(error: str, channel):
     flavor = random.choice(error_flavor)
-    await channel.send(f'{flavor} ({error})')
+
+    embed = discord.Embed(title="Error", description=f"{flavor}\n\n{error}", color=discord.Color.red())
+    await channel.send(embed=embed)

@@ -134,5 +134,11 @@ class Voice(commands.Cog, name="Voice"):
 # ----
 # Joins the current voice channel.
 ####################################################################
-async def JoinVoice(bot, ctx):
-    await ctx.author.voice.channel.connect()
+async def JoinVoice(bot, ctx: commands.Context):
+    try:
+        if ctx.voice_client:
+            await ctx.voice_client.move_to(ctx.author.voice.channel)
+        else:
+            await ctx.author.voice.channel.connect()
+    except Exception:
+        raise func.err_voice_join()
