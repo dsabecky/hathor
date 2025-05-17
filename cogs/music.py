@@ -13,7 +13,6 @@ import yt_dlp           # youtube library
 
 # system level stuff
 import asyncio      # prevents thread locking
-import io           # read/write
 import json         # logging (song history, settings, etc)
 import os           # system access
 import requests     # grabbing raw data from url
@@ -125,7 +124,7 @@ def SaveRadio() -> None:
 # Global variables
 ####################################################################
 
-BOT_SPOTIFY_KEY = ""
+BOT_SPOTIFY_KEY = ''
 song_history = LoadHistory()
 song_db = LoadSongDB()
 radio_playlists = LoadRadio()
@@ -185,7 +184,6 @@ class Music(commands.Cog, name="Music"):
     # Cog 'on_' listeners
     ####################################################################
 
-    ### on_ready() #####################################################
     @commands.Cog.listener()
     async def on_ready(self) -> None:
         """
@@ -205,7 +203,6 @@ class Music(commands.Cog, name="Music"):
         self.loop_radio_monitor.start()             # monitors radio queue generation
         self.loop_spotify_key_creation.start()      # generate a spotify key
 
-    ### on_guild_join() ################################################
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild) -> None:
         """
@@ -222,7 +219,6 @@ class Music(commands.Cog, name="Music"):
         if not os.path.exists(f"{config.SONGDB_PATH}/{guild.id}"):
             os.makedirs(f"{config.SONGDB_PATH}/{guild.id}", exist_ok=True, parents=True)
 
-    ### on_voice_state_update() ########################################
     @commands.Cog.listener()
     async def on_voice_state_update(
         self,
@@ -369,7 +365,7 @@ class Music(commands.Cog, name="Music"):
 
 
     ####################################################################
-    # Internal: Core Functions
+    # Internal: Helper Functions
     ####################################################################
 
     async def ChatGPT(
