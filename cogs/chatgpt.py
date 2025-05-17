@@ -46,7 +46,6 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
     # Cog 'on_' listeners
     ####################################################################
 
-    ### on_message() ###################################################
     @commands.Cog.listener()
     async def on_message(
         self,
