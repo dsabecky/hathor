@@ -35,6 +35,7 @@ from openai import AsyncOpenAI   # cleaner than manually calling openai.OpenAI()
 # hathor internals
 import config                       # bot config
 import func                         # bot specific functions (@decorators, err_ classes, etc)
+from func import Error              # bot specific errors
 from cogs.voice import JoinVoice    # cleaner than cogs.voice.JoinVoice()
 from logs import log_music          # logging
 
@@ -310,15 +311,15 @@ class Music(commands.Cog, name="Music"):
                 allstates.radio_building = True     # block the loop until we're done
 
                 try:
-                    response = await self.ChatGPT(
+                    response = await self._invoke_chatgpt(
                         "Respond with only the asked answer, in 'Artist- Song Title' format. Always provide a reponse.",
                         f"Generate a playlist of 50 songs. Playlist theme: {allstates.radio_station}. Include similar artists and songs.")
 
                 except Exception as e:
-                    log_music.exception(f"loop_radio_monitor(): {e}"); return
+                    raise Error(f"loop_radio_monitor() -> _invoke_chatgpt():\n{e}")
 
                 if response == "":
-                    log_music.error(f"ChatGPT is responding empty strings.\n\"{response}\""); return
+                    raise Error("loop_radio_monitor() -> _invoke_chatgpt():\nChatGPT is responding empty strings.")
 
                 parsed_response = response.split('\n')  # split into separate strings
                 radio_playlists[allstates.radio_station.lower()] = []   # build an empty list to populate
@@ -353,7 +354,7 @@ class Music(commands.Cog, name="Music"):
         try:
             response = await asyncio.to_thread(blocking_call)
         except Exception as e:
-            log_music.error(f"Failed to generate Spotify API Access Token: {e}"); return
+            raise Error(f"loop_spotify_key_creation() -> Spotify.requests.post():\n{e}")
 
         data = response.json()
         log_music.info("Generated new Spotify API Access Token.")
@@ -368,13 +369,13 @@ class Music(commands.Cog, name="Music"):
     # Internal: Helper Functions
     ####################################################################
 
-    async def ChatGPT(
+    async def _invoke_chatgpt(
         self,
         sys_content: str,
         user_content: str
     ) -> str:
         """
-        ChatGPT wrapper, returns a string response.
+        Helper function that uses ChatGPT to generate a response as a string.
         """
 
         conversation = [
@@ -389,9 +390,61 @@ class Music(commands.Cog, name="Music"):
                 temperature=config.BOT_OPENAI_TEMPERATURE
             )
         except Exception as e:
-            log_music.error(f"ChatGPT(): {e}"); return
+            raise Error(f"_invoke_chatgpt() -> client.chat.completions.create():\n{e}")
 
         return response.choices[0].message.content
+
+    async def _parse_spotify_playlist(
+        self,
+        payload: str
+    ) -> tuple[str, str, list[dict[str, Any]], int]:
+        """
+        Helper function that parses spotify playlists.
+        """
+
+        playlist_id = re.search(r'/playlist/([a-zA-Z0-9]+)(?:[/?]|$)', payload).group(1)
+        if not playlist_id:
+            raise Error("_parse_spotify_playlist():\n No playlist ID found.")
+
+        try:    # grab the playlist from spotify api
+            response = await asyncio.to_thread(requests.get, f'https://api.spotify.com/v1/playlists/{playlist_id}', headers={'Authorization': f'Bearer {BOT_SPOTIFY_KEY}'})
+        except Exception as e:
+            raise Error(f"_parse_spotify_playlist() -> Spotify.requests.get():\n{e}")
+        
+        response_json = response.json()     # convert response to json
+        playlist = response_json['tracks']['items']     # just get the tracklist
+        playlist_length = len(playlist) if len(playlist) <= config.MUSIC_MAX_PLAYLIST else config.MUSIC_MAX_PLAYLIST    # trim list length if needed
+
+        return "Spotify", playlist_id, playlist, playlist_length
+    
+    async def _parse_youtube_playlist(
+        self,
+        payload: str
+    ) -> tuple[str, str, list[dict[str, Any]], int]:
+        """
+        Helper function that parses youtube playlists.
+        """
+
+        playlist_id = re.search(r'list=([a-zA-Z0-9_-]+)', payload).group(1)
+        if not playlist_id:
+            raise Error("_parse_youtube_playlist():\n No playlist ID found.")
+
+        try:    # grab the playlist from spotify api
+            # First get playlist details
+            response = await asyncio.to_thread(requests.get, f'https://www.googleapis.com/youtube/v3/playlistItems?key={config.BOT_YOUTUBE_KEY}&part=snippet&maxResults=50&playlistId={playlist_id}')
+        except Exception as e:
+            raise Error(f"_parse_youtube_playlist() -> YouTube.requests.get():\n{e}")
+
+        response_json = response.json()     # convert response to json
+        playlist = response_json['items']  # get the tracklist from items
+        playlist_length = int(response_json['pageInfo']['totalResults']) if int(response_json['pageInfo']['totalResults']) <= config.MUSIC_MAX_PLAYLIST else config.MUSIC_MAX_PLAYLIST  # trim list length if needed
+
+        return "YouTube", playlist_id, playlist, playlist_length
+
+
+    ####################################################################
+    # Internal: Core Functions
+    ####################################################################
 
     async def FetchSongMetadata(
         self,
@@ -421,8 +474,8 @@ class Music(commands.Cog, name="Music"):
         try:    # grabs song metadata
             log_music.info(f"Fetching metadata for: {query}")
             info = await loop.run_in_executor(None, yt_dlp.YoutubeDL(opts).extract_info, ytdlp_query)
-        except Exception:
-            return None
+        except Exception as e:
+            raise Error(f"FetchSongMetadata() -> yt_dlp.YoutubeDL():\n{e}")
 
         if info.get('entries'):
             return info['entries'][0]
@@ -459,19 +512,19 @@ class Music(commands.Cog, name="Music"):
         try:    # downloads the song
             log_music.info(f"DownloadSong(): {query}")
             info = await loop.run_in_executor(None, yt_dlp.YoutubeDL(opts).extract_info, ytdlp_query)
-        except Exception:
-            return None
+        except Exception as e:
+            raise Error(f"DownloadSong() -> yt_dlp.YoutubeDL():\n{e}")
 
         if info and info.get('entries'):    # remove nest if nested
             info = info["entries"][0]
 
         try:    # generates proper tags for songDB
             log_music.info(f"DownloadSong(): Attemping to fetch proper tags for {info['title']}")
-            response = await self.ChatGPT(
+            response = await self._invoke_chatgpt(
                 "Respond with only the asked answer, in 'Artist - Song Title' format, or 'None' if you do not know.",
                 f"What is the name of this track: {info['title']}")
-        except Exception:
-            return "None"
+        except Exception as e:
+            raise Error(f"DownloadSong() -> _invoke_chatgpt():\n{e}")
 
         if " - " in response:
             s = response.split(" - ", 1)
@@ -650,7 +703,7 @@ class Music(commands.Cog, name="Music"):
         text = ""   # initiate the intro string
 
         if is_special:  # special intro
-            text = await self.ChatGPT(
+            text = await self._invoke_chatgpt(
                 'Return only the information requested with no additional words or context. Do not wrap in quotes.',
                 f'Give me a short radio dj intro for "{artist} - {title}". Intro should include info about the song. Limit of 2 sentences.'
             )
@@ -668,7 +721,7 @@ class Music(commands.Cog, name="Music"):
             ]
             text = random.choice(regular_intros)    # pick a random intro
 
-        tts = gTTS(text, lang="en")
+        tts = await asyncio.to_thread(gTTS, text, lang="en")
         intro_path = f"{config.SONGDB_PATH}/intro_{voice_client.guild.id}.mp3"
         tts.save(intro_path)
 
@@ -683,8 +736,8 @@ class Music(commands.Cog, name="Music"):
 
         try:    # file cleanup
             os.remove(intro_path)
-        except Exception:
-            log_music.exception("PlayRadioIntro(): Failed to remove intro file.")
+        except Exception as e:
+            raise Error(f"PlayRadioIntro() -> os.remove():\n{e}")
 
     async def QueuePlaylist(
         self,
@@ -698,43 +751,29 @@ class Music(commands.Cog, name="Music"):
 
         allstates = self.settings[voice_client.guild.id]
 
+        playlist_type, playlist_id, playlist, playlist_length = None, None, None, None
         if 'open.spotify.com/playlist/' in payload: # spotify playlist
-            playlist_type = "Spotify"
-            playlist_id = re.search(r'/playlist/([a-zA-Z0-9]+)(?:[/?]|$)', payload).group(1)
-
-            try:    # grab the playlist from spotify api
-                response = requests.get(f'https://api.spotify.com/v1/playlists/{playlist_id}', headers={'Authorization': f'Bearer {BOT_SPOTIFY_KEY}'})
+            try:
+                playlist_type, playlist_id, playlist, playlist_length = await self._parse_spotify_playlist(payload)
             except Exception as e:
                 if message:     # finalize message if we fail
                     embed = discord.Embed(description="❌ I ran into an issue with the Spotify API. 😢")
                     await message.edit(content=None, embed=embed)
-                    log_music.error(f"QueuePlaylist() -> Spotify.requests.get():\n{e}"); return None
-
-            response_json = response.json()
-            playlist = response_json['tracks']['items']     # just get the tracklist
-            playlist_length = len(playlist) if len(playlist) <= config.MUSIC_MAX_PLAYLIST else config.MUSIC_MAX_PLAYLIST    # trim list length if needed
+                raise Error(f"QueuePlaylist() -> _parse_spotify_playlist():\n{e}")
         
         elif 'list=' in payload:  # youtube playlist
-            playlist_type = "YouTube"
-            playlist_id = re.search(r'list=([a-zA-Z0-9_-]+)', payload).group(1)
-
-            try:    # grab the playlist from spotify api
-                response = requests.get(f'https://www.googleapis.com/youtube/v3/playlists?key={config.BOT_YOUTUBE_KEY}&part=contentDetails&id={playlist_id}')
+            try:
+                playlist_type, playlist_id, playlist, playlist_length = await self._parse_youtube_playlist(payload)
+                
+                print(playlist)
             except Exception as e:
                 if message:     # finalize message if we fail
                     embed = discord.Embed(description="❌ I ran into an issue with the YouTube API. 😢")
                     await message.edit(content=None, embed=embed)
-                    log_music.error(f"QueuePlaylist() -> YouTube.requests.get():\n{e}"); return None
-
-            response_json = response.json()
-            playlist = response_json['tracks']['items']     # just get the tracklist
-            playlist_length = response['items'][0]['contentDetails']['itemCount'] if response['items'][0]['contentDetails']['itemCount'] <= config.MUSIC_MAX_PLAYLIST else config.MUSIC_MAX_PLAYLIST
+                raise Error(f"QueuePlaylist() -> _parse_youtube_playlist():\n{e}")
 
         else:
-            playlist_type = "ChatGPT"
-            playlist_id = "ChatGPT"
-            playlist = payload
-            playlist_length = len(payload) if len(payload) <= config.MUSIC_MAX_PLAYLIST else config.MUSIC_MAX_PLAYLIST
+            playlist_type, playlist_id, playlist, playlist_length = "ChatGPT", "ChatGPT", payload, len(payload) if len(payload) <= config.MUSIC_MAX_PLAYLIST else config.MUSIC_MAX_PLAYLIST
 
         log_music.info(f"QueuePlaylist(): Playlist ({playlist_id}) true length {playlist_length}")
 
@@ -749,15 +788,18 @@ class Music(commands.Cog, name="Music"):
                 if playlist_type == "Spotify":  # spotify filtering
                     track    = f"{item['track']['artists'][0]['name']} - {item['track']['name']}"
                     metadata = await self.FetchSongMetadata(track)
+
                 elif playlist_type == "YouTube":    # youtube filtering
-                    track    = item[0]['snippet']['title']
-                    metadata = await self.FetchSongMetadata(f"https://youtube.com/watch?v={item[0]['snippet']['resourceId']['videoId']}")
+                    track    = item['snippet']['title']
+                    metadata = await self.FetchSongMetadata(f"https://youtube.com/watch?v={item['snippet']['resourceId']['videoId']}")
+
                 else:   # just chatgpt
                     track    = item
                     metadata = await self.FetchSongMetadata(item)
-            except Exception:   # fail gracefully
-                embed = discord.Embed(description=f"❌ I ran into an issue finding {track}. 😢\nMoving onto the next song. 🫡")
-                await message.edit(content=None, embed=embed)
+            except Exception as e:   # fail gracefully
+                if message:
+                    embed = discord.Embed(description=f"❌ I ran into an issue finding {track}. 😢\nMoving onto the next song. 🫡")
+                    await message.edit(content=None, embed=embed)
                 log_music.error(f"QueuePlaylist() -> FetchSongMetadata():\n{e}"); continue
 
             if metadata['id'] in song_db and os.path.exists(f"{config.SONGDB_PATH}/{metadata['id']}.mp3"):  # save the bandwidth
@@ -765,19 +807,21 @@ class Music(commands.Cog, name="Music"):
                 song = song_db[metadata['id']]
 
             elif metadata['duration'] >= config.MUSIC_MAX_DURATION: # song exceeds config.MUSIC_MAX_DURATION, fail gracefully
-                embed = discord.Embed(description=f"❌ Song is too long! ({metadata['duration']} > {config.MUSIC_MAX_DURATION}) 🕑\nMoving onto the next song. 🫡")
-                await message.edit(content=None, embed=embed)
-                raise func.err_song_length(); continue
+                if message:
+                    embed = discord.Embed(description=f"❌ Song is too long! ({metadata['duration']} > {config.MUSIC_MAX_DURATION}) 🕑\nMoving onto the next song. 🫡")
+                    await message.edit(content=None, embed=embed)
+                    log_music.error(f"QueuePlaylist(): Song ({metadata['title']}) duration exceeds {config.MUSIC_MAX_DURATION} seconds."); continue
             
             else:  # seems good, download it
                 log_music.info(f"QueuePlaylist(): ({i}/{playlist_length}) Downloading \"{metadata['webpage_url']}\"")
 
                 try:
                     song = await self.DownloadSong(f"https://youtube.com/watch?v={metadata['id']}", track, None)
-                except Exception:   # fail gracefully
-                    embed = discord.Embed(description=f"❌ I ran into an issue downloading {track}. 😢\nMoving onto the next song. 🫡")
-                    await message.edit(content=None, embed=embed)
-                    log_music.error(f"QueuePlaylist() -> DownloadSong():\n{e}"); return None
+                except Exception as e:   # fail gracefully
+                    if message:
+                        embed = discord.Embed(description=f"❌ I ran into an issue downloading {track}. 😢\nMoving onto the next song. 🫡")
+                        await message.edit(content=None, embed=embed)
+                    log_music.error(f"QueuePlaylist() -> DownloadSong():\n{e}"); continue
 
             allstates.queue.append(song)    # add song to the queue
             lines.append(f"{i}. {track}")
@@ -814,11 +858,11 @@ class Music(commands.Cog, name="Music"):
         if 'open.spotify.com/track/' in payload:
             track_id = re.search(r'/track/([a-zA-Z0-9]+)(?:[/?]|$)', payload).group(1)
             try:    # grab the trackid from spotify
-                response = requests.get(f'https://api.spotify.com/v1/tracks/{track_id}', headers={'Authorization': f'Bearer {BOT_SPOTIFY_KEY}'})
+                response = await asyncio.to_thread(requests.get, f'https://api.spotify.com/v1/tracks/{track_id}', headers={'Authorization': f'Bearer {BOT_SPOTIFY_KEY}'})
             except Exception as e:  # finalize the message if we fail
                 embed = discord.Embed(description="❌ I ran into an issue with the Spotify API. 😢")
                 await message.edit(content=None, embed=embed)
-                log_music.error(f"QueuePlaylist() -> Spotify.requests.get():\n{e}"); return None
+                raise Error(f"QueueIndividualSong() -> Spotify.requests.get():\n{e}")
 
             response_json = response.json()
             track = f"{response_json['artists'][0]['name']} - {response_json['name']}"
@@ -828,10 +872,10 @@ class Music(commands.Cog, name="Music"):
                 metadata = await self.FetchSongMetadata(track)
             else:   # regular
                 metadata = await self.FetchSongMetadata(payload)
-        except Exception:
+        except Exception as e:
             embed = discord.Embed(description="❌ I ran into an issue finding that song. 😢")
             await message.edit(content=None, embed=embed)
-            log_music.error(f"QueueIndividualSong() -> FetchSongMetadata():\n{e}"); return None
+            raise Error(f"QueueIndividualSong() -> FetchSongMetadata():\n{e}")
 
         if metadata['id'] in song_db and os.path.exists(f"{config.SONGDB_PATH}/{metadata['id']}.mp3"):  # save the bandwidth
             log_music.info(f"Song: \"{metadata['title']}\" already downloaded.")
@@ -840,7 +884,7 @@ class Music(commands.Cog, name="Music"):
         elif metadata['duration'] >= config.MUSIC_MAX_DURATION: # song exceeds config.MUSIC_MAX_DURATION
             embed = discord.Embed(description="❌ Song is too long! 🕑")
             await message.edit(content=None, embed=embed)
-            raise func.err_song_length(); return None
+            raise Error(f"QueueIndividualSong() -> FetchSongMetadata():\nSong duration exceeds {config.MUSIC_MAX_DURATION} seconds.")
         
         else:  # seems good, download it
             log_music.info(f"QueueIndividualSong(): Downloading \"{metadata['webpage_url']}\"")
@@ -849,10 +893,10 @@ class Music(commands.Cog, name="Music"):
 
             try:    # download the song
                 song = await self.DownloadSong(f"https://youtube.com/watch?v={metadata['id']}", track, None)
-            except Exception:
+            except Exception as e:
                 embed = discord.Embed(description=f"❌ I ran into an issue downloading {metadata['title']}. 😢")
                 await message.edit(content=None, embed=embed)
-                log_music.error(f"QueueIndividualSong() -> DownloadSong():\n{e}"); return None
+                raise Error(f"QueueIndividualSong() -> DownloadSong():\n{e}")
 
         if is_priority:     # push to top of queue
             allstates.queue.insert(0, song)
@@ -889,7 +933,7 @@ class Music(commands.Cog, name="Music"):
         allstates = self.settings[ctx.guild.id]
 
         if not args or len(args) < 3:
-            raise func.err_syntax(); return
+            raise func.err_syntax()
 
         if not ctx.guild.voice_client: # we're not in voice, lets change that
             await JoinVoice(ctx)
@@ -899,13 +943,13 @@ class Music(commands.Cog, name="Music"):
 
         try:    # request our playlist
             log_music.info(f"!aiplaylist: Generating playlist request...")
-            response = await self.ChatGPT(
+            response = await self._invoke_chatgpt(
                 "Respond with only the asked answer, in 'Artist- Song Title' format. Always provide a reponse.",
                 f"Generate a playlist of {config.MUSIC_MAX_PLAYLIST} songs. Playlist theme: {args}. Include similar artists and songs.")
         except Exception as e:  # well this is embarrasing
-            log_music.error(f"!aiplaylist: {e}")
             embed = discord.Embed(description="❌ I ran into an issue. 😢")
-            await message.edit(content=None, embed=embed); return
+            await message.edit(content=None, embed=embed);
+            raise Error(f"!aiplaylist() -> _invoke_chatgpt():\n{e}")
 
         parsed_response = response.split('\n')  # filter out the goop
         playlist = []   # build the playlist and send it to the queue
@@ -913,9 +957,9 @@ class Music(commands.Cog, name="Music"):
             playlist.append(item.strip())
 
         if not playlist:
-            log_music.error(f"!aiplaylist: Could not parse playlist[] {playlist}")
             embed = discord.Embed(description=f"❌ I ran into an issue. 😢")
-            await message.edit(content=None, embed=embed); return
+            await message.edit(content=None, embed=embed);
+            raise Error(f"!aiplaylist() -> _invoke_chatgpt():\nCould not parse playlist[] {playlist}")
 
         await asyncio.create_task(self.QueuePlaylist(ctx.guild.voice_client, playlist, message))
 
