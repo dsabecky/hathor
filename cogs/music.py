@@ -892,7 +892,7 @@ class Music(commands.Cog, name="Music"):
             raise func.err_syntax(); return
 
         if not ctx.guild.voice_client: # we're not in voice, lets change that
-            await JoinVoice(self.bot, ctx)
+            await JoinVoice(ctx)
         
         embed = discord.Embed(description=f"🧠 Generating your AI playlist...")
         message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
@@ -1145,7 +1145,7 @@ class Music(commands.Cog, name="Music"):
         """
 
         if not ctx.guild.voice_client: # we're not in voice, lets change that
-            await JoinVoice(self.bot, ctx)
+            await JoinVoice(ctx)
 
         if not payload:    # no data provided
             raise func.err_syntax(); return
@@ -1182,7 +1182,7 @@ class Music(commands.Cog, name="Music"):
             raise func.err_syntax(); return
 
         if not ctx.guild.voice_client: # we're not in voice, lets change that
-            await JoinVoice(self.bot, ctx)
+            await JoinVoice(ctx)
         
         song_type = payload.startswith('https://') and 'link' or 'search' # lazy filter to determine if it's a direct link or if we're searching
 
@@ -1223,7 +1223,7 @@ class Music(commands.Cog, name="Music"):
         allstates = self.settings[ctx.guild.id]
         
         if not ctx.guild.voice_client: # we're not in voice, lets change that
-            await JoinVoice(self.bot, ctx)
+            await JoinVoice(ctx)
 
         if allstates.radio_fusions:     # cancel out fusion
             allstates.radio_fusions = None

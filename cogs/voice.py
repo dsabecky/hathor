@@ -70,7 +70,7 @@ class Voice(commands.Cog, name="Voice"):
             !join
         """
         
-        await JoinVoice(self.bot, ctx)
+        await JoinVoice(ctx)
 
     ####################################################################
     # trigger: !leave
@@ -134,7 +134,7 @@ class Voice(commands.Cog, name="Voice"):
 # ----
 # Joins the current voice channel.
 ####################################################################
-async def JoinVoice(bot, ctx: commands.Context):
+async def JoinVoice(ctx: commands.Context):
     try:
         if ctx.voice_client:
             await ctx.voice_client.move_to(ctx.author.voice.channel)
