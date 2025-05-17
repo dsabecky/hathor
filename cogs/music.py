@@ -260,9 +260,18 @@ class Music(commands.Cog, name="Music"):
         for voice_client in self.bot.voice_clients:
             allstates = self.settings[voice_client.guild.id]
 
-            if voice_client.is_playing():   # we're playing something, update last_active
-                allstates.last_active = time.time()
+            if not voice_client.is_connected():    # sanity check
                 continue
+
+            if voice_client.is_playing():   # we're playing something, update last_active
+                count = len([member for member in voice_client.channel.members if not member.bot])
+                if count > 0:
+                    allstates.last_active = time.time()
+
+                if count == 0 and (time.time() - allstates.last_active) > config.settings[str(voice_client.guild.id)]["voice_idle"]:    # idle timeout
+                    await voice_client.disconnect()
+                    allstates.last_active = None
+                    continue
 
             if not voice_client.is_playing() and not voice_client.is_paused() and allstates.queue:  # should be, but we're not
                 await self.PlayNextSong(voice_client)
