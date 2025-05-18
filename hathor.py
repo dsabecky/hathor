@@ -160,15 +160,18 @@ async def on_message(ctx: commands.Context) -> None:
     await bot.process_commands(ctx) # required to process @bot.command
 
 @bot.event
-async def on_command_error(ctx: commands.Context, exc: Exception) -> None:
+async def on_command_error(ctx: commands.Context, error: Exception) -> None:
     """
     Runs when an error occurs during a command.
     """
 
-    if isinstance(exc, func.Error):
-        return await FancyErrors(exc.code, ctx.channel)
+    if isinstance(error, commands.CommandNotFound):
+        return
+
+    if isinstance(error, func.Error):
+        return await FancyErrors(error.code, ctx.channel)
     else:
-        raise exc
+        raise error
 
 
 ####################################################################
