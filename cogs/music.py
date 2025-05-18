@@ -532,7 +532,7 @@ class Music(commands.Cog, name="Music"):
         Helper function that parses youtube playlists.
         """
 
-        playlist_id = re.search(r'list=([a-zA-Z0-9_-]+)', payload).group(1)
+        playlist_id = re.search(r'[&?]list=([a-zA-Z0-9_-]+)', payload).group(1)
         if not playlist_id:
             raise Error("_parse_youtube_playlist():\n No playlist ID found.")
 
