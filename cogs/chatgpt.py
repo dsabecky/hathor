@@ -312,7 +312,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         prompt: str = commands.parameter(default=None, description="Prompt request")
     ):
         """
-        Uses ChatGPT to create a DALL-E prompt, then returns the result.
+        Uses ChatGPT to create a GPT-Image prompt, then returns the result.
 
         Syntax:
             !gptimagine <prompt>
