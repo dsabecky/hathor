@@ -34,7 +34,7 @@ error_flavor = [
 ]
 
 ###############################################################
-# Errors: Cases & Linker References
+# Error Classes
 ###############################################################
 
 class Error(commands.CommandError):
@@ -83,6 +83,10 @@ class err_vol_range(Error):
     code = "Invalid! Volume range is 1-100"
 class err_wrong_fuse(Error):
     code = "That station is not fused"
+
+###############################################################
+# Permission Checks (decorators)
+###############################################################
 
 def requires_author_perms():
     async def predicate(ctx: commands.Context):
@@ -164,6 +168,10 @@ async def CheckPermissions(bot, guild_id, user_id, user_roles):
     else:
         return False
     
+###############################################################
+# Functions
+###############################################################
+ 
 async def FancyErrors(error: str, channel):
     flavor = random.choice(error_flavor)
 
