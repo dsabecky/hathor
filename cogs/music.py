@@ -369,6 +369,104 @@ class Music(commands.Cog, name="Music"):
     # Internal: Helper Functions
     ####################################################################
 
+    def _build_now_playing_embed(
+        self,
+        guild_id: int,
+        voice_client: discord.VoiceClient
+    ) -> tuple[str, str, str]:
+        """
+        Helper function that returns the currently playing song.
+        """
+
+        allstates = self.settings[guild_id]
+        currently_playing = allstates.currently_playing
+
+        if not voice_client or not currently_playing or not (voice_client.is_playing() or voice_client.is_paused()):
+            return "No song playing.", "", None
+
+        # build now playing text
+        song_title = f"{currently_playing['song_artist']} - {currently_playing['song_title']}" if currently_playing.get('song_artist') else currently_playing["title"].replace("*", r"\*")
+
+        # calculate progress bar
+        elapsed = (allstates.pause_time - allstates.start_time) if voice_client.is_paused() else (time.time() - allstates.start_time)
+        total = currently_playing["duration"]
+        filled = int(min(max(elapsed / total, 0.0), 1.0) * 10)
+        empty = 10 - filled
+        status_emoji = "⏸️" if voice_client.is_paused() else "▶️"
+        progress_bar = (
+            f"{status_emoji} "
+            f"{'▬' * filled}🔘{'▬' * empty} "
+            f"[{f'{int(elapsed)//60:02d}:{int(elapsed)%60:02d}'}"
+            f" / {f'{int(total)//60:02d}:{int(total)%60:02d}'}]"
+        )
+
+        thumb = currently_playing.get("thumbnail")    # get thumbnail
+
+        return song_title, progress_bar, thumb
+    
+    def _build_queue_embed(
+        self,
+        guild_id: int,
+        voice_client: discord.VoiceClient
+    ) -> tuple[str, str, str]:
+        """
+        Helper function that returns the current queue.
+        """
+
+        allstates = self.settings[guild_id]
+        queue = allstates.queue 
+
+        if not queue:
+            return ["No queue."]
+
+        lines = [
+            f"**{i+1}.** "
+            + (
+                f"{item['song_artist']} - {item['song_title']}"
+                if item.get('song_artist')
+                else item['title'].replace('*', r'\*')
+            )
+            for i, item in enumerate(queue[:10])
+        ]
+
+        if len(queue) > 10:
+            lines.append(f"…and {len(queue) - 10} more")
+
+        return "\n".join(lines)
+    
+    def _build_settings_embed(
+        self,
+        guild_id: int,
+        voice_client: discord.VoiceClient
+    ) -> str:
+        """
+        Helper function that returns the current settings.
+        """
+
+        allstates = self.settings[guild_id]
+
+        # music settings
+        settings = config.settings[str(guild_id)]
+        volume = settings["volume"]
+        repeat_status = "on" if allstates.repeat else "off"
+        shuffle_status = "on" if allstates.shuffle else "off"
+
+        # radio settings
+        intro = "on" if settings["radio_intro"] else "off"
+        radio = allstates.radio_station or "off"
+
+        ### TODO: FIXME (with the rest of fusion)
+        # fused = ""
+        # if guild_id in radio_fusions:
+        #     fused = ", ".join(f'{s}' for s in radio_fusions[guild_id])
+        #     fused = f"♾️ {fused} ♾️"
+
+        return (   # build radio settings text
+            f"```🔊 vol: {volume}%  🔁 repeat: {repeat_status}  🔀 shuffle: {shuffle_status}```"
+            #f"```📢 intro: {intro}\n📻 Radio: {fused and fused or endless}```"
+            f"```📢 intro: {intro}\n📻 Radio: {radio}```"
+        )
+
     async def _invoke_chatgpt(
         self,
         sys_content: str,
@@ -547,7 +645,7 @@ class Music(commands.Cog, name="Music"):
         SaveSongDB()
 
         return result
-
+    
     async def GetQueue(
         self,
         ctx: Context
@@ -556,87 +654,24 @@ class Music(commands.Cog, name="Music"):
         Displays the current song queue.
         """
 
-        allstates = self.settings[ctx.guild.id]
-        current = allstates.currently_playing
         voice_client = ctx.guild.voice_client
 
         title = "Song Queue"
-        embed = discord.Embed(title=title, description=None, color=discord.Color.blurple())
+        embed = discord.Embed(title=title, description=None, color=discord.Color.dark_purple())
 
         # now playing section
-        if voice_client and current and (voice_client.is_playing() or voice_client.is_paused()):
-            elapsed = (allstates.pause_time - allstates.start_time) if voice_client.is_paused() else (time.time() - allstates.start_time)
-            total = current["duration"]
-            ratio = min(max(elapsed / total, 0.0), 1.0)
-
-            bar_width = 10
-            filled = int(ratio * bar_width)
-            empty = bar_width - filled
-            status_emoji = "⏸️" if voice_client.is_paused() else "▶️"
-            progress_bar = (
-                f"{status_emoji} "
-                f"{'▬' * filled}🔘{'▬' * empty} "
-                f"[{str(datetime.timedelta(seconds=int(elapsed)))}"
-                f" / {str(datetime.timedelta(seconds=int(total)))}]"
-            )
-
-            np_title = f"{current['song_artist']} - {current['song_title']}" if current.get('song_artist') else current["title"].replace("*", r"\*")
-            np_text = f"{np_title}\n{progress_bar}"
-            embed.add_field(name="Now Playing", value=np_text, inline=False)
-
-            thumb = current.get("thumbnail")
-            if thumb:
-                embed.set_thumbnail(url=thumb)
-
-        else:
-            embed.add_field(name="Now Playing", value="Nothing playing.", inline=False)
+        song_title, progress_bar, thumb = self._build_now_playing_embed(ctx.guild.id, voice_client)
+        embed.add_field(name="Now Playing", value=song_title + (f"\n{progress_bar}" if progress_bar else ""), inline=False)
+        if thumb:
+            embed.set_thumbnail(url=thumb)
 
         # up next section
-        queue = allstates.queue
-        if not queue:
-            up_next_text = "No queue."
-
-        else:
-            lines = [
-                f"**{i+1}.** "
-                + (
-                    f"{item['song_artist']} - {item['song_title']}"
-                    if item.get('song_artist')
-                    else item['title'].replace('*', r'\*')
-                )
-                for i, item in enumerate(queue[:10])
-            ]
-
-            if len(queue) > 10:
-                lines.append(f"…and {len(queue) - 10} more")
-            up_next_text = "\n".join(lines)
-
-        embed.add_field(name="Up Next", value=up_next_text, inline=False)
+        queue = self._build_queue_embed(ctx.guild.id, voice_client)
+        embed.add_field(name="Up Next", value=queue, inline=False)
 
         # music settings
-        settings = config.settings[str(ctx.guild.id)]
-        volume = settings["volume"]
-        repeat_status = "on" if allstates.repeat else "off"
-        shuffle_status = "on" if allstates.shuffle else "off"
-
-        # radio settings
-        radio = allstates.radio_station or "off"
-
-        ### TODO: FIXME (with the rest of fusion)
-        # fused = ""
-        # if guild_id in radio_fusions:
-        #     fused = ", ".join(f'{s}' for s in radio_fusions[guild_id])
-        #     fused = f"♾️ {fused} ♾️"
-
-        intro = "on" if settings["radio_intro"] else "off"
-
-
-        settings_text = (   # build radio settings text
-            f"```🔊 vol: {volume}%  🔁 repeat: {repeat_status}  🔀 shuffle: {shuffle_status}```"
-            #f"```📢 intro: {intro}\n📻 Radio: {fused and fused or endless}```"
-            f"```📢 intro: {intro}\n📻 Radio: {radio}```"
-        )
-        embed.add_field(name="Settings", value=settings_text, inline=False)
+        settings = self._build_settings_embed(ctx.guild.id, voice_client)
+        embed.add_field(name="Settings", value=settings, inline=False)
 
         await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
