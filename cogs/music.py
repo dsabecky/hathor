@@ -421,6 +421,56 @@ class Music(commands.Cog, name="Music"):
             #f"```📢 intro: {intro}\n📻 Radio: {fused and fused or endless}```"
             f"```📢 intro: {intro}\n📻 Radio: {radio}```"
         )
+    
+    def _generate_fusion_playlist(
+        self,
+        guild_id: int
+    ) -> None:
+        """
+        Generates a fusion playlist.
+        """
+
+        allstates = self.settings[guild_id]
+
+        temp_playlist = []
+        songs_per_station = math.ceil(40 / len(allstates.radio_fusions))
+        for station in allstates.radio_fusions:
+            temp_playlist.extend(random.sample(radio_playlists[station.lower()], songs_per_station))
+
+        log_music.info(f"Generated fusion playlist for {len(allstates.radio_fusions)} stations.")
+        allstates.radio_fusions_playlist = temp_playlist
+        
+    async def _generate_radio_station(
+        self,
+        station: str
+    ) -> None:
+        """
+        Generates a radio station playlist.
+        """
+
+        if not station:
+            raise Error("_generate_radio_station() -> Empty station name.")
+
+        try:
+            log_music.info(f"Generating radio playlist for {station}...")
+            response = await self._invoke_chatgpt(
+                "Return only the information requested with no additional words or context.",
+                f"Make a playlist of 50 songs (formatted as: artist - song), do not number the list, themed around: {station}. Include similar artists and songs."
+            )
+        except Exception as e:
+            raise Error(f"_generate_radio_station() -> _invoke_chatgpt():\n{e}")
+
+        if response == "":
+            raise Error("_generate_radio_station() -> _invoke_chatgpt():\nChatGPT is responding empty strings.")
+        
+        parsed_response = response.split('\n')
+        radio_playlists[station.lower()] = []
+
+        for item in parsed_response:
+            radio_playlists[station.lower()].append(item.strip())
+
+        SaveRadio()
+        log_music.info(f"Radio playlist for {station} generated.")
 
     async def _invoke_chatgpt(
         self,
@@ -1013,103 +1063,99 @@ class Music(commands.Cog, name="Music"):
         await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
         allstates.queue = []
 
-    # @commands.command(name='defuse')
-    # @func.requires_author_perms()
-    # async def trigger_defuse(self, ctx, *, args=None):
-    #     """
-    #     Removes a fused station from the mix.
+    @commands.command(name='defuse')
+    @func.requires_author_perms()
+    @func.requires_author_voice()
+    async def trigger_defuse(
+        self,
+        ctx: commands.Context,
+        *,
+        payload: str = None
+    ) -> None:
+        """
+        Removes a radio station from the fusion.
 
-    #     Syntax:
-    #         !defuse <theme>
-    #     """
+        Syntax:
+            !defuse <station>
+        """
 
-    #     global radio_station
-    #     guild_id = ctx.guild.id
+        allstates = self.settings[ctx.guild.id]
 
-    #     # are you even allowed to use this command?
-    #     if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
-    #         await FancyErrors("AUTHOR_PERMS", ctx.channel); return
+        if not payload: # no station provided
+            raise func.err_syntax()
         
-    #     # author isn't in a voice channel
-    #     if not ctx.author.voice:
-    #         await FancyErrors("AUTHOR_NO_VOICE", ctx.channel); return
+        if payload.lower() not in allstates.radio_fusions: # station not fused
+            raise func.err_radio_not_fused()
         
-    #     # empty theme
-    #     if not args:
-    #         await FancyErrors("SYNTAX", ctx.channel); return
-        
-    #     # is the radio even on?
-    #     if radio_station[guild_id] == False:
-    #         await FancyErrors("NO_RADIO", ctx.channel); return
-        
-    #     # fusion doesnt exist
-    #     if guild_id not in radio_fusions or (radio_fusions[guild_id] and args.lower() not in radio_fusions[guild_id]):
-    #         await FancyErrors("NO_FUSE_EXIST", ctx.channel); return
-        
-    #     # let's defuse this situation
-    #     if any(station.lower() == args.lower() for station in radio_fusions[guild_id]):
-    #         radio_fusions[guild_id].remove(args)
+        if len(allstates.radio_fusions) == 1: # deny defusion of last station
+            embed = discord.Embed(title="Error", description="❌ You must have at least one radio station fused.", color=discord.Color.red())
+            await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+            return
 
-    #     # send our mesage and build a new station
-    #     info_embed = discord.Embed(description=f"📻 Removed \"{args}\" from the radio.")
-    #     message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
-    #     await FuseRadio(self.bot, ctx)
+        allstates.radio_fusions.remove(payload.lower())     # remove the station from the fusion list
+        self._generate_fusion_playlist(ctx.guild.id)        # generate the fusion playlist
+        await self._radio_monitor()                         # kick-start the radio monitor
 
-    ### !fuse ##########################################################
-    # @commands.command(name='fuse')
-    # async def trigger_fuse(self, ctx, *, args=None):
-    #     """
-    #     Fuses a new radio station into the current station(s).
-    #     You can add multiple fusions by separating with: |
+        embed = discord.Embed(description=f"📻 Radio fusions updated, themes: {', '.join(f'**{s}**' for s in allstates.radio_fusions)}.", color=discord.Color.green())
+        await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
-    #     Syntax:
-    #         !fuse <theme>
-    #         !fuse <theme> | <theme>
-    #     """
+    @commands.command(name='fuse')
+    @func.requires_author_perms()
+    @func.requires_author_voice()
+    async def trigger_fuse(
+        self,
+        ctx: commands.Context,
+        *,
+        payload: str = None
+    ) -> None:
+        """
+        Fuses two or more radio stations together.
+        If there is an active radio station, it will be added to the fusion.
 
-    #     global radio_station
-    #     guild_id = ctx.guild.id
+        Syntax:
+            !fuse <station1> | <station2> | <station3>
+        """
 
-    #     # are you even allowed to use this command?
-    #     if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
-    #         await FancyErrors("AUTHOR_PERMS", ctx.channel); return
+        allstates = self.settings[ctx.guild.id]
         
-    #     # author isn't in a voice channel
-    #     if not ctx.author.voice:
-    #         await FancyErrors("AUTHOR_NO_VOICE", ctx.channel); return
-        
-    #     # empty theme
-    #     if not args:
-    #         await FancyErrors("SYNTAX", ctx.channel); return
-        
-    #     # theres no radio playing
-    #     if radio_station[guild_id] == False:
-    #         await FancyErrors("NO_RADIO", ctx.channel); return
-        
-    #     if guild_id in radio_fusions and args in radio_fusions[guild_id]:
-    #         await FancyErrors("RADIO_EXIST", ctx.channel); return
-        
-    #     # get list of stations
-    #     stations = ""
-    #     if "|" in args:
-    #         for i, part in enumerate(args.split("|"), 1):
-    #             stations += i == 1 and f"**{part}**" or f", **{part}**"  
-    #     else:
-    #         stations = f"**{args}**"
-        
-    #     # too short
-    #     if len(args) < 3:
-    #         await FancyErrors("SHORT", ctx.channel); return
-        
-    #     # we're not in voice, lets change that
-    #     if not ctx.guild.voice_client:
-    #         await JoinVoice(self.bot, ctx)        
-        
-    #     # let's fuse the radio
-    #     info_embed = discord.Embed(description=f"📻 Fusing \"{stations}\" into the radio.")
-    #     message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
-    #     await FuseRadio(self.bot, ctx, args)        
+        if not payload: # no fusion provided
+            raise func.err_syntax()
 
+        if not ctx.guild.voice_client: # we're not in voice, lets change that
+            await JoinVoice(ctx)
+
+        payload_list = [s.lower().strip() for s in payload.split("|")]
+        if allstates.radio_station:   # add the current station to the list, if it exists
+            payload_list.append(allstates.radio_station.lower())
+
+        embed = discord.Embed(description=f"🧠 Fusing radio stations...", color=discord.Color.dark_purple())
+        message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+
+        print(f"payload_list: {payload_list}")
+        for station in payload_list: # add to fusion list, if not already in it
+            print(f"for() station: {station}")
+            if not station or station in allstates.radio_fusions:
+                continue
+
+            if station not in radio_playlists: # not already generated?
+                async with ctx.channel.typing():
+                    try:
+                        await self._generate_radio_station(station)
+                    except Exception as e:
+                        embed = discord.Embed(description=f"❌ I ran into an issue. 😢")
+                        await message.edit(content=None, embed=embed)
+                        raise Error(f"trigger_fuse() -> _generate_radio_station():\n{e}")
+
+            allstates.radio_fusions.append(station) # add to fusion list
+
+        self._generate_fusion_playlist(ctx.guild.id)    # generate the fusion playlist
+
+        embed = discord.Embed(description=f"⚛️ Radio fusions enabled, themes: {', '.join(f'**{s}**' for s in allstates.radio_fusions)}.", color=discord.Color.green())
+        await message.edit(content=None, embed=embed)
+
+        await self._radio_monitor()                     # kick-start the radio monitor
+        
+        
     ### !hot100 ########################################################
     # @commands.command(name='hot100')
     # async def hot100_radio(self, ctx):
@@ -1435,66 +1481,3 @@ class Music(commands.Cog, name="Music"):
         ctx.guild.voice_client.stop()   # actually skip the song
         if allstates.repeat:
             await self.PlayNextSong(ctx.guild.voice_client)
-
-# async def FuseRadio(bot, ctx, new_theme=None):
-#     guild_id = ctx.guild.id
-#     fuse_playlist[guild_id] = []
-
-#     # initial build
-#     if guild_id not in radio_fusions:
-#         radio_fusions[guild_id] = []
-#         radio_fusions[guild_id].append(radio_station[guild_id])
-
-#     # add the themes to the fuse, and clear out the old fuse station
-#     if new_theme:
-#         # add multiple fusions
-#         if "|" in new_theme:
-#             parts = new_theme.split("|")
-#             for part in parts:
-#                 if part.strip() not in radio_station[guild_id]:
-#                     radio_fusions[guild_id].append(part.strip())
-#         # add single fusion
-#         else:
-#             if new_theme not in radio_station[guild_id]:
-#                 radio_fusions[guild_id].append(new_theme)
-
-#     if radio_fusions[guild_id] == []:
-#         return
-
-#     # how many songs are we grabbing from each station
-#     song_limit = math.ceil(50 / len(radio_fusions[guild_id]))
-
-#     # build our new combined station
-#     for station in radio_fusions[guild_id]:
-
-#         # we don't know this station, build it
-#         if station.lower() not in radio_playlists:
-#             try:
-#                 radio_playlists[station.lower()] = []
-#                 response = await ChatGPT(
-#                     bot,
-#                     "Return only the information requested with no additional words or context.",
-#                     f"Make a playlist of 50 songs (formatted as artist - song), themed around: {station}. Include similar artists and songs."
-#                 )
-
-#                 # filter out the goop
-#                 parsed_response = response.split('\n')
-#                 pattern = r'^\d+\.\s'
-
-#                 for item in parsed_response:
-#                     if re.match(pattern, item):
-#                         parts = re.split(pattern, item, maxsplit=1)
-#                         radio_playlists[station].append(parts[1].strip())
-#                 SaveRadio()
-
-#             except openai.ServiceUnavailableError:
-#                 print("Service Unavailable :(")
-#                 return
-            
-#         # add the station songs to the fuse station, and mix up the list
-#         temp_pl = random.sample(radio_playlists[station.lower()], song_limit)
-#         for song in temp_pl:
-#             fuse_playlist[guild_id].append(song)
-#         random.shuffle(fuse_playlist[guild_id])
-
-#     return
