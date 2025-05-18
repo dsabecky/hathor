@@ -143,10 +143,8 @@ class CurrentlyPlaying(TypedDict):
     title: str
     song_artist: str
     song_title: str
-
     file_path: str
     thumbnail: str
-
     duration: int
 
 class Settings:
@@ -162,9 +160,8 @@ class Settings:
         self.shuffle: bool = False
 
         self.radio_station: str | None = None
-        self.radio_fusions: list[str] | None = None
-        self.radio_fusions_playlist: list[str] | None = None
-        self.radio_building: bool = False
+        self.radio_fusions: list[str] = []
+        self.radio_fusions_playlist: list[str] = []
 
         self.start_time: float | None = None
         self.pause_time: float | None = None
