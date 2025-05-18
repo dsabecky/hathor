@@ -176,6 +176,7 @@ class Music(commands.Cog, name="Music"):
     def __init__(self, bot):
         self.bot = bot
         self.settings: dict[int, Settings] = defaultdict(Settings)
+        self.radio_lock = asyncio.Lock()
 
 
     ####################################################################
@@ -285,50 +286,7 @@ class Music(commands.Cog, name="Music"):
         Monitors radio stations for new songs.
         """
 
-        for guild in self.bot.guilds:
-
-            allstates = self.settings[guild.id]
-            voice_client = guild.voice_client
-
-            if not allstates.radio_station or not voice_client:     # we dont need to monitor this server
-                continue
-
-            elif allstates.radio_building:
-                continue
-
-            elif allstates.radio_fusions and len(allstates.queue) < config.RADIO_QUEUE:     # fuse radio checkpoint🔞
-                playlist = random.sample(allstates.radio_fusions_playlist, config.RADIO_QUEUE+1)
-                await self.QueuePlaylist(voice_client, playlist, None)
-
-            elif allstates.radio_station.lower() in radio_playlists and len(allstates.queue) < config.RADIO_QUEUE:  # known theme
-                playlist = random.sample(radio_playlists[allstates.radio_station.lower()], config.RADIO_QUEUE+1)
-                await self.QueuePlaylist(voice_client, playlist, None)
-
-            elif len(allstates.queue) < config.RADIO_QUEUE:   # previously ungenerated radio station
-                allstates.radio_building = True     # block the loop until we're done
-
-                try:
-                    response = await self._invoke_chatgpt(
-                        "Respond with only the asked answer, in 'Artist- Song Title' format. Always provide a reponse.",
-                        f"Generate a playlist of 50 songs. Playlist theme: {allstates.radio_station}. Include similar artists and songs.")
-
-                except Exception as e:
-                    raise Error(f"loop_radio_monitor() -> _invoke_chatgpt():\n{e}")
-
-                if response == "":
-                    raise Error("loop_radio_monitor() -> _invoke_chatgpt():\nChatGPT is responding empty strings.")
-
-                parsed_response = response.split('\n')  # split into separate strings
-                radio_playlists[allstates.radio_station.lower()] = []   # build an empty list to populate
-                for item in parsed_response:    # populate the list
-                        radio_playlists[allstates.radio_station.lower()].append(item.strip())
-
-                SaveRadio()     # write the new playlist to json file
-
-                playlist = random.sample(radio_playlists[allstates.radio_station.lower()], config.RADIO_QUEUE+1)
-                await self.QueuePlaylist(voice_client, playlist, None)
-
-                allstates.radio_building = False    # free up the loop
+        await self._radio_monitor()
 
     @loop_radio_monitor.before_loop
     async def _before_radio_monitor(self):
@@ -536,6 +494,42 @@ class Music(commands.Cog, name="Music"):
 
         return "YouTube", playlist_id, playlist, playlist_length
 
+    async def _radio_monitor(self) -> None:
+        """
+        Monitors radio stations for new songs.
+        """
+
+        async with self.radio_lock:
+            for guild in self.bot.guilds:
+
+                allstates = self.settings[guild.id]
+                voice_client = guild.voice_client
+
+                if not voice_client:    # no voice client, skip
+                    continue
+
+                if not allstates.radio_station and not allstates.radio_fusions: # no radio station or fusions, skip
+                    continue
+
+                elif allstates.radio_fusions and allstates.radio_fusions_playlist and len(allstates.queue) < config.RADIO_QUEUE:     # fuse radio checkpoint🔞
+                    playlist = random.sample(allstates.radio_fusions_playlist, config.RADIO_QUEUE+1)
+                    await self.QueuePlaylist(voice_client, playlist, None)
+                    continue
+
+                elif (allstates.radio_station and allstates.radio_station.lower() in radio_playlists) and len(allstates.queue) < config.RADIO_QUEUE:  # radio station checkpoint 🔞
+                    playlist = random.sample(radio_playlists[allstates.radio_station.lower()], config.RADIO_QUEUE+1)
+                    await self.QueuePlaylist(voice_client, playlist, None)
+                    continue
+
+                elif allstates.radio_station and allstates.radio_station.lower() not in radio_playlists:   # previously ungenerated radio station
+                    try:
+                        await self._generate_radio_station(allstates.radio_station)
+                    except Exception as e:
+                        log_music.error(f"loop_radio_monitor() -> _generate_radio_station():\n{e}")
+                        continue
+
+                    playlist = random.sample(radio_playlists[allstates.radio_station.lower()], config.RADIO_QUEUE+1)
+                    await self.QueuePlaylist(voice_client, playlist, None)
 
     ####################################################################
     # Internal: Core Functions
@@ -1328,17 +1322,16 @@ class Music(commands.Cog, name="Music"):
         if payload:
             allstates.radio_station = payload
             embed = discord.Embed(description=f"📻 Radio enabled, theme: **{payload}**.")
-            self.loop_radio_monitor.restart()
             
         elif allstates.radio_station == None:
             allstates.radio_station = config.RADIO_DEFAULT_THEME
             embed = discord.Embed(description=f"📻 Radio enabled, theme: {allstates.radio_station}.")
-            self.loop_radio_monitor.restart()
         else:
             allstates.radio_station = False
             embed = discord.Embed(description=f"📻 Radio disabled.")
         
-        await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())    
+        await self._radio_monitor()
+        await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='remove')
     @func.requires_author_perms()
