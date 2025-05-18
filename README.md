@@ -17,7 +17,8 @@
 - `!fuse <theme1> | <theme2> …` mix multiple radio themes  
 - `!aiplaylist <theme>` create 10–50 song smart playlists  
 - DJ voice intros (customizable “radio intro”)  
-- ChatGPT text chat (`!chatgpt`), DALL·E prompts (`!gptimagine`), image edits (`!gptedit`)  
+- ChatGPT text chat (`!chatgpt`)
+- GPT-Image generation (`!imagine`), ChatGPT prompted GPT-Image generation (`!gptimagine`), image edits (`!gptedit`)  
 - Per-guild settings with persistence (JSON backing)
 
 ## Installation
