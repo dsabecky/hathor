@@ -60,10 +60,10 @@ def LoadHistory() -> dict[str, list[dict[str, Any]]]:
     """
 
     try:
-        with open('song_history.json', 'r') as file:
+        with open('song_history.json', 'r', encoding='utf-8') as file:
             return json.load(file)
     except FileNotFoundError:
-        with open('song_history.json', 'w') as file:
+        with open('song_history.json', 'w', encoding='utf-8') as file:
             default = {}
             json.dump(default, file, indent=4)
             return default
@@ -73,7 +73,7 @@ def SaveHistory() -> None:
     Saves the song history to the JSON file.
     """
 
-    with open('song_history.json', 'w') as file:
+    with open('song_history.json', 'w', encoding='utf-8') as file:
         json.dump(song_history, file, ensure_ascii=False, indent=4)
 
 def LoadSongDB() -> dict[str, list[dict[str, Any]]]:
@@ -82,10 +82,10 @@ def LoadSongDB() -> dict[str, list[dict[str, Any]]]:
     """
 
     try:
-        with open('song_db.json', 'r') as file:
+        with open('song_db.json', 'r', encoding='utf-8') as file:
             return json.load(file)
     except FileNotFoundError:
-        with open('song_db.json', 'w') as file:
+        with open('song_db.json', 'w', encoding='utf-8') as file:
             default = {}
             json.dump(default, file, indent=4)
             return default
@@ -95,7 +95,7 @@ def SaveSongDB() -> None:
     Saves the song database to the JSON file.
     """
 
-    with open('song_db.json', 'w') as file:
+    with open('song_db.json', 'w', encoding='utf-8') as file:
         json.dump(song_db, file, ensure_ascii=False, indent=4)
 
 def LoadRadio() -> dict[str, list[str]]:
@@ -104,10 +104,10 @@ def LoadRadio() -> dict[str, list[str]]:
     """
 
     try:
-        with open('radio_playlists.json', 'r') as file:
+        with open('radio_playlists.json', 'r', encoding='utf-8') as file:
             return json.load(file)
     except FileNotFoundError:
-        with open('radio_playlists.json', 'w') as file:
+        with open('radio_playlists.json', 'w', encoding='utf-8') as file:
             default = {}
             json.dump(default, file, indent=4)
             return default
@@ -117,7 +117,7 @@ def SaveRadio() -> None:
     Saves the radio playlists to the JSON file.
     """
 
-    with open('radio_playlists.json', 'w') as file:
+    with open('radio_playlists.json', 'w', encoding='utf-8') as file:
         json.dump(radio_playlists, file, ensure_ascii=False, indent=4)
 
 
