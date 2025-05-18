@@ -919,7 +919,12 @@ class Music(commands.Cog, name="Music"):
 
     @commands.command(name="aiplaylist", aliases=['smartplaylist'])
     @func.requires_author_voice()
-    async def trigger_aiplaylist(self, ctx, *, args: str):
+    async def trigger_aiplaylist(
+        self,
+        ctx: commands.Context,
+        *,
+        args: str
+    ) -> None:
         """
         Generates a ChatGPT 10 song playlist based off context.
 
@@ -967,7 +972,11 @@ class Music(commands.Cog, name="Music"):
     @func.requires_author_perms()
     @func.requires_author_voice()
     @func.requires_queue()
-    async def trigger_bump(self, ctx, song_number = commands.parameter(default=None, description="Song number in queue.")):
+    async def trigger_bump(
+        self,
+        ctx: commands.Context,
+        song_number: int = commands.parameter(default=None, description="Song number in queue.")
+    ) -> None:
         """
         Move the requested song to the top of the queue.
 
@@ -978,22 +987,23 @@ class Music(commands.Cog, name="Music"):
         allstates = self.settings[ctx.guild.id]
 
         if len(allstates.queue) < 2:    # is there even enough songs to justify?
-            raise func.err_bump_short(); return
+            raise func.err_bump_short()
 
         elif not song_number or not song_number.isdigit() or int(song_number) < 2:
-            raise func.err_syntax(); return
+            raise func.err_syntax()
 
         bumped = allstates.queue.pop(int(song_number) - 1)
         allstates.queue.insert(0, bumped)
-        output = discord.Embed(description=f"Bumped {bumped['title']} to the top of the queue.")
-        await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
+        embed = discord.Embed(description=f"Bumped {bumped['title']} to the top of the queue.")
+        await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='clear')
     @func.requires_author_perms()
-    @func.requires_author_voice()
-    @func.requires_bot_voice()
     @func.requires_queue()
-    async def trigger_clear(self, ctx):
+    async def trigger_clear(
+        self,
+        ctx: commands.Context
+    ) -> None:
         """
         Clears the current playlist.
 
@@ -1003,8 +1013,8 @@ class Music(commands.Cog, name="Music"):
 
         allstates = self.settings[ctx.guild.id]
         
-        info_embed = discord.Embed(description=f"Removed {len(allstates.queue)} songs from queue.")
-        message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
+        embed = discord.Embed(description=f"Removed {len(allstates.queue)} songs from queue.")
+        await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
         allstates.queue = []
 
     # @commands.command(name='defuse')
@@ -1141,7 +1151,10 @@ class Music(commands.Cog, name="Music"):
 
     @commands.command(name='intro')
     @func.requires_author_perms()
-    async def trigger_intro(self, ctx):
+    async def trigger_intro(
+        self,
+        ctx: commands.Context
+    ) -> None:
         """
         Toggles song intros for the radio station.
 
@@ -1154,15 +1167,18 @@ class Music(commands.Cog, name="Music"):
         config.settings[guild_str]['radio_intro'] = not config.settings[guild_str]['radio_intro']
         config.SaveSettings()
 
-        info_embed = discord.Embed(description=f"📢 Radio intros {config.settings[guild_str]['radio_intro'] and 'enabled' or 'disabled'}.")
-        await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
+        embed = discord.Embed(description=f"📢 Radio intros {config.settings[guild_str]['radio_intro'] and 'enabled' or 'disabled'}.")
+        await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='pause')
     @func.requires_author_perms()
     @func.requires_author_voice()
     @func.requires_bot_playing()
     @func.requires_bot_voice()
-    async def trigger_pause(self, ctx, *, args=None):
+    async def trigger_pause(
+        self,
+        ctx: commands.Context
+    ) -> None:
         """
         Pauses the song playing.
 
@@ -1175,12 +1191,17 @@ class Music(commands.Cog, name="Music"):
         allstates.pause_time = time.time()  # record when we paused
         ctx.guild.voice_client.pause()      # actually pause
 
-        info_embed = discord.Embed(description=f"⏸️ Playback paused.")
-        message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
+        embed = discord.Embed(description=f"⏸️ Playback paused.")
+        await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='play')
     @func.requires_author_voice()
-    async def trigger_play(self, ctx, *, payload=None):
+    async def trigger_play(
+        self,
+        ctx: commands.Context,
+        *,
+        payload: str = None
+    ) -> None:
         """
         Adds a song to the queue.
 
@@ -1206,7 +1227,12 @@ class Music(commands.Cog, name="Music"):
     @commands.command(name='playnext', aliases=['playbump'])
     @func.requires_author_perms()
     @func.requires_author_voice()
-    async def trigger_playnext(self, ctx, *, payload=None):
+    async def trigger_playnext(
+        self,
+        ctx: commands.Context,
+        *,
+        payload: str = None
+    ) -> None:
         """
         Adds a song to the top of the queue (no playlists).
 
@@ -1217,26 +1243,26 @@ class Music(commands.Cog, name="Music"):
             !playbump
         """
 
-        is_playlist = ('&list=' in payload or 'open.spotify.com/playlist' in payload) and True or False
-        
-        if is_playlist:     # playlists not supported with playnext
-            raise func.err_shuffle_no_playlist(); return
-        
         if not payload:    # no data provided
-            raise func.err_syntax(); return
+            raise func.err_syntax()
 
+        is_playlist = ('&list=' in payload or 'open.spotify.com/playlist' in payload) and True or False
+        if is_playlist:     # playlists not supported with playnext
+            raise func.err_shuffle_no_playlist()
+        
         if not ctx.guild.voice_client: # we're not in voice, lets change that
             await JoinVoice(ctx)
-        
-        song_type = payload.startswith('https://') and 'link' or 'search' # lazy filter to determine if it's a direct link or if we're searching
 
-        info_embed = discord.Embed(description=f"Searching for {payload}")
-        message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
+        embed = discord.Embed(description=f"🔎 Searching for {payload}")
+        message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
         await asyncio.create_task(self.QueueIndividualSong(ctx.guild.voice_client, payload, True, message))
 
     @commands.command(name='queue', aliases=['q', 'np', 'nowplaying', 'song'])
-    async def trigger_queue(self, ctx):
+    async def trigger_queue(
+        self,
+        ctx: commands.Context
+    ) -> None:
         """
         Displays the song queue.
 
@@ -1252,7 +1278,12 @@ class Music(commands.Cog, name="Music"):
     @commands.command(name='radio', aliases=['dj'])
     @func.requires_author_perms()
     @func.requires_author_voice()
-    async def trigger_radio(self, ctx, *, args=None):
+    async def trigger_radio(
+        self,
+        ctx: commands.Context,
+        *,
+        payload: str = None
+    ) -> None:
         """
         Toggles endless mix mode.
 
@@ -1273,18 +1304,20 @@ class Music(commands.Cog, name="Music"):
             allstates.radio_fusions = None
             allstates.radio_fusions_playlist = None
 
-        if args:
-            allstates.radio_station = args
-            info_embed = discord.Embed(description=f"📻 Radio enabled, theme: **{args}**.")
+        if payload:
+            allstates.radio_station = payload
+            embed = discord.Embed(description=f"📻 Radio enabled, theme: **{payload}**.")
+            self.loop_radio_monitor.restart()
             
         elif allstates.radio_station == None:
-            allstates.radio_station = "anything, im not picky" ### TODO: make this customizable per server
-            info_embed = discord.Embed(description=f"📻 Radio enabled, theme: anything, im not picky.") ### TODO: variable to match above todo
+            allstates.radio_station = config.RADIO_DEFAULT_THEME
+            embed = discord.Embed(description=f"📻 Radio enabled, theme: {allstates.radio_station}.")
+            self.loop_radio_monitor.restart()
         else:
             allstates.radio_station = False
-            info_embed = discord.Embed(description=f"📻 Radio disabled.")
+            embed = discord.Embed(description=f"📻 Radio disabled.")
         
-        await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())    
+        await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())    
 
     @commands.command(name='remove')
     @func.requires_author_perms()
