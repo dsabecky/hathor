@@ -1,48 +1,45 @@
 import json
 
-# set your bot token here (https://discord.com/developers)
-BOT_TOKEN = ''
+####################################################################
+#  API Keys
+####################################################################
+BOT_TOKEN = ''  # discord bot token (https://discord.com/developers)
+BOT_OPENAI_KEY = ''  # openai api key (https://platform.openai.com/api-keys)
+BOT_YOUTUBE_KEY = ''  # youtube api key (https://console.cloud.google.com/apis/credentials)
+BOT_SPOTIFY_CLIENT = ''  # spotify client id (https://developer.spotify.com/dashboard/)
+BOT_SPOTIFY_SECRET = ''  # spotify client secret (https://developer.spotify.com/dashboard/)
 
-# set to True if bot is in maintenance mode
-MAINTENANCE = False
 
-# set your prefix
-BOT_PREFIX = '!'
+####################################################################
+#  Bot Settings
+####################################################################
+BOT_PREFIX = '!'    # set your commandprefix
+MAINTENANCE = False  # set to True if bot is in maintenance mode
+BOT_ADMIN  = 000000000000000000  # set the bot administrator (your personal userID)
+SONGDB_PATH = 'db'  # path to the song database
 
-# set the bot administrator (your personal userID)
-BOT_ADMIN  = 000000000000000
 
-# set your openai key here (https://platform.openai.com/api-keys)
-BOT_OPENAI_KEY = ''
-BOT_CHATGPT_MODEL = 'o4-mini
+####################################################################
+#  OpenAI Settings
+####################################################################
+BOT_CHATGPT_MODEL = 'o4-mini'
 BOT_GPTIMAGE_MODEL = 'gpt-image-1'
 BOT_OPENAI_TEMPERATURE = 1
 
-# youtube api key (https://developers.google.com/youtube/v3)
-BOT_YOUTUBE_KEY = ''
 
-# spotify api (https://developer.spotify.com/)
-BOT_SPOTIFY_CLIENT = ''
-BOT_SPOTIFY_SECRET = ''
+####################################################################
+#  Music Settings
+####################################################################
+BILLBOARD_HOT_100 = 'https://api.spotify.com/v1/playlists/37i9dQZF1DXcBWIGoYBM5M'  # billboard hot 100 playlist link (spotify)
+MUSIC_MAX_PLAYLIST = 20  # maximum playlist legnth
+MUSIC_MAX_DURATION = 1800  # maximum song length
+RADIO_QUEUE = 4  # radio queue length (how few songs in queue until we queue more (+1))
+SPOTIFY_KEY_REFRESH = 1800  # how often to refresh spotify keys (in seconds)
 
-# maximum playlist legnth
-MUSIC_MAX_PLAYLIST = 20
-
-# maximum song length
-MUSIC_MAX_DURATION = 1800
-
-# radio queue length (how many songs should radio queue at a time)
-RADIO_QUEUE = 5
 
 ####################################################################
 #       !! DON'T MODIFY BELOW ME !! DON'T MODIFY BELOW ME !!       #
 ####################################################################
-
-BILLBOARD_HOT_100 = 'https://api.spotify.com/v1/playlists/37i9dQZF1DXcBWIGoYBM5M'
-SPOTIFY_KEY_REFRESH = 1800
-
-SONGDB_PATH = 'db'
-
 def LoadSettings():
     try:
         with open('settings.json', 'r') as file:

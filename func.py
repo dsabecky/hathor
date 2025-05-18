@@ -34,7 +34,7 @@ error_flavor = [
 ]
 
 ###############################################################
-# Errors: Cases & Linker References
+# Error Classes
 ###############################################################
 
 class Error(commands.CommandError):
@@ -75,14 +75,18 @@ class err_song_length(Error):
     code = "Requested song is too long!"
 class err_syntax(Error):
     code = "Syntax error"
-class err_voice_full(Error):
-    code = "That voice channel is full"
+class err_voice_join(Error):
+    code = "I can't join that voice channel"
 class err_voice_mismatch(Error):
     code = "You must be in the same voice channel to do this"
 class err_vol_range(Error):
     code = "Invalid! Volume range is 1-100"
 class err_wrong_fuse(Error):
     code = "That station is not fused"
+
+###############################################################
+# Permission Checks (decorators)
+###############################################################
 
 def requires_author_perms():
     async def predicate(ctx: commands.Context):
@@ -135,21 +139,14 @@ def requires_owner_perms():
 
 def requires_queue():
     async def predicate(ctx: commands.Context):
-        cog = ctx.bot.get_cog("Music")
-        if cog is None:
-            raise err_no_queue()
-
-        allstates = cog.settings[ctx.guild.id]
+        allstates = ctx.bot.get_cog("Music").settings[ctx.guild.id]
 
         if not allstates.queue:
             raise err_no_queue()
+        
         return True
     return commands.check(predicate)
 
-
-###############################################################
-# Internal Functions
-###############################################################
 async def CheckPermissions(bot, guild_id, user_id, user_roles):
     guild = await bot.fetch_guild(guild_id) # why cant i get this from ctx.guild???
     
@@ -171,11 +168,12 @@ async def CheckPermissions(bot, guild_id, user_id, user_roles):
     else:
         return False
     
-####################################################################
-# function: FancyErrors(error)
-# ----
-# Returns prewritten errors.
-####################################################################
+###############################################################
+# Functions
+###############################################################
+ 
 async def FancyErrors(error: str, channel):
     flavor = random.choice(error_flavor)
-    await channel.send(f'{flavor} ({error})')
+
+    embed = discord.Embed(title=flavor, description=error, color=discord.Color.red())
+    await channel.send(embed=embed)

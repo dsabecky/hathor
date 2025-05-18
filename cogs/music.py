@@ -13,7 +13,6 @@ import yt_dlp           # youtube library
 
 # system level stuff
 import asyncio      # prevents thread locking
-import io           # read/write
 import json         # logging (song history, settings, etc)
 import os           # system access
 import requests     # grabbing raw data from url
@@ -36,6 +35,7 @@ from openai import AsyncOpenAI   # cleaner than manually calling openai.OpenAI()
 # hathor internals
 import config                       # bot config
 import func                         # bot specific functions (@decorators, err_ classes, etc)
+from func import Error              # bot specific errors
 from cogs.voice import JoinVoice    # cleaner than cogs.voice.JoinVoice()
 from logs import log_music          # logging
 
@@ -125,7 +125,7 @@ def SaveRadio() -> None:
 # Global variables
 ####################################################################
 
-BOT_SPOTIFY_KEY = ""
+BOT_SPOTIFY_KEY = ''
 song_history = LoadHistory()
 song_db = LoadSongDB()
 radio_playlists = LoadRadio()
@@ -143,10 +143,8 @@ class CurrentlyPlaying(TypedDict):
     title: str
     song_artist: str
     song_title: str
-
     file_path: str
     thumbnail: str
-
     duration: int
 
 class Settings:
@@ -162,9 +160,8 @@ class Settings:
         self.shuffle: bool = False
 
         self.radio_station: str | None = None
-        self.radio_fusions: list[str] | None = None
-        self.radio_fusions_playlist: list[str] | None = None
-        self.radio_building: bool = False
+        self.radio_fusions: list[str] = []
+        self.radio_fusions_playlist: list[str] = []
 
         self.start_time: float | None = None
         self.pause_time: float | None = None
@@ -179,13 +176,13 @@ class Music(commands.Cog, name="Music"):
     def __init__(self, bot):
         self.bot = bot
         self.settings: dict[int, Settings] = defaultdict(Settings)
+        self.radio_lock = asyncio.Lock()
 
 
     ####################################################################
     # Cog 'on_' listeners
     ####################################################################
 
-    ### on_ready() #####################################################
     @commands.Cog.listener()
     async def on_ready(self) -> None:
         """
@@ -205,7 +202,6 @@ class Music(commands.Cog, name="Music"):
         self.loop_radio_monitor.start()             # monitors radio queue generation
         self.loop_spotify_key_creation.start()      # generate a spotify key
 
-    ### on_guild_join() ################################################
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild) -> None:
         """
@@ -222,7 +218,6 @@ class Music(commands.Cog, name="Music"):
         if not os.path.exists(f"{config.SONGDB_PATH}/{guild.id}"):
             os.makedirs(f"{config.SONGDB_PATH}/{guild.id}", exist_ok=True, parents=True)
 
-    ### on_voice_state_update() ########################################
     @commands.Cog.listener()
     async def on_voice_state_update(
         self,
@@ -251,7 +246,7 @@ class Music(commands.Cog, name="Music"):
     # Internal: Loops
     ####################################################################
 
-    @tasks.loop(seconds=3)
+    @tasks.loop(seconds=2)
     async def loop_voice_monitor(self) -> None:
         """
         Monitors voice activity for idle, broken playing, etc.
@@ -291,50 +286,7 @@ class Music(commands.Cog, name="Music"):
         Monitors radio stations for new songs.
         """
 
-        for guild in self.bot.guilds:
-
-            allstates = self.settings[guild.id]
-            voice_client = guild.voice_client
-
-            if not allstates.radio_station or not voice_client:     # we dont need to monitor this server
-                continue
-
-            elif allstates.radio_building:
-                continue
-
-            elif allstates.radio_fusions and len(allstates.queue) < config.RADIO_QUEUE:     # fuse radio checkpoint🔞
-                playlist = random.sample(allstates.radio_fusions_playlist, config.RADIO_QUEUE+1)
-                await self.QueuePlaylist(voice_client, playlist, None)
-
-            elif allstates.radio_station.lower() in radio_playlists and len(allstates.queue) < config.RADIO_QUEUE:  # known theme
-                playlist = random.sample(radio_playlists[allstates.radio_station.lower()], config.RADIO_QUEUE+1)
-                await self.QueuePlaylist(voice_client, playlist, None)
-
-            elif len(allstates.queue) < config.RADIO_QUEUE:   # previously ungenerated radio station
-                allstates.radio_building = True     # block the loop until we're done
-
-                try:
-                    response = await self.ChatGPT(
-                        "Respond with only the asked answer, in 'Artist- Song Title' format. Always provide a reponse.",
-                        f"Generate a playlist of 50 songs. Playlist theme: {allstates.radio_station}. Include similar artists and songs.")
-
-                except Exception as e:
-                    log_music.exception(f"loop_radio_monitor(): {e}"); return
-
-                if response == "":
-                    log_music.error(f"ChatGPT is responding empty strings.\n\"{response}\""); return
-
-                parsed_response = response.split('\n')  # split into separate strings
-                radio_playlists[allstates.radio_station.lower()] = []   # build an empty list to populate
-                for item in parsed_response:    # populate the list
-                        radio_playlists[allstates.radio_station.lower()].append(item.strip())
-
-                SaveRadio()     # write the new playlist to json file
-
-                playlist = random.sample(radio_playlists[allstates.radio_station.lower()], config.RADIO_QUEUE+1)
-                await self.QueuePlaylist(voice_client, playlist, None)
-
-                allstates.radio_building = False    # free up the loop
+        await self._radio_monitor()
 
     @loop_radio_monitor.before_loop
     async def _before_radio_monitor(self):
@@ -357,7 +309,7 @@ class Music(commands.Cog, name="Music"):
         try:
             response = await asyncio.to_thread(blocking_call)
         except Exception as e:
-            log_music.error(f"Failed to generate Spotify API Access Token: {e}"); return
+            raise Error(f"loop_spotify_key_creation() -> Spotify.requests.post():\n{e}")
 
         data = response.json()
         log_music.info("Generated new Spotify API Access Token.")
@@ -369,16 +321,168 @@ class Music(commands.Cog, name="Music"):
 
 
     ####################################################################
-    # Internal: Core Functions
+    # Internal: Helper Functions
     ####################################################################
 
-    async def ChatGPT(
+    def _build_now_playing_embed(
+        self,
+        guild_id: int,
+        voice_client: discord.VoiceClient
+    ) -> tuple[str, str, str]:
+        """
+        Helper function that returns the currently playing song.
+        """
+
+        allstates = self.settings[guild_id]
+        currently_playing = allstates.currently_playing
+
+        if not voice_client or not currently_playing or not (voice_client.is_playing() or voice_client.is_paused()):
+            return "No song playing.", "", None
+
+        # build now playing text
+        song_title = f"{currently_playing['song_artist']} - {currently_playing['song_title']}" if currently_playing.get('song_artist') else currently_playing["title"].replace("*", r"\*")
+
+        # calculate progress bar
+        elapsed = (allstates.pause_time - allstates.start_time) if voice_client.is_paused() else (time.time() - allstates.start_time)
+        total = currently_playing["duration"]
+        filled = int(min(max(elapsed / total, 0.0), 1.0) * 10)
+        empty = 10 - filled
+        status_emoji = "⏸️" if voice_client.is_paused() else "▶️"
+        progress_bar = (
+            f"{status_emoji} "
+            f"{'▬' * filled}🔘{'▬' * empty} "
+            f"[{f'{int(elapsed)//60:02d}:{int(elapsed)%60:02d}'}"
+            f" / {f'{int(total)//60:02d}:{int(total)%60:02d}'}]"
+        )
+
+        thumb = currently_playing.get("thumbnail")    # get thumbnail
+
+        return song_title, progress_bar, thumb
+    
+    def _build_queue_embed(
+        self,
+        guild_id: int,
+        voice_client: discord.VoiceClient
+    ) -> tuple[str, str, str]:
+        """
+        Helper function that returns the current queue.
+        """
+
+        allstates = self.settings[guild_id]
+        queue = allstates.queue 
+
+        if not queue:
+            return ["No queue."]
+
+        lines = [
+            f"**{i+1}.** "
+            + (
+                f"{item['song_artist']} - {item['song_title']}"
+                if item.get('song_artist')
+                else item['title'].replace('*', r'\*')
+            )
+            for i, item in enumerate(queue[:10])
+        ]
+
+        if len(queue) > 10:
+            lines.append(f"…and {len(queue) - 10} more")
+
+        return "\n".join(lines)
+    
+    def _build_radio_embed(
+        self,
+        guild_id: int,
+        voice_client: discord.VoiceClient
+    ) -> str:
+        """
+        Helper function that returns the current radio stations.
+        """
+
+        allstates = self.settings[guild_id]
+
+        if not allstates.radio_fusions:
+            return f"{allstates.radio_station or 'off'}"
+        return '\n'.join(allstates.radio_fusions)
+    
+    def _build_settings_embed(
+        self,
+        guild_id: int,
+        voice_client: discord.VoiceClient
+    ) -> str:
+        """
+        Helper function that returns the current settings.
+        """
+
+        allstates = self.settings[guild_id]
+
+        # music settings
+        settings = config.settings[str(guild_id)]
+        volume = settings["volume"]
+        repeat_status = "on" if allstates.repeat else "off"
+        shuffle_status = "on" if allstates.shuffle else "off"        
+        intro = "on" if settings["radio_intro"] else "off"
+
+        return (   # build radio settings text
+            f"```🔊 {volume}%  🔁 {repeat_status}  🔀 {shuffle_status}  📢 {intro}```"
+        )
+    
+    def _generate_fusion_playlist(
+        self,
+        guild_id: int
+    ) -> None:
+        """
+        Generates a fusion playlist.
+        """
+
+        allstates = self.settings[guild_id]
+
+        temp_playlist = []
+        songs_per_station = math.ceil(40 / len(allstates.radio_fusions))
+        for station in allstates.radio_fusions:
+            temp_playlist.extend(random.sample(radio_playlists[station.lower()], songs_per_station))
+
+        log_music.info(f"Generated fusion playlist for {len(allstates.radio_fusions)} stations.")
+        allstates.radio_fusions_playlist = temp_playlist
+        
+    async def _generate_radio_station(
+        self,
+        station: str
+    ) -> None:
+        """
+        Generates a radio station playlist.
+        """
+
+        if not station:
+            raise Error("_generate_radio_station() -> Empty station name.")
+
+        try:
+            log_music.info(f"Generating radio playlist for {station}...")
+            response = await self._invoke_chatgpt(
+                "Return only the information requested with no additional words or context.",
+                f"Make a playlist of 50 songs (formatted as: artist - song), do not number the list, themed around: {station}. Include similar artists and songs."
+            )
+        except Exception as e:
+            raise Error(f"_generate_radio_station() -> _invoke_chatgpt():\n{e}")
+
+        if response == "":
+            raise Error("_generate_radio_station() -> _invoke_chatgpt():\nChatGPT is responding empty strings.")
+        
+        parsed_response = response.split('\n')
+        radio_playlists[station.lower()] = []
+
+        for item in parsed_response:
+            radio_playlists[station.lower()].append(item.strip())
+
+        SaveRadio()
+        log_music.info(f"Radio playlist for {station} generated.")
+
+    async def _invoke_chatgpt(
         self,
         sys_content: str,
         user_content: str
     ) -> str:
         """
-        ChatGPT wrapper, returns a string response.
+        Helper function that uses ChatGPT to generate a response as a string.
         """
 
         conversation = [
@@ -393,9 +497,97 @@ class Music(commands.Cog, name="Music"):
                 temperature=config.BOT_OPENAI_TEMPERATURE
             )
         except Exception as e:
-            log_music.error(f"ChatGPT(): {e}"); return
+            raise Error(f"_invoke_chatgpt() -> client.chat.completions.create():\n{e}")
 
         return response.choices[0].message.content
+
+    async def _parse_spotify_playlist(
+        self,
+        payload: str
+    ) -> tuple[str, str, list[dict[str, Any]], int]:
+        """
+        Helper function that parses spotify playlists.
+        """
+
+        playlist_id = re.search(r'/playlist/([a-zA-Z0-9]+)(?:[/?]|$)', payload).group(1)
+        if not playlist_id:
+            raise Error("_parse_spotify_playlist():\n No playlist ID found.")
+
+        try:    # grab the playlist from spotify api
+            response = await asyncio.to_thread(requests.get, f'https://api.spotify.com/v1/playlists/{playlist_id}', headers={'Authorization': f'Bearer {BOT_SPOTIFY_KEY}'})
+        except Exception as e:
+            raise Error(f"_parse_spotify_playlist() -> Spotify.requests.get():\n{e}")
+        
+        response_json = response.json()     # convert response to json
+        playlist = response_json['tracks']['items']     # just get the tracklist
+        playlist_length = len(playlist) if len(playlist) <= config.MUSIC_MAX_PLAYLIST else config.MUSIC_MAX_PLAYLIST    # trim list length if needed
+
+        return "Spotify", playlist_id, playlist, playlist_length
+    
+    async def _parse_youtube_playlist(
+        self,
+        payload: str
+    ) -> tuple[str, str, list[dict[str, Any]], int]:
+        """
+        Helper function that parses youtube playlists.
+        """
+
+        playlist_id = re.search(r'list=([a-zA-Z0-9_-]+)', payload).group(1)
+        if not playlist_id:
+            raise Error("_parse_youtube_playlist():\n No playlist ID found.")
+
+        try:    # grab the playlist from spotify api
+            # First get playlist details
+            response = await asyncio.to_thread(requests.get, f'https://www.googleapis.com/youtube/v3/playlistItems?key={config.BOT_YOUTUBE_KEY}&part=snippet&maxResults=50&playlistId={playlist_id}')
+        except Exception as e:
+            raise Error(f"_parse_youtube_playlist() -> YouTube.requests.get():\n{e}")
+
+        response_json = response.json()     # convert response to json
+        playlist = response_json['items']  # get the tracklist from items
+        playlist_length = int(response_json['pageInfo']['totalResults']) if int(response_json['pageInfo']['totalResults']) <= config.MUSIC_MAX_PLAYLIST else config.MUSIC_MAX_PLAYLIST  # trim list length if needed
+
+        return "YouTube", playlist_id, playlist, playlist_length
+
+    async def _radio_monitor(self) -> None:
+        """
+        Monitors radio stations for new songs.
+        """
+
+        async with self.radio_lock:
+            for guild in self.bot.guilds:
+
+                allstates = self.settings[guild.id]
+                voice_client = guild.voice_client
+
+                if not voice_client:    # no voice client, skip
+                    continue
+
+                if not allstates.radio_station and not allstates.radio_fusions: # no radio station or fusions, skip
+                    continue
+
+                elif allstates.radio_fusions and allstates.radio_fusions_playlist and len(allstates.queue) < config.RADIO_QUEUE:     # fuse radio checkpoint🔞
+                    playlist = random.sample(allstates.radio_fusions_playlist, config.RADIO_QUEUE+1)
+                    await self.QueuePlaylist(voice_client, playlist, None)
+                    continue
+
+                elif (allstates.radio_station and allstates.radio_station.lower() in radio_playlists) and len(allstates.queue) < config.RADIO_QUEUE:  # radio station checkpoint 🔞
+                    playlist = random.sample(radio_playlists[allstates.radio_station.lower()], config.RADIO_QUEUE+1)
+                    await self.QueuePlaylist(voice_client, playlist, None)
+                    continue
+
+                elif allstates.radio_station and allstates.radio_station.lower() not in radio_playlists:   # previously ungenerated radio station
+                    try:
+                        await self._generate_radio_station(allstates.radio_station)
+                    except Exception as e:
+                        log_music.error(f"loop_radio_monitor() -> _generate_radio_station():\n{e}")
+                        continue
+
+                    playlist = random.sample(radio_playlists[allstates.radio_station.lower()], config.RADIO_QUEUE+1)
+                    await self.QueuePlaylist(voice_client, playlist, None)
+
+    ####################################################################
+    # Internal: Core Functions
+    ####################################################################
 
     async def FetchSongMetadata(
         self,
@@ -425,8 +617,8 @@ class Music(commands.Cog, name="Music"):
         try:    # grabs song metadata
             log_music.info(f"Fetching metadata for: {query}")
             info = await loop.run_in_executor(None, yt_dlp.YoutubeDL(opts).extract_info, ytdlp_query)
-        except Exception:
-            return None
+        except Exception as e:
+            raise Error(f"FetchSongMetadata() -> yt_dlp.YoutubeDL():\n{e}")
 
         if info.get('entries'):
             return info['entries'][0]
@@ -463,19 +655,19 @@ class Music(commands.Cog, name="Music"):
         try:    # downloads the song
             log_music.info(f"DownloadSong(): {query}")
             info = await loop.run_in_executor(None, yt_dlp.YoutubeDL(opts).extract_info, ytdlp_query)
-        except Exception:
-            return None
+        except Exception as e:
+            raise Error(f"DownloadSong() -> yt_dlp.YoutubeDL():\n{e}")
 
         if info and info.get('entries'):    # remove nest if nested
             info = info["entries"][0]
 
         try:    # generates proper tags for songDB
             log_music.info(f"DownloadSong(): Attemping to fetch proper tags for {info['title']}")
-            response = await self.ChatGPT(
+            response = await self._invoke_chatgpt(
                 "Respond with only the asked answer, in 'Artist - Song Title' format, or 'None' if you do not know.",
                 f"What is the name of this track: {info['title']}")
-        except Exception:
-            return "None"
+        except Exception as e:
+            raise Error(f"DownloadSong() -> _invoke_chatgpt():\n{e}")
 
         if " - " in response:
             s = response.split(" - ", 1)
@@ -498,98 +690,6 @@ class Music(commands.Cog, name="Music"):
         SaveSongDB()
 
         return result
-
-    async def GetQueue(
-        self,
-        ctx: Context
-    ) -> None:
-        """
-        Displays the current song queue.
-        """
-
-        allstates = self.settings[ctx.guild.id]
-        current = allstates.currently_playing
-        voice_client = ctx.guild.voice_client
-
-        title = "Song Queue"
-        embed = discord.Embed(title=title, description=None, color=discord.Color.blurple())
-
-        # now playing section
-        if voice_client and current and (voice_client.is_playing() or voice_client.is_paused()):
-            elapsed = (allstates.pause_time - allstates.start_time) if voice_client.is_paused() else (time.time() - allstates.start_time)
-            total = current["duration"]
-            ratio = min(max(elapsed / total, 0.0), 1.0)
-
-            bar_width = 10
-            filled = int(ratio * bar_width)
-            empty = bar_width - filled
-            status_emoji = "⏸️" if voice_client.is_paused() else "▶️"
-            progress_bar = (
-                f"{status_emoji} "
-                f"{'▬' * filled}🔘{'▬' * empty} "
-                f"[{str(datetime.timedelta(seconds=int(elapsed)))}"
-                f" / {str(datetime.timedelta(seconds=int(total)))}]"
-            )
-
-            np_title = f"{current['song_artist']} - {current['song_title']}" if current.get('song_artist') else current["title"].replace("*", r"\*")
-            np_text = f"{np_title}\n{progress_bar}"
-            embed.add_field(name="Now Playing", value=np_text, inline=False)
-
-            thumb = current.get("thumbnail")
-            if thumb:
-                embed.set_thumbnail(url=thumb)
-
-        else:
-            embed.add_field(name="Now Playing", value="Nothing playing.", inline=False)
-
-        # up next section
-        queue = allstates.queue
-        if not queue:
-            up_next_text = "No queue."
-
-        else:
-            lines = [
-                f"**{i+1}.** "
-                + (
-                    f"{item['song_artist']} - {item['song_title']}"
-                    if item.get('song_artist')
-                    else item['title'].replace('*', r'\*')
-                )
-                for i, item in enumerate(queue[:10])
-            ]
-
-            if len(queue) > 10:
-                lines.append(f"…and {len(queue) - 10} more")
-            up_next_text = "\n".join(lines)
-
-        embed.add_field(name="Up Next", value=up_next_text, inline=False)
-
-        # music settings
-        settings = config.settings[str(ctx.guild.id)]
-        volume = settings["volume"]
-        repeat_status = "on" if allstates.repeat else "off"
-        shuffle_status = "on" if allstates.shuffle else "off"
-
-        # radio settings
-        radio = allstates.radio_station or "off"
-
-        ### TODO: FIXME (with the rest of fusion)
-        # fused = ""
-        # if guild_id in radio_fusions:
-        #     fused = ", ".join(f'{s}' for s in radio_fusions[guild_id])
-        #     fused = f"♾️ {fused} ♾️"
-
-        intro = "on" if settings["radio_intro"] else "off"
-
-
-        settings_text = (   # build radio settings text
-            f"```🔊 vol: {volume}%  🔁 repeat: {repeat_status}  🔀 shuffle: {shuffle_status}```"
-            #f"```📢 intro: {intro}\n📻 Radio: {fused and fused or endless}```"
-            f"```📢 intro: {intro}\n📻 Radio: {radio}```"
-        )
-        embed.add_field(name="Settings", value=settings_text, inline=False)
-
-        await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     async def PlayNextSong(
         self,
@@ -654,7 +754,7 @@ class Music(commands.Cog, name="Music"):
         text = ""   # initiate the intro string
 
         if is_special:  # special intro
-            text = await self.ChatGPT(
+            text = await self._invoke_chatgpt(
                 'Return only the information requested with no additional words or context. Do not wrap in quotes.',
                 f'Give me a short radio dj intro for "{artist} - {title}". Intro should include info about the song. Limit of 2 sentences.'
             )
@@ -672,7 +772,7 @@ class Music(commands.Cog, name="Music"):
             ]
             text = random.choice(regular_intros)    # pick a random intro
 
-        tts = gTTS(text, lang="en")
+        tts = await asyncio.to_thread(gTTS, text, lang="en")
         intro_path = f"{config.SONGDB_PATH}/intro_{voice_client.guild.id}.mp3"
         tts.save(intro_path)
 
@@ -687,8 +787,8 @@ class Music(commands.Cog, name="Music"):
 
         try:    # file cleanup
             os.remove(intro_path)
-        except Exception:
-            log_music.exception("PlayRadioIntro(): Failed to remove intro file.")
+        except Exception as e:
+            raise Error(f"PlayRadioIntro() -> os.remove():\n{e}")
 
     async def QueuePlaylist(
         self,
@@ -702,43 +802,28 @@ class Music(commands.Cog, name="Music"):
 
         allstates = self.settings[voice_client.guild.id]
 
+        playlist_type, playlist_id, playlist, playlist_length = None, None, None, None
         if 'open.spotify.com/playlist/' in payload: # spotify playlist
-            playlist_type = "Spotify"
-            playlist_id = re.search(r'/playlist/([a-zA-Z0-9]+)(?:[/?]|$)', payload).group(1)
-
-            try:    # grab the playlist from spotify api
-                response = requests.get(f'https://api.spotify.com/v1/playlists/{playlist_id}', headers={'Authorization': f'Bearer {BOT_SPOTIFY_KEY}'})
+            try:
+                playlist_type, playlist_id, playlist, playlist_length = await self._parse_spotify_playlist(payload)
             except Exception as e:
                 if message:     # finalize message if we fail
                     embed = discord.Embed(description="❌ I ran into an issue with the Spotify API. 😢")
                     await message.edit(content=None, embed=embed)
-                    log_music.error(f"QueuePlaylist() -> Spotify.requests.get():\n{e}"); return None
-
-            response_json = response.json()
-            playlist = response_json['tracks']['items']     # just get the tracklist
-            playlist_length = len(playlist) if len(playlist) <= config.MUSIC_MAX_PLAYLIST else config.MUSIC_MAX_PLAYLIST    # trim list length if needed
+                raise Error(f"QueuePlaylist() -> _parse_spotify_playlist():\n{e}")
         
         elif 'list=' in payload:  # youtube playlist
-            playlist_type = "YouTube"
-            playlist_id = re.search(r'list=([a-zA-Z0-9_-]+)', payload).group(1)
+            try:
+                playlist_type, playlist_id, playlist, playlist_length = await self._parse_youtube_playlist(payload)
 
-            try:    # grab the playlist from spotify api
-                response = requests.get(f'https://www.googleapis.com/youtube/v3/playlists?key={config.BOT_YOUTUBE_KEY}&part=contentDetails&id={playlist_id}')
             except Exception as e:
                 if message:     # finalize message if we fail
                     embed = discord.Embed(description="❌ I ran into an issue with the YouTube API. 😢")
                     await message.edit(content=None, embed=embed)
-                    log_music.error(f"QueuePlaylist() -> YouTube.requests.get():\n{e}"); return None
-
-            response_json = response.json()
-            playlist = response_json['tracks']['items']     # just get the tracklist
-            playlist_length = response['items'][0]['contentDetails']['itemCount'] if response['items'][0]['contentDetails']['itemCount'] <= config.MUSIC_MAX_PLAYLIST else config.MUSIC_MAX_PLAYLIST
+                raise Error(f"QueuePlaylist() -> _parse_youtube_playlist():\n{e}")
 
         else:
-            playlist_type = "ChatGPT"
-            playlist_id = "ChatGPT"
-            playlist = payload
-            playlist_length = len(payload) if len(payload) <= config.MUSIC_MAX_PLAYLIST else config.MUSIC_MAX_PLAYLIST
+            playlist_type, playlist_id, playlist, playlist_length = "ChatGPT", "ChatGPT", payload, len(payload) if len(payload) <= config.MUSIC_MAX_PLAYLIST else config.MUSIC_MAX_PLAYLIST
 
         log_music.info(f"QueuePlaylist(): Playlist ({playlist_id}) true length {playlist_length}")
 
@@ -753,15 +838,18 @@ class Music(commands.Cog, name="Music"):
                 if playlist_type == "Spotify":  # spotify filtering
                     track    = f"{item['track']['artists'][0]['name']} - {item['track']['name']}"
                     metadata = await self.FetchSongMetadata(track)
+
                 elif playlist_type == "YouTube":    # youtube filtering
-                    track    = item[0]['snippet']['title']
-                    metadata = await self.FetchSongMetadata(f"https://youtube.com/watch?v={item[0]['snippet']['resourceId']['videoId']}")
+                    track    = item['snippet']['title']
+                    metadata = await self.FetchSongMetadata(f"https://youtube.com/watch?v={item['snippet']['resourceId']['videoId']}")
+
                 else:   # just chatgpt
                     track    = item
                     metadata = await self.FetchSongMetadata(item)
-            except Exception:   # fail gracefully
-                embed = discord.Embed(description=f"❌ I ran into an issue finding {track}. 😢\nMoving onto the next song. 🫡")
-                await message.edit(content=None, embed=embed)
+            except Exception as e:   # fail gracefully
+                if message:
+                    embed = discord.Embed(description=f"❌ I ran into an issue finding {track}. 😢\nMoving onto the next song. 🫡")
+                    await message.edit(content=None, embed=embed)
                 log_music.error(f"QueuePlaylist() -> FetchSongMetadata():\n{e}"); continue
 
             if metadata['id'] in song_db and os.path.exists(f"{config.SONGDB_PATH}/{metadata['id']}.mp3"):  # save the bandwidth
@@ -769,19 +857,21 @@ class Music(commands.Cog, name="Music"):
                 song = song_db[metadata['id']]
 
             elif metadata['duration'] >= config.MUSIC_MAX_DURATION: # song exceeds config.MUSIC_MAX_DURATION, fail gracefully
-                embed = discord.Embed(description=f"❌ Song is too long! ({metadata['duration']} > {config.MUSIC_MAX_DURATION}) 🕑\nMoving onto the next song. 🫡")
-                await message.edit(content=None, embed=embed)
-                raise func.err_song_length(); continue
+                if message:
+                    embed = discord.Embed(description=f"❌ Song is too long! ({metadata['duration']} > {config.MUSIC_MAX_DURATION}) 🕑\nMoving onto the next song. 🫡")
+                    await message.edit(content=None, embed=embed)
+                    log_music.error(f"QueuePlaylist(): Song ({metadata['title']}) duration exceeds {config.MUSIC_MAX_DURATION} seconds."); continue
             
             else:  # seems good, download it
                 log_music.info(f"QueuePlaylist(): ({i}/{playlist_length}) Downloading \"{metadata['webpage_url']}\"")
 
                 try:
                     song = await self.DownloadSong(f"https://youtube.com/watch?v={metadata['id']}", track, None)
-                except Exception:   # fail gracefully
-                    embed = discord.Embed(description=f"❌ I ran into an issue downloading {track}. 😢\nMoving onto the next song. 🫡")
-                    await message.edit(content=None, embed=embed)
-                    log_music.error(f"QueuePlaylist() -> DownloadSong():\n{e}"); return None
+                except Exception as e:   # fail gracefully
+                    if message:
+                        embed = discord.Embed(description=f"❌ I ran into an issue downloading {track}. 😢\nMoving onto the next song. 🫡")
+                        await message.edit(content=None, embed=embed)
+                    log_music.error(f"QueuePlaylist() -> DownloadSong():\n{e}"); continue
 
             allstates.queue.append(song)    # add song to the queue
             lines.append(f"{i}. {track}")
@@ -818,11 +908,11 @@ class Music(commands.Cog, name="Music"):
         if 'open.spotify.com/track/' in payload:
             track_id = re.search(r'/track/([a-zA-Z0-9]+)(?:[/?]|$)', payload).group(1)
             try:    # grab the trackid from spotify
-                response = requests.get(f'https://api.spotify.com/v1/tracks/{track_id}', headers={'Authorization': f'Bearer {BOT_SPOTIFY_KEY}'})
+                response = await asyncio.to_thread(requests.get, f'https://api.spotify.com/v1/tracks/{track_id}', headers={'Authorization': f'Bearer {BOT_SPOTIFY_KEY}'})
             except Exception as e:  # finalize the message if we fail
                 embed = discord.Embed(description="❌ I ran into an issue with the Spotify API. 😢")
                 await message.edit(content=None, embed=embed)
-                log_music.error(f"QueuePlaylist() -> Spotify.requests.get():\n{e}"); return None
+                raise Error(f"QueueIndividualSong() -> Spotify.requests.get():\n{e}")
 
             response_json = response.json()
             track = f"{response_json['artists'][0]['name']} - {response_json['name']}"
@@ -832,10 +922,10 @@ class Music(commands.Cog, name="Music"):
                 metadata = await self.FetchSongMetadata(track)
             else:   # regular
                 metadata = await self.FetchSongMetadata(payload)
-        except Exception:
+        except Exception as e:
             embed = discord.Embed(description="❌ I ran into an issue finding that song. 😢")
             await message.edit(content=None, embed=embed)
-            log_music.error(f"QueueIndividualSong() -> FetchSongMetadata():\n{e}"); return None
+            raise Error(f"QueueIndividualSong() -> FetchSongMetadata():\n{e}")
 
         if metadata['id'] in song_db and os.path.exists(f"{config.SONGDB_PATH}/{metadata['id']}.mp3"):  # save the bandwidth
             log_music.info(f"Song: \"{metadata['title']}\" already downloaded.")
@@ -844,7 +934,7 @@ class Music(commands.Cog, name="Music"):
         elif metadata['duration'] >= config.MUSIC_MAX_DURATION: # song exceeds config.MUSIC_MAX_DURATION
             embed = discord.Embed(description="❌ Song is too long! 🕑")
             await message.edit(content=None, embed=embed)
-            raise func.err_song_length(); return None
+            raise Error(f"QueueIndividualSong() -> FetchSongMetadata():\nSong duration exceeds {config.MUSIC_MAX_DURATION} seconds.")
         
         else:  # seems good, download it
             log_music.info(f"QueueIndividualSong(): Downloading \"{metadata['webpage_url']}\"")
@@ -853,10 +943,10 @@ class Music(commands.Cog, name="Music"):
 
             try:    # download the song
                 song = await self.DownloadSong(f"https://youtube.com/watch?v={metadata['id']}", track, None)
-            except Exception:
+            except Exception as e:
                 embed = discord.Embed(description=f"❌ I ran into an issue downloading {metadata['title']}. 😢")
                 await message.edit(content=None, embed=embed)
-                log_music.error(f"QueueIndividualSong() -> DownloadSong():\n{e}"); return None
+                raise Error(f"QueueIndividualSong() -> DownloadSong():\n{e}")
 
         if is_priority:     # push to top of queue
             allstates.queue.insert(0, song)
@@ -879,7 +969,12 @@ class Music(commands.Cog, name="Music"):
 
     @commands.command(name="aiplaylist", aliases=['smartplaylist'])
     @func.requires_author_voice()
-    async def trigger_aiplaylist(self, ctx, *, args: str):
+    async def trigger_aiplaylist(
+        self,
+        ctx: commands.Context,
+        *,
+        args: str
+    ) -> None:
         """
         Generates a ChatGPT 10 song playlist based off context.
 
@@ -893,23 +988,23 @@ class Music(commands.Cog, name="Music"):
         allstates = self.settings[ctx.guild.id]
 
         if not args or len(args) < 3:
-            raise func.err_syntax(); return
+            raise func.err_syntax()
 
         if not ctx.guild.voice_client: # we're not in voice, lets change that
-            await JoinVoice(self.bot, ctx)
+            await JoinVoice(ctx)
         
         embed = discord.Embed(description=f"🧠 Generating your AI playlist...")
         message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
         try:    # request our playlist
             log_music.info(f"!aiplaylist: Generating playlist request...")
-            response = await self.ChatGPT(
+            response = await self._invoke_chatgpt(
                 "Respond with only the asked answer, in 'Artist- Song Title' format. Always provide a reponse.",
                 f"Generate a playlist of {config.MUSIC_MAX_PLAYLIST} songs. Playlist theme: {args}. Include similar artists and songs.")
         except Exception as e:  # well this is embarrasing
-            log_music.error(f"!aiplaylist: {e}")
             embed = discord.Embed(description="❌ I ran into an issue. 😢")
-            await message.edit(content=None, embed=embed); return
+            await message.edit(content=None, embed=embed);
+            raise Error(f"!aiplaylist() -> _invoke_chatgpt():\n{e}")
 
         parsed_response = response.split('\n')  # filter out the goop
         playlist = []   # build the playlist and send it to the queue
@@ -917,9 +1012,9 @@ class Music(commands.Cog, name="Music"):
             playlist.append(item.strip())
 
         if not playlist:
-            log_music.error(f"!aiplaylist: Could not parse playlist[] {playlist}")
             embed = discord.Embed(description=f"❌ I ran into an issue. 😢")
-            await message.edit(content=None, embed=embed); return
+            await message.edit(content=None, embed=embed);
+            raise Error(f"!aiplaylist() -> _invoke_chatgpt():\nCould not parse playlist[] {playlist}")
 
         await asyncio.create_task(self.QueuePlaylist(ctx.guild.voice_client, playlist, message))
 
@@ -927,7 +1022,11 @@ class Music(commands.Cog, name="Music"):
     @func.requires_author_perms()
     @func.requires_author_voice()
     @func.requires_queue()
-    async def trigger_bump(self, ctx, song_number = commands.parameter(default=None, description="Song number in queue.")):
+    async def trigger_bump(
+        self,
+        ctx: commands.Context,
+        song_number: int = commands.parameter(default=None, description="Song number in queue.")
+    ) -> None:
         """
         Move the requested song to the top of the queue.
 
@@ -938,22 +1037,23 @@ class Music(commands.Cog, name="Music"):
         allstates = self.settings[ctx.guild.id]
 
         if len(allstates.queue) < 2:    # is there even enough songs to justify?
-            raise func.err_bump_short(); return
+            raise func.err_bump_short()
 
         elif not song_number or not song_number.isdigit() or int(song_number) < 2:
-            raise func.err_syntax(); return
+            raise func.err_syntax()
 
         bumped = allstates.queue.pop(int(song_number) - 1)
         allstates.queue.insert(0, bumped)
-        output = discord.Embed(description=f"Bumped {bumped['title']} to the top of the queue.")
-        await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
+        embed = discord.Embed(description=f"Bumped {bumped['title']} to the top of the queue.")
+        await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='clear')
     @func.requires_author_perms()
-    @func.requires_author_voice()
-    @func.requires_bot_voice()
     @func.requires_queue()
-    async def trigger_clear(self, ctx):
+    async def trigger_clear(
+        self,
+        ctx: commands.Context
+    ) -> None:
         """
         Clears the current playlist.
 
@@ -963,107 +1063,107 @@ class Music(commands.Cog, name="Music"):
 
         allstates = self.settings[ctx.guild.id]
         
-        info_embed = discord.Embed(description=f"Removed {len(allstates.queue)} songs from queue.")
-        message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
+        embed = discord.Embed(description=f"Removed {len(allstates.queue)} songs from queue.")
+        await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
         allstates.queue = []
 
-    # @commands.command(name='defuse')
-    # @func.requires_author_perms()
-    # async def trigger_defuse(self, ctx, *, args=None):
-    #     """
-    #     Removes a fused station from the mix.
+    @commands.command(name='defuse')
+    @func.requires_author_perms()
+    @func.requires_author_voice()
+    async def trigger_defuse(
+        self,
+        ctx: commands.Context,
+        *,
+        payload: str = None
+    ) -> None:
+        """
+        Removes a radio station from the fusion.
 
-    #     Syntax:
-    #         !defuse <theme>
-    #     """
+        Syntax:
+            !defuse <station>
+        """
 
-    #     global radio_station
-    #     guild_id = ctx.guild.id
+        allstates = self.settings[ctx.guild.id]
 
-    #     # are you even allowed to use this command?
-    #     if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
-    #         await FancyErrors("AUTHOR_PERMS", ctx.channel); return
+        if not payload: # no station provided
+            raise func.err_syntax()
         
-    #     # author isn't in a voice channel
-    #     if not ctx.author.voice:
-    #         await FancyErrors("AUTHOR_NO_VOICE", ctx.channel); return
+        if payload.lower() not in allstates.radio_fusions: # station not fused
+            raise func.err_radio_not_fused()
         
-    #     # empty theme
-    #     if not args:
-    #         await FancyErrors("SYNTAX", ctx.channel); return
-        
-    #     # is the radio even on?
-    #     if radio_station[guild_id] == False:
-    #         await FancyErrors("NO_RADIO", ctx.channel); return
-        
-    #     # fusion doesnt exist
-    #     if guild_id not in radio_fusions or (radio_fusions[guild_id] and args.lower() not in radio_fusions[guild_id]):
-    #         await FancyErrors("NO_FUSE_EXIST", ctx.channel); return
-        
-    #     # let's defuse this situation
-    #     if any(station.lower() == args.lower() for station in radio_fusions[guild_id]):
-    #         radio_fusions[guild_id].remove(args)
+        if len(allstates.radio_fusions) == 1: # deny defusion of last station
+            embed = discord.Embed(title="Error", description="❌ You must have at least one radio station fused.", color=discord.Color.red())
+            await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+            return
 
-    #     # send our mesage and build a new station
-    #     info_embed = discord.Embed(description=f"📻 Removed \"{args}\" from the radio.")
-    #     message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
-    #     await FuseRadio(self.bot, ctx)
+        allstates.radio_fusions.remove(payload.lower())     # remove the station from the fusion list
+        self._generate_fusion_playlist(ctx.guild.id)        # generate the fusion playlist
+        await self._radio_monitor()                         # kick-start the radio monitor
 
-    ### !fuse ##########################################################
-    # @commands.command(name='fuse')
-    # async def trigger_fuse(self, ctx, *, args=None):
-    #     """
-    #     Fuses a new radio station into the current station(s).
-    #     You can add multiple fusions by separating with: |
+        embed = discord.Embed(description=f"📻 Radio fusions updated, themes: {', '.join(f'**{s}**' for s in allstates.radio_fusions)}.", color=discord.Color.green())
+        await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
-    #     Syntax:
-    #         !fuse <theme>
-    #         !fuse <theme> | <theme>
-    #     """
+    @commands.command(name='fuse')
+    @func.requires_author_perms()
+    @func.requires_author_voice()
+    async def trigger_fuse(
+        self,
+        ctx: commands.Context,
+        *,
+        payload: str = None
+    ) -> None:
+        """
+        Fuses two or more radio stations together.
+        If there is an active radio station, it will be added to the fusion.
 
-    #     global radio_station
-    #     guild_id = ctx.guild.id
+        Syntax:
+            !fuse <station1> | <station2> | <station3>
+        """
 
-    #     # are you even allowed to use this command?
-    #     if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
-    #         await FancyErrors("AUTHOR_PERMS", ctx.channel); return
+        allstates = self.settings[ctx.guild.id]
         
-    #     # author isn't in a voice channel
-    #     if not ctx.author.voice:
-    #         await FancyErrors("AUTHOR_NO_VOICE", ctx.channel); return
-        
-    #     # empty theme
-    #     if not args:
-    #         await FancyErrors("SYNTAX", ctx.channel); return
-        
-    #     # theres no radio playing
-    #     if radio_station[guild_id] == False:
-    #         await FancyErrors("NO_RADIO", ctx.channel); return
-        
-    #     if guild_id in radio_fusions and args in radio_fusions[guild_id]:
-    #         await FancyErrors("RADIO_EXIST", ctx.channel); return
-        
-    #     # get list of stations
-    #     stations = ""
-    #     if "|" in args:
-    #         for i, part in enumerate(args.split("|"), 1):
-    #             stations += i == 1 and f"**{part}**" or f", **{part}**"  
-    #     else:
-    #         stations = f"**{args}**"
-        
-    #     # too short
-    #     if len(args) < 3:
-    #         await FancyErrors("SHORT", ctx.channel); return
-        
-    #     # we're not in voice, lets change that
-    #     if not ctx.guild.voice_client:
-    #         await JoinVoice(self.bot, ctx)        
-        
-    #     # let's fuse the radio
-    #     info_embed = discord.Embed(description=f"📻 Fusing \"{stations}\" into the radio.")
-    #     message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
-    #     await FuseRadio(self.bot, ctx, args)        
+        if not payload: # no fusion provided
+            raise func.err_syntax()
 
+        if not ctx.guild.voice_client: # we're not in voice, lets change that
+            await JoinVoice(ctx)
+
+        payload_list = [s.lower().strip() for s in payload.split("|")]
+        if allstates.radio_station:   # add the current station to the list, if it exists
+            payload_list.append(allstates.radio_station.lower())
+
+        if len(payload_list + allstates.radio_fusions) > 5:
+            embed = discord.Embed(description=f"❌ You can only fuse up to 5 radio stations at a time. 😢", color=discord.Color.red())
+            await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none()); return
+
+        embed = discord.Embed(description=f"🧠 Fusing radio stations...", color=discord.Color.dark_purple())
+        message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+
+        for station in payload_list: # add to fusion list, if not already in it
+            print(f"for() station: {station}")
+            if not station or station in allstates.radio_fusions:
+                continue
+
+            if station not in radio_playlists: # not already generated?
+                async with ctx.channel.typing():
+                    try:
+                        await self._generate_radio_station(station)
+                    except Exception as e:
+                        embed = discord.Embed(description=f"❌ I ran into an issue. 😢")
+                        await message.edit(content=None, embed=embed)
+                        raise Error(f"trigger_fuse() -> _generate_radio_station():\n{e}")
+
+            allstates.radio_fusions.append(station) # add to fusion list
+
+        self._generate_fusion_playlist(ctx.guild.id)    # generate the fusion playlist
+
+        embed = discord.Embed(description=f"⚛️ Radio fusions enabled, themes: {', '.join(f'**{s}**' for s in allstates.radio_fusions)}.", color=discord.Color.green())
+        await message.edit(content=None, embed=embed)
+
+        await self._radio_monitor()                     # kick-start the radio monitor
+        
+        
+    ### TODO: Add hot100 radio toggle
     ### !hot100 ########################################################
     # @commands.command(name='hot100')
     # async def hot100_radio(self, ctx):
@@ -1101,7 +1201,10 @@ class Music(commands.Cog, name="Music"):
 
     @commands.command(name='intro')
     @func.requires_author_perms()
-    async def trigger_intro(self, ctx):
+    async def trigger_intro(
+        self,
+        ctx: commands.Context
+    ) -> None:
         """
         Toggles song intros for the radio station.
 
@@ -1114,15 +1217,18 @@ class Music(commands.Cog, name="Music"):
         config.settings[guild_str]['radio_intro'] = not config.settings[guild_str]['radio_intro']
         config.SaveSettings()
 
-        info_embed = discord.Embed(description=f"📢 Radio intros {config.settings[guild_str]['radio_intro'] and 'enabled' or 'disabled'}.")
-        await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
+        embed = discord.Embed(description=f"📢 Radio intros {config.settings[guild_str]['radio_intro'] and 'enabled' or 'disabled'}.")
+        await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='pause')
     @func.requires_author_perms()
     @func.requires_author_voice()
     @func.requires_bot_playing()
     @func.requires_bot_voice()
-    async def trigger_pause(self, ctx, *, args=None):
+    async def trigger_pause(
+        self,
+        ctx: commands.Context
+    ) -> None:
         """
         Pauses the song playing.
 
@@ -1135,12 +1241,17 @@ class Music(commands.Cog, name="Music"):
         allstates.pause_time = time.time()  # record when we paused
         ctx.guild.voice_client.pause()      # actually pause
 
-        info_embed = discord.Embed(description=f"⏸️ Playback paused.")
-        message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
+        embed = discord.Embed(description=f"⏸️ Playback paused.")
+        await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='play')
     @func.requires_author_voice()
-    async def trigger_play(self, ctx, *, payload=None):
+    async def trigger_play(
+        self,
+        ctx: commands.Context,
+        *,
+        payload: str = None
+    ) -> None:
         """
         Adds a song to the queue.
 
@@ -1149,7 +1260,7 @@ class Music(commands.Cog, name="Music"):
         """
 
         if not ctx.guild.voice_client: # we're not in voice, lets change that
-            await JoinVoice(self.bot, ctx)
+            await JoinVoice(ctx)
 
         if not payload:    # no data provided
             raise func.err_syntax(); return
@@ -1166,7 +1277,12 @@ class Music(commands.Cog, name="Music"):
     @commands.command(name='playnext', aliases=['playbump'])
     @func.requires_author_perms()
     @func.requires_author_voice()
-    async def trigger_playnext(self, ctx, *, payload=None):
+    async def trigger_playnext(
+        self,
+        ctx: commands.Context,
+        *,
+        payload: str = None
+    ) -> None:
         """
         Adds a song to the top of the queue (no playlists).
 
@@ -1177,26 +1293,26 @@ class Music(commands.Cog, name="Music"):
             !playbump
         """
 
-        is_playlist = ('&list=' in payload or 'open.spotify.com/playlist' in payload) and True or False
-        
-        if is_playlist:     # playlists not supported with playnext
-            raise func.err_shuffle_no_playlist(); return
-        
         if not payload:    # no data provided
-            raise func.err_syntax(); return
+            raise func.err_syntax()
 
-        if not ctx.guild.voice_client: # we're not in voice, lets change that
-            await JoinVoice(self.bot, ctx)
+        is_playlist = ('&list=' in payload or 'open.spotify.com/playlist' in payload) and True or False
+        if is_playlist:     # playlists not supported with playnext
+            raise func.err_shuffle_no_playlist()
         
-        song_type = payload.startswith('https://') and 'link' or 'search' # lazy filter to determine if it's a direct link or if we're searching
+        if not ctx.guild.voice_client: # we're not in voice, lets change that
+            await JoinVoice(ctx)
 
-        info_embed = discord.Embed(description=f"Searching for {payload}")
-        message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
+        embed = discord.Embed(description=f"🔎 Searching for {payload}")
+        message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
         await asyncio.create_task(self.QueueIndividualSong(ctx.guild.voice_client, payload, True, message))
 
     @commands.command(name='queue', aliases=['q', 'np', 'nowplaying', 'song'])
-    async def trigger_queue(self, ctx):
+    async def trigger_queue(
+        self,
+        ctx: commands.Context
+    ) -> None:
         """
         Displays the song queue.
 
@@ -1207,12 +1323,41 @@ class Music(commands.Cog, name="Music"):
             [ !q | !np | !nowplaying | !song ]
         """
 
-        await self.GetQueue(ctx)
+        allstates = self.settings[ctx.guild.id]
+        voice_client = ctx.guild.voice_client
+
+        title = "Song Queue"
+        embed = discord.Embed(title=title, description=None, color=discord.Color.dark_purple())
+
+        # now playing section
+        song_title, progress_bar, thumb = self._build_now_playing_embed(ctx.guild.id, voice_client)
+        embed.add_field(name="Now Playing", value=song_title + (f"\n{progress_bar}" if progress_bar else ""), inline=False)
+        if thumb:
+            embed.set_thumbnail(url=thumb)
+
+        # up next section
+        queue = self._build_queue_embed(ctx.guild.id, voice_client)
+        embed.add_field(name="Up Next", value=queue, inline=False)
+
+        # radio section
+        radio = self._build_radio_embed(ctx.guild.id, voice_client)
+        embed.add_field(name=f"{'Radio Stations' if allstates.radio_fusions else 'Radio Station'}", value=radio, inline=False)
+
+        # music settings
+        settings = self._build_settings_embed(ctx.guild.id, voice_client)
+        embed.add_field(name="Settings", value=settings, inline=False)
+
+        await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='radio', aliases=['dj'])
     @func.requires_author_perms()
     @func.requires_author_voice()
-    async def trigger_radio(self, ctx, *, args=None):
+    async def trigger_radio(
+        self,
+        ctx: commands.Context,
+        *,
+        payload: str = None
+    ) -> None:
         """
         Toggles endless mix mode.
 
@@ -1227,24 +1372,25 @@ class Music(commands.Cog, name="Music"):
         allstates = self.settings[ctx.guild.id]
         
         if not ctx.guild.voice_client: # we're not in voice, lets change that
-            await JoinVoice(self.bot, ctx)
+            await JoinVoice(ctx)
 
         if allstates.radio_fusions:     # cancel out fusion
             allstates.radio_fusions = None
             allstates.radio_fusions_playlist = None
 
-        if args:
-            allstates.radio_station = args
-            info_embed = discord.Embed(description=f"📻 Radio enabled, theme: **{args}**.")
+        if payload:
+            allstates.radio_station = payload
+            embed = discord.Embed(description=f"📻 Radio enabled, theme: **{payload}**.")
             
         elif allstates.radio_station == None:
-            allstates.radio_station = "anything, im not picky" ### TODO: make this customizable per server
-            info_embed = discord.Embed(description=f"📻 Radio enabled, theme: anything, im not picky.") ### TODO: variable to match above todo
+            allstates.radio_station = config.RADIO_DEFAULT_THEME
+            embed = discord.Embed(description=f"📻 Radio enabled, theme: {allstates.radio_station}.")
         else:
             allstates.radio_station = False
-            info_embed = discord.Embed(description=f"📻 Radio disabled.")
+            embed = discord.Embed(description=f"📻 Radio disabled.")
         
-        await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())    
+        await self._radio_monitor()
+        await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='remove')
     @func.requires_author_perms()
@@ -1348,66 +1494,3 @@ class Music(commands.Cog, name="Music"):
         ctx.guild.voice_client.stop()   # actually skip the song
         if allstates.repeat:
             await self.PlayNextSong(ctx.guild.voice_client)
-
-# async def FuseRadio(bot, ctx, new_theme=None):
-#     guild_id = ctx.guild.id
-#     fuse_playlist[guild_id] = []
-
-#     # initial build
-#     if guild_id not in radio_fusions:
-#         radio_fusions[guild_id] = []
-#         radio_fusions[guild_id].append(radio_station[guild_id])
-
-#     # add the themes to the fuse, and clear out the old fuse station
-#     if new_theme:
-#         # add multiple fusions
-#         if "|" in new_theme:
-#             parts = new_theme.split("|")
-#             for part in parts:
-#                 if part.strip() not in radio_station[guild_id]:
-#                     radio_fusions[guild_id].append(part.strip())
-#         # add single fusion
-#         else:
-#             if new_theme not in radio_station[guild_id]:
-#                 radio_fusions[guild_id].append(new_theme)
-
-#     if radio_fusions[guild_id] == []:
-#         return
-
-#     # how many songs are we grabbing from each station
-#     song_limit = math.ceil(50 / len(radio_fusions[guild_id]))
-
-#     # build our new combined station
-#     for station in radio_fusions[guild_id]:
-
-#         # we don't know this station, build it
-#         if station.lower() not in radio_playlists:
-#             try:
-#                 radio_playlists[station.lower()] = []
-#                 response = await ChatGPT(
-#                     bot,
-#                     "Return only the information requested with no additional words or context.",
-#                     f"Make a playlist of 50 songs (formatted as artist - song), themed around: {station}. Include similar artists and songs."
-#                 )
-
-#                 # filter out the goop
-#                 parsed_response = response.split('\n')
-#                 pattern = r'^\d+\.\s'
-
-#                 for item in parsed_response:
-#                     if re.match(pattern, item):
-#                         parts = re.split(pattern, item, maxsplit=1)
-#                         radio_playlists[station].append(parts[1].strip())
-#                 SaveRadio()
-
-#             except openai.ServiceUnavailableError:
-#                 print("Service Unavailable :(")
-#                 return
-            
-#         # add the station songs to the fuse station, and mix up the list
-#         temp_pl = random.sample(radio_playlists[station.lower()], song_limit)
-#         for song in temp_pl:
-#             fuse_playlist[guild_id].append(song)
-#         random.shuffle(fuse_playlist[guild_id])
-
-#     return
