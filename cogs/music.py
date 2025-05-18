@@ -1268,7 +1268,7 @@ class Music(commands.Cog, name="Music"):
         embed = discord.Embed(description=f"🔎 Searching for {payload}")
         message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
-        if '&list=' in payload or 'open.spotify.com/playlist' in payload:
+        if 'list=' in payload or 'open.spotify.com/playlist' in payload:
             await asyncio.create_task(self.QueuePlaylist(ctx.guild.voice_client, payload, message))
         else:
             await asyncio.create_task(self.QueueIndividualSong(ctx.guild.voice_client, payload, False, message))
@@ -1296,7 +1296,7 @@ class Music(commands.Cog, name="Music"):
         if not payload:    # no data provided
             raise func.err_syntax()
 
-        is_playlist = ('&list=' in payload or 'open.spotify.com/playlist' in payload) and True or False
+        is_playlist = ('list=' in payload or 'open.spotify.com/playlist' in payload) and True or False
         if is_playlist:     # playlists not supported with playnext
             raise func.err_shuffle_no_playlist()
         
