@@ -175,5 +175,5 @@ async def CheckPermissions(bot, guild_id, user_id, user_roles):
 async def FancyErrors(error: str, channel):
     flavor = random.choice(error_flavor)
 
-    embed = discord.Embed(title="Error", description=f"{flavor}\n\n{error}", color=discord.Color.red())
+    embed = discord.Embed(title=flavor, description=error, color=discord.Color.red())
     await channel.send(embed=embed)
