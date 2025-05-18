@@ -764,8 +764,7 @@ class Music(commands.Cog, name="Music"):
         elif 'list=' in payload:  # youtube playlist
             try:
                 playlist_type, playlist_id, playlist, playlist_length = await self._parse_youtube_playlist(payload)
-                
-                print(playlist)
+
             except Exception as e:
                 if message:     # finalize message if we fail
                     embed = discord.Embed(description="❌ I ran into an issue with the YouTube API. 😢")
