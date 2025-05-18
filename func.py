@@ -135,14 +135,11 @@ def requires_owner_perms():
 
 def requires_queue():
     async def predicate(ctx: commands.Context):
-        cog = ctx.bot.get_cog("Music")
-        if cog is None:
-            raise err_no_queue()
-
-        allstates = cog.settings[ctx.guild.id]
+        allstates = ctx.bot.get_cog("Music").settings[ctx.guild.id]
 
         if not allstates.queue:
             raise err_no_queue()
+        
         return True
     return commands.check(predicate)
 
