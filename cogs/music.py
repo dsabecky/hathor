@@ -645,35 +645,6 @@ class Music(commands.Cog, name="Music"):
         SaveSongDB()
 
         return result
-    
-    async def GetQueue(
-        self,
-        ctx: Context
-    ) -> None:
-        """
-        Displays the current song queue.
-        """
-
-        voice_client = ctx.guild.voice_client
-
-        title = "Song Queue"
-        embed = discord.Embed(title=title, description=None, color=discord.Color.dark_purple())
-
-        # now playing section
-        song_title, progress_bar, thumb = self._build_now_playing_embed(ctx.guild.id, voice_client)
-        embed.add_field(name="Now Playing", value=song_title + (f"\n{progress_bar}" if progress_bar else ""), inline=False)
-        if thumb:
-            embed.set_thumbnail(url=thumb)
-
-        # up next section
-        queue = self._build_queue_embed(ctx.guild.id, voice_client)
-        embed.add_field(name="Up Next", value=queue, inline=False)
-
-        # music settings
-        settings = self._build_settings_embed(ctx.guild.id, voice_client)
-        embed.add_field(name="Settings", value=settings, inline=False)
-
-        await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     async def PlayNextSong(
         self,
@@ -1307,7 +1278,26 @@ class Music(commands.Cog, name="Music"):
             [ !q | !np | !nowplaying | !song ]
         """
 
-        await self.GetQueue(ctx)
+        voice_client = ctx.guild.voice_client
+
+        title = "Song Queue"
+        embed = discord.Embed(title=title, description=None, color=discord.Color.dark_purple())
+
+        # now playing section
+        song_title, progress_bar, thumb = self._build_now_playing_embed(ctx.guild.id, voice_client)
+        embed.add_field(name="Now Playing", value=song_title + (f"\n{progress_bar}" if progress_bar else ""), inline=False)
+        if thumb:
+            embed.set_thumbnail(url=thumb)
+
+        # up next section
+        queue = self._build_queue_embed(ctx.guild.id, voice_client)
+        embed.add_field(name="Up Next", value=queue, inline=False)
+
+        # music settings
+        settings = self._build_settings_embed(ctx.guild.id, voice_client)
+        embed.add_field(name="Settings", value=settings, inline=False)
+
+        await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='radio', aliases=['dj'])
     @func.requires_author_perms()
