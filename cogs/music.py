@@ -1156,6 +1156,7 @@ class Music(commands.Cog, name="Music"):
         await self._radio_monitor()                     # kick-start the radio monitor
         
         
+    ### TODO: Add hot100 radio toggle
     ### !hot100 ########################################################
     # @commands.command(name='hot100')
     # async def hot100_radio(self, ctx):
