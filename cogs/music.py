@@ -246,7 +246,7 @@ class Music(commands.Cog, name="Music"):
     # Internal: Loops
     ####################################################################
 
-    @tasks.loop(seconds=3)
+    @tasks.loop(seconds=2)
     async def loop_voice_monitor(self) -> None:
         """
         Monitors voice activity for idle, broken playing, etc.
@@ -389,6 +389,21 @@ class Music(commands.Cog, name="Music"):
 
         return "\n".join(lines)
     
+    def _build_radio_embed(
+        self,
+        guild_id: int,
+        voice_client: discord.VoiceClient
+    ) -> str:
+        """
+        Helper function that returns the current radio stations.
+        """
+
+        allstates = self.settings[guild_id]
+
+        if not allstates.radio_fusions:
+            return f"{allstates.radio_station or 'off'}"
+        return '\n'.join(allstates.radio_fusions)
+    
     def _build_settings_embed(
         self,
         guild_id: int,
@@ -404,22 +419,11 @@ class Music(commands.Cog, name="Music"):
         settings = config.settings[str(guild_id)]
         volume = settings["volume"]
         repeat_status = "on" if allstates.repeat else "off"
-        shuffle_status = "on" if allstates.shuffle else "off"
-
-        # radio settings
+        shuffle_status = "on" if allstates.shuffle else "off"        
         intro = "on" if settings["radio_intro"] else "off"
-        radio = allstates.radio_station or "off"
-
-        ### TODO: FIXME (with the rest of fusion)
-        # fused = ""
-        # if guild_id in radio_fusions:
-        #     fused = ", ".join(f'{s}' for s in radio_fusions[guild_id])
-        #     fused = f"♾️ {fused} ♾️"
 
         return (   # build radio settings text
-            f"```🔊 vol: {volume}%  🔁 repeat: {repeat_status}  🔀 shuffle: {shuffle_status}```"
-            #f"```📢 intro: {intro}\n📻 Radio: {fused and fused or endless}```"
-            f"```📢 intro: {intro}\n📻 Radio: {radio}```"
+            f"```🔊 {volume}%  🔁 {repeat_status}  🔀 {shuffle_status}  📢 {intro}```"
         )
     
     def _generate_fusion_playlist(
@@ -1128,10 +1132,13 @@ class Music(commands.Cog, name="Music"):
         if allstates.radio_station:   # add the current station to the list, if it exists
             payload_list.append(allstates.radio_station.lower())
 
+        if len(payload_list + allstates.radio_fusions) > 5:
+            embed = discord.Embed(description=f"❌ You can only fuse up to 5 radio stations at a time. 😢", color=discord.Color.red())
+            await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none()); return
+
         embed = discord.Embed(description=f"🧠 Fusing radio stations...", color=discord.Color.dark_purple())
         message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
-        print(f"payload_list: {payload_list}")
         for station in payload_list: # add to fusion list, if not already in it
             print(f"for() station: {station}")
             if not station or station in allstates.radio_fusions:
@@ -1316,6 +1323,7 @@ class Music(commands.Cog, name="Music"):
             [ !q | !np | !nowplaying | !song ]
         """
 
+        allstates = self.settings[ctx.guild.id]
         voice_client = ctx.guild.voice_client
 
         title = "Song Queue"
@@ -1330,6 +1338,10 @@ class Music(commands.Cog, name="Music"):
         # up next section
         queue = self._build_queue_embed(ctx.guild.id, voice_client)
         embed.add_field(name="Up Next", value=queue, inline=False)
+
+        # radio section
+        radio = self._build_radio_embed(ctx.guild.id, voice_client)
+        embed.add_field(name=f"{'Radio Stations' if allstates.radio_fusions else 'Radio Station'}", value=radio, inline=False)
 
         # music settings
         settings = self._build_settings_embed(ctx.guild.id, voice_client)
