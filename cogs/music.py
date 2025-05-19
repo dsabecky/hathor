@@ -35,10 +35,8 @@ from openai import AsyncOpenAI   # cleaner than manually calling openai.OpenAI()
 # hathor internals
 import config                        # bot config
 import func                          # bot specific functions (@decorators, err_ classes, etc)
-from func import Error               # bot specific errors
-from cogs.voice import JoinVoice     # cleaner than cogs.voice.JoinVoice()
+from func import Error, Settings     # bot specific errors
 from logs import log_cogs, log_music # logging
-
 
 ####################################################################
 # OpenAPI key validation
@@ -135,39 +133,6 @@ radio_playlists = LoadRadio()
 # Classes
 ####################################################################
 
-class CurrentlyPlaying(TypedDict):
-    """
-    Dictionary structure for CurrentlyPlaying.
-    """
-
-    title: str
-    song_artist: str
-    song_title: str
-    file_path: str
-    thumbnail: str
-    duration: int
-
-class Settings:
-    """
-    Volatile settings, called as 'allstates' in functions.
-    """
-
-    def __init__(self):
-        self.currently_playing: CurrentlyPlaying | None = None
-
-        self.queue: list[str] = []
-        self.repeat: bool = False
-        self.shuffle: bool = False
-
-        self.radio_station: str | None = None
-        self.radio_fusions: list[str] = []
-        self.radio_fusions_playlist: list[str] = []
-
-        self.start_time: float | None = None
-        self.pause_time: float | None = None
-        self.last_active: float | None = None
-        self.intro_playing: bool = False
-
 class Music(commands.Cog, name="Music"):
     """
     Core cog for music functionality.
@@ -175,7 +140,6 @@ class Music(commands.Cog, name="Music"):
 
     def __init__(self, bot):
         self.bot = bot
-        self.settings: dict[int, Settings] = defaultdict(Settings)
         self.radio_lock = asyncio.Lock()
 
 
@@ -207,8 +171,6 @@ class Music(commands.Cog, name="Music"):
         """
         Initializes server settings when the bot joins a new guild.
         """
-
-        allstates = self.settings[guild.id]     # init server settings
         guild_str = str(guild.id)               # json is stupid and forces the key to be a string
 
         if not guild_str in song_history:       # build and save song history (if required)
@@ -232,7 +194,7 @@ class Music(commands.Cog, name="Music"):
         if self.bot.user.id != member.id:   # ignore everyone else
             return
 
-        allstates = self.settings[member.guild.id]
+        allstates = self.bot.settings[member.guild.id]
         voice_client = member.guild.voice_client
 
         if before.channel is not None and after.channel is None:    # clear out last_active (we left voice)
@@ -253,7 +215,7 @@ class Music(commands.Cog, name="Music"):
         """
 
         for voice_client in self.bot.voice_clients:
-            allstates = self.settings[voice_client.guild.id]
+            allstates = self.bot.settings[voice_client.guild.id]
 
             if not voice_client.is_connected():    # sanity check
                 continue
@@ -333,7 +295,7 @@ class Music(commands.Cog, name="Music"):
         Helper function that returns the currently playing song.
         """
 
-        allstates = self.settings[guild_id]
+        allstates = self.bot.settings[guild_id]
         currently_playing = allstates.currently_playing
 
         if not voice_client or not currently_playing or not (voice_client.is_playing() or voice_client.is_paused()):
@@ -368,7 +330,7 @@ class Music(commands.Cog, name="Music"):
         Helper function that returns the current queue.
         """
 
-        allstates = self.settings[guild_id]
+        allstates = self.bot.settings[guild_id]
         queue = allstates.queue 
 
         if not queue:
@@ -398,7 +360,7 @@ class Music(commands.Cog, name="Music"):
         Helper function that returns the current radio stations.
         """
 
-        allstates = self.settings[guild_id]
+        allstates = self.bot.settings[guild_id]
 
         if not allstates.radio_fusions:
             return f"{allstates.radio_station or 'off'}"
@@ -413,7 +375,7 @@ class Music(commands.Cog, name="Music"):
         Helper function that returns the current settings.
         """
 
-        allstates = self.settings[guild_id]
+        allstates = self.bot.settings[guild_id]
 
         # music settings
         settings = config.settings[str(guild_id)]
@@ -434,7 +396,7 @@ class Music(commands.Cog, name="Music"):
         Generates a fusion playlist.
         """
 
-        allstates = self.settings[guild_id]
+        allstates = self.bot.settings[guild_id]
 
         temp_playlist = []
         songs_per_station = math.ceil(40 / len(allstates.radio_fusions))
@@ -556,7 +518,7 @@ class Music(commands.Cog, name="Music"):
         async with self.radio_lock:
             for guild in self.bot.guilds:
 
-                allstates = self.settings[guild.id]
+                allstates = self.bot.settings[guild.id]
                 voice_client = guild.voice_client
 
                 if not voice_client:    # no voice client, skip
@@ -699,7 +661,7 @@ class Music(commands.Cog, name="Music"):
         Plays the next song in the queue.
         """
 
-        allstates = self.settings[voice_client.guild.id]
+        allstates = self.bot.settings[voice_client.guild.id]
         guild_str = str(voice_client.guild.id)
         cfg       = config.settings[guild_str]
 
@@ -748,7 +710,7 @@ class Music(commands.Cog, name="Music"):
         Plays a radio intro.
         """
 
-        allstates = self.settings[voice_client.guild.id]
+        allstates = self.bot.settings[voice_client.guild.id]
 
         is_special = random.random() < 0.4  # 40% odds we use a song specific intro
         text = ""   # initiate the intro string
@@ -800,7 +762,7 @@ class Music(commands.Cog, name="Music"):
         Helper function that queues playlists for the radio.
         """
 
-        allstates = self.settings[voice_client.guild.id]
+        allstates = self.bot.settings[voice_client.guild.id]
 
         playlist_type, playlist_id, playlist, playlist_length = None, None, None, None
         if 'open.spotify.com/playlist/' in payload: # spotify playlist
@@ -901,7 +863,7 @@ class Music(commands.Cog, name="Music"):
         Helper function for queueing individual songs.
         """
 
-        allstates = self.settings[voice_client.guild.id]
+        allstates = self.bot.settings[voice_client.guild.id]
         track = None
 
 
@@ -985,13 +947,13 @@ class Music(commands.Cog, name="Music"):
             !smartplaylist
         """
 
-        allstates = self.settings[ctx.guild.id]
+        allstates = self.bot.settings[ctx.guild.id]
 
         if not args or len(args) < 3:
             raise func.err_syntax()
 
         if not ctx.guild.voice_client: # we're not in voice, lets change that
-            await JoinVoice(ctx)
+            await self.bot._join_voice(ctx)
         
         embed = discord.Embed(description=f"🧠 Generating your AI playlist...")
         message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
@@ -1034,7 +996,7 @@ class Music(commands.Cog, name="Music"):
             !bump <song number>
         """
 
-        allstates = self.settings[ctx.guild.id]
+        allstates = self.bot.settings[ctx.guild.id]
 
         if len(allstates.queue) < 2:    # is there even enough songs to justify?
             raise func.err_bump_short()
@@ -1061,7 +1023,7 @@ class Music(commands.Cog, name="Music"):
             !clear
         """
 
-        allstates = self.settings[ctx.guild.id]
+        allstates = self.bot.settings[ctx.guild.id]
         
         embed = discord.Embed(description=f"Removed {len(allstates.queue)} songs from queue.")
         await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
@@ -1083,7 +1045,7 @@ class Music(commands.Cog, name="Music"):
             !defuse <station>
         """
 
-        allstates = self.settings[ctx.guild.id]
+        allstates = self.bot.settings[ctx.guild.id]
 
         if not payload: # no station provided
             raise func.err_syntax()
@@ -1120,13 +1082,13 @@ class Music(commands.Cog, name="Music"):
             !fuse <station1> | <station2> | <station3>
         """
 
-        allstates = self.settings[ctx.guild.id]
+        allstates = self.bot.settings[ctx.guild.id]
         
         if not payload: # no fusion provided
             raise func.err_syntax()
 
         if not ctx.guild.voice_client: # we're not in voice, lets change that
-            await JoinVoice(ctx)
+            await self.bot._join_voice(ctx)
 
         payload_list = [s.lower().strip() for s in payload.split("|")]
         if allstates.radio_station:   # add the current station to the list, if it exists
@@ -1236,7 +1198,7 @@ class Music(commands.Cog, name="Music"):
             !pause
         """
 
-        allstates = self.settings[ctx.guild.id]
+        allstates = self.bot.settings[ctx.guild.id]
         
         allstates.pause_time = time.time()  # record when we paused
         ctx.guild.voice_client.pause()      # actually pause
@@ -1260,7 +1222,7 @@ class Music(commands.Cog, name="Music"):
         """
 
         if not ctx.guild.voice_client: # we're not in voice, lets change that
-            await JoinVoice(ctx)
+            await self.bot._join_voice(ctx)
 
         if not payload:    # no data provided
             raise func.err_syntax(); return
@@ -1301,7 +1263,7 @@ class Music(commands.Cog, name="Music"):
             raise func.err_shuffle_no_playlist()
         
         if not ctx.guild.voice_client: # we're not in voice, lets change that
-            await JoinVoice(ctx)
+            await self.bot._join_voice(ctx)
 
         embed = discord.Embed(description=f"🔎 Searching for {payload}")
         message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
@@ -1323,7 +1285,7 @@ class Music(commands.Cog, name="Music"):
             [ !q | !np | !nowplaying | !song ]
         """
 
-        allstates = self.settings[ctx.guild.id]
+        allstates = self.bot.settings[ctx.guild.id]
         voice_client = ctx.guild.voice_client
 
         title = "Song Queue"
@@ -1369,10 +1331,10 @@ class Music(commands.Cog, name="Music"):
             !dj
         """
 
-        allstates = self.settings[ctx.guild.id]
+        allstates = self.bot.settings[ctx.guild.id]
         
         if not ctx.guild.voice_client: # we're not in voice, lets change that
-            await JoinVoice(ctx)
+            await self.bot._join_voice(ctx)
 
         if allstates.radio_fusions:     # cancel out fusion
             allstates.radio_fusions = None
@@ -1403,7 +1365,7 @@ class Music(commands.Cog, name="Music"):
             !remove <song number>
         """
 
-        allstates = self.settings[ctx.guild.id]
+        allstates = self.bot.settings[ctx.guild.id]
         
         if not args or (args and not args.isdigit()):
             raise func.err_syntax(); return
@@ -1430,7 +1392,7 @@ class Music(commands.Cog, name="Music"):
             !loop
         """
 
-        allstates = self.settings[ctx.guild.id]
+        allstates = self.bot.settings[ctx.guild.id]
         allstates.repeat = not allstates.repeat # change value to current opposite (True -> False)
 
         info_embed = discord.Embed(description=f"🔁 Repeat mode {allstates.repeat and 'enabled' or 'disabled'}.")
@@ -1449,7 +1411,7 @@ class Music(commands.Cog, name="Music"):
             !resume
         """
 
-        allstates = self.settings[ctx.guild.id]
+        allstates = self.bot.settings[ctx.guild.id]
         
         allstates.start_time += (allstates.pause_time - allstates.start_time)   # update the start_time
         ctx.guild.voice_client.resume()     # actually resume playing
@@ -1467,7 +1429,7 @@ class Music(commands.Cog, name="Music"):
             !shuffle
         """
 
-        allstates = self.settings[ctx.guild.id]
+        allstates = self.bot.settings[ctx.guild.id]
         
         random.shuffle(allstates.queue)     # actually shuffles the queue
         allstates.shuffle = not allstates.shuffle   # update the shuffle variable
@@ -1487,7 +1449,7 @@ class Music(commands.Cog, name="Music"):
             !skip
         """
 
-        allstates = self.settings[ctx.guild.id]
+        allstates = self.bot.settings[ctx.guild.id]
         embed = discord.Embed(description=f"⏭️ Skipping {allstates.currently_playing['title']}")
         message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 

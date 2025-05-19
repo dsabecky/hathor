@@ -8,13 +8,67 @@ from discord.ext import commands
 
 # system level stuff
 import json
+from typing import TypedDict, Any
 
 # date, time, numbers
-from datetime import datetime
 import random
 
 # hathor internals
 import config
+
+
+####################################################################
+# Classes
+####################################################################
+
+class CurrentlyPlaying(TypedDict):
+    """
+    Dictionary structure for CurrentlyPlaying.
+    """
+
+    title: str
+    song_artist: str
+    song_title: str
+
+    file_path: str
+    thumbnail: str
+    duration: int
+
+class Settings:
+    """
+    Volatile settings, called as 'allstates' in functions.
+    """
+
+    def __init__(self):
+        self.perms: dict[str, list[int]] = { 'user_id': [], 'role_id': [], 'channel_id': [] }
+
+        self.currently_playing: CurrentlyPlaying | None = None
+        self.queue: list[str] = []
+
+        self.volume: int = 100
+        self.repeat: bool = False
+        self.shuffle: bool = False
+
+        self.radio_station: str | None = None
+        self.radio_fusions: list[str] = []
+        self.radio_fusions_playlist: list[str] = []
+        self.radio_intro: bool = True
+
+        self.voice_idle: int = 300
+        self.start_time: float | None = None
+        self.pause_time: float | None = None
+        self.last_active: float | None = None
+        self.intro_playing: bool = False
+
+    def load_settings_from_json(self, data: dict[str, Any]):
+        if perms := data.get("perms"):
+            self.perms.update(perms)
+        if vol := data.get("volume"):
+            self.volume = vol
+        if voice_idle := data.get("voice_idle"):
+            self.voice_idle = voice_idle
+        if radio_intro := data.get("radio_intro"):
+            self.radio_intro = radio_intro
 
 ###############################################################
 # Quotable References
@@ -89,9 +143,9 @@ class err_wrong_fuse(Error):
 ###############################################################
 
 def requires_author_perms():
-    async def predicate(ctx: commands.Context):
+    async def predicate(message: discord.Message):
 
-        allowed = await CheckPermissions(ctx.bot, ctx.guild.id, ctx.author.id, ctx.author.roles)
+        allowed = await CheckPermissions(message.bot, message.guild.id, message.author.id, message.author.roles)
 
         if not allowed:
             raise err_author_perms()
@@ -99,30 +153,30 @@ def requires_author_perms():
     return commands.check(predicate)
 
 def requires_author_voice():
-    def predicate(ctx: commands.Context):
-        if not ctx.author.voice:
+    def predicate(message: discord.Message):
+        if not message.author.voice:
             raise err_author_no_voice()
         return True
     return commands.check(predicate)
 
 def requires_bot_playing():
-    async def predicate(ctx: commands.Context):
-        vc = ctx.guild.voice_client
+    async def predicate(message: discord.Message):
+        vc = message.guild.voice_client
         if not vc or (not vc.is_playing() and not vc.is_paused()):
             raise err_no_playing()
         return True
     return commands.check(predicate)
 
 def requires_bot_voice():
-    def predicate(ctx: commands.Context):
-        if not ctx.guild.voice_client:
+    def predicate(message: discord.Message):
+        if not message.guild.voice_client:
             raise err_bot_no_voice()
         return True
     return commands.check(predicate)
 
 def requires_message_length(min_len: int):
-    def predicate(ctx: commands.Context):
-        args = ctx.message.content.split(" ", 1)
+    def predicate(message: discord.Message):
+        args = message.content.split(" ", 1)
         val = args[1] if len(args) > 1 else ""
         if len(val.strip()) < min_len:
             raise err_message_short()
@@ -130,16 +184,16 @@ def requires_message_length(min_len: int):
     return commands.check(predicate)
 
 def requires_owner_perms():
-    async def predicate(ctx: commands.Context):
-        if ctx.author.id == config.BOT_ADMIN:
+    async def predicate(message: discord.Message):
+        if message.author.id == config.BOT_ADMIN:
             return True
         else:
             raise err_author_perms()
     return commands.check(predicate)
 
 def requires_queue():
-    async def predicate(ctx: commands.Context):
-        allstates = ctx.bot.get_cog("Music").settings[ctx.guild.id]
+    async def predicate(message: discord.Message):
+        allstates = message.bot.settings[message.guild.id]
 
         if not allstates.queue:
             raise err_no_queue()

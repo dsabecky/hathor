@@ -71,7 +71,7 @@ class Voice(commands.Cog, name="Voice"):
             !join
         """
         
-        await JoinVoice(ctx)
+        await self.bot._join_voice(ctx)
 
     ####################################################################
     # trigger: !leave
@@ -128,23 +128,6 @@ class Voice(commands.Cog, name="Voice"):
 
             else:
                 raise func.err_vol_range(); return
-
-
-####################################################################
-# function: JoinVoice(ctx)
-# ----
-# Joins the current voice channel.
-####################################################################
-async def JoinVoice(ctx: commands.Context):
-    allstates = ctx.bot.get_cog("Music").settings[ctx.guild.id]
-    try:
-        if ctx.voice_client:
-            await ctx.voice_client.move_to(ctx.author.voice.channel)
-        else:
-            await ctx.author.voice.channel.connect()
-        allstates.last_active = time.time() # update the last active time
-    except Exception:
-        raise func.err_voice_join()
     
 async def setup(bot):
     log_cogs.info("Loading Voice cog...")
