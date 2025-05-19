@@ -351,5 +351,5 @@ async def trigger_permissions(
 ####################################################################
 # Launch
 ####################################################################
-
-bot.run(config.BOT_TOKEN)
+if __name__ == "__main__":
+    bot.run(config.BOT_TOKEN)
