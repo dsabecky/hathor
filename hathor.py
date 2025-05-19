@@ -60,11 +60,17 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix=config.BOT_PREFIX, intents=intents, case_insensitive=True)
 
-log_cogs.info("loading 'Voice' cog"); asyncio.run(bot.add_cog(Voice(bot)))
-log_cogs.info("loading 'Music' cog"); asyncio.run(bot.add_cog(Music(bot)))
-log_cogs.info("loading 'ChatGPT' cog"); asyncio.run(bot.add_cog(ChatGPT(bot)))
-log_cogs.info("loading 'RaiderIO' cog"); asyncio.run(bot.add_cog(RaiderIO(bot)))
-log_cogs.info("loading 'Gamba' cog"); asyncio.run(bot.add_cog(Gamba(bot)))
+extensions = [
+    "cogs.voice",
+    "cogs.music",
+    "cogs.chatgpt",
+    "cogs.raiderio",
+    "cogs.gamba"
+]
+async def main():
+  for ext in extensions:
+    await bot.load_extension(ext)
+  await bot.start(config.BOT_TOKEN)
 
 
 ####################################################################
@@ -348,4 +354,5 @@ async def trigger_permissions(
 # Launch
 ####################################################################
 
-bot.run(config.BOT_TOKEN)
+if __name__ == "__main__":
+    asyncio.run(main())
