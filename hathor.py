@@ -19,12 +19,7 @@ import pprint                            # pretty print
 import config                                           # bot config
 import func                                             # bot specific functions (@decorators, err_ classes, etc)
 from func import FancyErrors                            # error handling
-from logs import log_sys, log_cogs, log_msg, log_voice  # logging
-from cogs.voice import Voice                            # voice handling
-from cogs.music import Music                            # music handling
-from cogs.chatgpt import ChatGPT                        # chatgpt handling
-from cogs.raiderio import RaiderIO                      # raiderio handling
-from cogs.gamba import Gamba                            # gamba handling
+from logs import log_sys, log_msg, log_voice            # logging
 
 
 ####################################################################
