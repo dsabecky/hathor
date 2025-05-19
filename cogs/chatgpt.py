@@ -404,6 +404,6 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         embed.set_image(url="attachment://generated.png")
         await ctx.reply(content=None, embed=embed, files=[discord.File(response, filename="generated.png")])
 
-def setup(bot):
+async def setup(bot):
     log_cogs.info("Loading ChatGPT cog...")
-    bot.add_cog(ChatGPT(bot))
+    await bot.add_cog(ChatGPT(bot))

@@ -39,6 +39,6 @@ class Gamba(commands.Cog, name="Gamba"):    # main class for cog
 
             await interaction.response.send_message(embed=output)
 
-def setup(bot):
+async def setup(bot):
     log_cogs.info("Loading Gamba cog...")
-    bot.add_cog(Gamba(bot))
+    await bot.add_cog(Gamba(bot))

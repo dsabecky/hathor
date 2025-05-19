@@ -1495,6 +1495,6 @@ class Music(commands.Cog, name="Music"):
         if allstates.repeat:
             await self.PlayNextSong(ctx.guild.voice_client)
 
-def setup(bot):
+async def setup(bot):
     log_cogs.info("Loading Music cog...")
-    bot.add_cog(Music(bot))
+    await bot.add_cog(Music(bot))

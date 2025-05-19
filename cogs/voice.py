@@ -146,6 +146,6 @@ async def JoinVoice(ctx: commands.Context):
     except Exception:
         raise func.err_voice_join()
     
-def setup(bot):
+async def setup(bot):
     log_cogs.info("Loading Voice cog...")
-    bot.add_cog(Voice(bot))
+    await bot.add_cog(Voice(bot))

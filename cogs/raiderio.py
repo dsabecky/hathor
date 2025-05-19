@@ -249,6 +249,6 @@ def format_key(key):
     parts = key.split('-')
     return ' '.join(part.capitalize() for part in parts)
 
-def setup(bot):
+async def setup(bot):
     log_cogs.info("Loading RaiderIO cog...")
-    bot.add_cog(RaiderIO(bot))
+    await bot.add_cog(RaiderIO(bot))
