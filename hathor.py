@@ -67,8 +67,12 @@ extensions = [
     "cogs.raiderio",
     "cogs.gamba"
 ]
-for ext in extensions:
-    bot.load_extension(ext)
+async def main():
+  for ext in extensions:
+    await bot.load_extension(ext)
+  await bot.start(config.BOT_TOKEN)
+
+
 
 
 ####################################################################
@@ -352,4 +356,4 @@ async def trigger_permissions(
 # Launch
 ####################################################################
 if __name__ == "__main__":
-    bot.run(config.BOT_TOKEN)
+    asyncio.run(main())
