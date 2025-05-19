@@ -33,11 +33,11 @@ import random       # pseudorandom selection (for shuffle, fusion playlist compi
 from openai import AsyncOpenAI   # cleaner than manually calling openai.OpenAI()
 
 # hathor internals
-import config                       # bot config
-import func                         # bot specific functions (@decorators, err_ classes, etc)
-from func import Error              # bot specific errors
-from cogs.voice import JoinVoice    # cleaner than cogs.voice.JoinVoice()
-from logs import log_music          # logging
+import config                        # bot config
+import func                          # bot specific functions (@decorators, err_ classes, etc)
+from func import Error               # bot specific errors
+from cogs.voice import JoinVoice     # cleaner than cogs.voice.JoinVoice()
+from logs import log_cogs, log_music # logging
 
 
 ####################################################################
@@ -1494,3 +1494,7 @@ class Music(commands.Cog, name="Music"):
         ctx.guild.voice_client.stop()   # actually skip the song
         if allstates.repeat:
             await self.PlayNextSong(ctx.guild.voice_client)
+
+def setup(bot):
+    log_cogs.info("Loading Music cog...")
+    bot.add_cog(Music(bot))

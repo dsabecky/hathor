@@ -60,11 +60,15 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix=config.BOT_PREFIX, intents=intents, case_insensitive=True)
 
-log_cogs.info("loading 'Voice' cog"); asyncio.run(bot.add_cog(Voice(bot)))
-log_cogs.info("loading 'Music' cog"); asyncio.run(bot.add_cog(Music(bot)))
-log_cogs.info("loading 'ChatGPT' cog"); asyncio.run(bot.add_cog(ChatGPT(bot)))
-log_cogs.info("loading 'RaiderIO' cog"); asyncio.run(bot.add_cog(RaiderIO(bot)))
-log_cogs.info("loading 'Gamba' cog"); asyncio.run(bot.add_cog(Gamba(bot)))
+extensions = [
+    "cogs.voice",
+    "cogs.music",
+    "cogs.chatgpt",
+    "cogs.raiderio",
+    "cogs.gamba"
+]
+for ext in extensions:
+    bot.load_extension(ext)
 
 
 ####################################################################

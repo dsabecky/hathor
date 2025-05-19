@@ -9,6 +9,7 @@ import json
 
 import config
 import func
+from logs import log_cogs
 
 queue = {}
 currently_playing = {}
@@ -144,3 +145,7 @@ async def JoinVoice(ctx: commands.Context):
         allstates.last_active = time.time() # update the last active time
     except Exception:
         raise func.err_voice_join()
+    
+def setup(bot):
+    log_cogs.info("Loading Voice cog...")
+    bot.add_cog(Voice(bot))

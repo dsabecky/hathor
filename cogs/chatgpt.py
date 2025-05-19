@@ -21,7 +21,7 @@ from openai import AsyncOpenAI  # cleaner than manually calling openai.OpenAI()
 import config                   # bot config
 import func                     # bot specific functions (@decorators, err_classes, etc)
 from func import Error          # custom error class
-from logs import log_chatgpt    # logging
+from logs import log_cogs    # logging
 
 
 ####################################################################
@@ -403,3 +403,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         embed.add_field(name="Prompt:", value=prompt, inline=False)
         embed.set_image(url="attachment://generated.png")
         await ctx.reply(content=None, embed=embed, files=[discord.File(response, filename="generated.png")])
+
+def setup(bot):
+    log_cogs.info("Loading ChatGPT cog...")
+    bot.add_cog(ChatGPT(bot))

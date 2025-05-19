@@ -15,7 +15,7 @@ import random
 
 # hathor internals
 import func
-from logs import log_gamba
+from logs import log_cogs
 
 ####################################################################
 # Classes
@@ -38,3 +38,7 @@ class Gamba(commands.Cog, name="Gamba"):    # main class for cog
             output = discord.Embed(title="Roll!", description=f"{interaction.user.nick} rolls {number} (1-{limit})")
 
             await interaction.response.send_message(embed=output)
+
+def setup(bot):
+    log_cogs.info("Loading Gamba cog...")
+    bot.add_cog(Gamba(bot))

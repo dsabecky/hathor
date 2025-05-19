@@ -5,6 +5,7 @@ import requests
 import math
 from typing import Literal
 from urllib.parse import urlparse
+from logs import log_cogs
 
 # define the class
 class RaiderIO(commands.Cog, name="RaiderIO"):
@@ -247,3 +248,7 @@ class RaiderIO(commands.Cog, name="RaiderIO"):
 def format_key(key):
     parts = key.split('-')
     return ' '.join(part.capitalize() for part in parts)
+
+def setup(bot):
+    log_cogs.info("Loading RaiderIO cog...")
+    bot.add_cog(RaiderIO(bot))
