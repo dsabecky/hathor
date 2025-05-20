@@ -5,7 +5,7 @@
 # discord imports
 import discord
 from discord.ext import commands
-from discord.ext.commands import Greedy, Context
+from discord.ext.commands import Context
 
 # system level stuff
 import asyncio             # prevents thread locking
