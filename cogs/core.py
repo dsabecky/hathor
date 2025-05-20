@@ -1,15 +1,34 @@
+####################################################################
+# Library & Modules
+####################################################################
+
+# discord imports
 import discord
 from discord.ext import commands
 from discord.ext.commands import Greedy, Context
-from typing import Literal
+
+# data analysis
+from typing import Literal  # type hints
+
+# hathor internals
 from func import requires_owner_perms, requires_author_perms
 from func import Error, ERROR_CODES
+
+
+####################################################################
+# Classes
+####################################################################
 
 class Core(commands.Cog, name="Core"):
     """Core commands."""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+
+
+    ####################################################################
+    # Command triggers
+    ####################################################################
 
     @commands.command(name="botleave")
     @requires_owner_perms()

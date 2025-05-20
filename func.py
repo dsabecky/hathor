@@ -7,12 +7,12 @@ import discord
 from discord.ext import commands
 
 # system level stuff
-import json
-from typing import TypedDict
-from pathlib import Path
+import json                       # json db handling
+from typing import Any,TypedDict  # type hints
+from pathlib import Path          # pathlib
 
-# date, time, numbers
-import random
+# data analysis
+import random   # error flavor text randomizer
 
 # hathor internals
 import config
@@ -109,6 +109,39 @@ class Settings:
             json.dumps(data, ensure_ascii=False, indent=4),
             encoding="utf-8"
         )
+
+class SongDB:
+    def __init__(self, path: str = "song_db.json"):
+        self.path = Path(path)
+        self._db: dict[str, dict[str, Any]] = {}
+        self.load()
+
+    def load(self):
+        try:
+            with self.path.open("r", encoding="utf-8") as f:
+                self._db = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            self._db = {}
+            self.save()  # create the file if missing or invalid
+
+    def save(self):
+        with self.path.open("w", encoding="utf-8") as f:
+            json.dump(self._db, f, ensure_ascii=False, indent=4)
+
+    def __getitem__(self, song_id: str) -> dict[str, Any]:
+        return self._db[song_id]
+
+    def __setitem__(self, song_id: str, value: dict[str, Any]):
+        self._db[song_id] = value
+
+    def __contains__(self, song_id: str) -> bool:
+        return song_id in self._db
+
+    def get(self, song_id: str, default=None):
+        return self._db.get(song_id, default)
+
+    def all(self):
+        return self._db.values()
 
 
 ###############################################################

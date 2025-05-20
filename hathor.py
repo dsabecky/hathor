@@ -12,15 +12,14 @@ import asyncio             # prevents thread locking
 from pathlib import Path   # cog discovery
 
 # data analysis
-from collections import defaultdict   # type hints
-import inspect
-import re
-import time
+import inspect  # inspect config variables
+import re       # various regex filters
+import time     # last active time updater
 
 # hathor internals
-import config                                               # bot config
-from func import Error, ERROR_CODES, FancyErrors, Settings  # useful functions
-from logs import log_sys, log_msg, log_voice                # logging
+import config
+from func import Error, ERROR_CODES, FancyErrors, Settings
+from logs import log_sys, log_msg, log_voice
 
 
 ####################################################################

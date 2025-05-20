@@ -21,7 +21,6 @@ import re                 # regex for various filtering
 from typing import Any    # legacy type hints
 
 # date, time, numbers
-import datetime     # timestamps for song history
 import time         # epoch timing
 import math         # cut playlists down using math.ceil() for fusion
 import random       # pseudorandom selection (for shuffle, fusion playlist compilation, etc)
@@ -30,11 +29,10 @@ import random       # pseudorandom selection (for shuffle, fusion playlist compi
 from openai import AsyncOpenAI   # cleaner than manually calling openai.OpenAI()
 
 # hathor internals
-import config                        # bot config
-import func                          # bot specific functions (@decorators, err_ classes, etc)
-from func import Error, ERROR_CODES  # bot specific errors
+import config
+from func import Error, ERROR_CODES, SongDB
 from func import requires_author_perms, requires_author_voice, requires_bot_voice, requires_queue, requires_bot_playing
-from logs import log_cogs, log_music # logging
+from logs import log_cogs, log_music
 
 
 ####################################################################
@@ -70,28 +68,6 @@ def SaveHistory() -> None:
     with open('song_history.json', 'w', encoding='utf-8') as file:
         json.dump(song_history, file, ensure_ascii=False, indent=4)
 
-def LoadSongDB() -> dict[str, list[dict[str, Any]]]:
-    """
-    Loads the song database from the JSON file.
-    """
-
-    try:
-        with open('song_db.json', 'r', encoding='utf-8') as file:
-            return json.load(file)
-    except FileNotFoundError:
-        with open('song_db.json', 'w', encoding='utf-8') as file:
-            default = {}
-            json.dump(default, file, indent=4)
-            return default
-        
-def SaveSongDB() -> None:
-    """
-    Saves the song database to the JSON file.
-    """
-
-    with open('song_db.json', 'w', encoding='utf-8') as file:
-        json.dump(song_db, file, ensure_ascii=False, indent=4)
-
 def LoadRadio() -> dict[str, list[str]]:
     """
     Loads the radio playlists from the JSON file.
@@ -121,7 +97,7 @@ def SaveRadio() -> None:
 
 SPOTIFY_ACCESS_TOKEN = ''
 song_history = LoadHistory()
-song_db = LoadSongDB()
+song_db = SongDB()
 radio_playlists = LoadRadio()
 
 
@@ -644,7 +620,7 @@ class Music(commands.Cog, name="Music"):
         }
 
         song_db[result['id']] = result  # add to database
-        SaveSongDB()
+        song_db.save()
 
         return result
 
@@ -805,7 +781,7 @@ class Music(commands.Cog, name="Music"):
                     await message.edit(content=None, embed=embed)
                 log_music.error(f"QueuePlaylist() -> FetchSongMetadata():\n{e}"); continue
 
-            if metadata['id'] in song_db and os.path.exists(f"{config.SONGDB_PATH}/{metadata['id']}.mp3"):  # save the bandwidth
+            if metadata['id'] in song_db and os.path.exists(song_db[metadata['id']]['file_path']):  # save the bandwidth
                 log_music.info(f"QueuePlaylist(): ({i}/{playlist_length}) \"{metadata['title']}\" already downloaded.")
                 song = song_db[metadata['id']]
 
@@ -880,7 +856,7 @@ class Music(commands.Cog, name="Music"):
             await message.edit(content=None, embed=embed)
             raise Error(f"QueueIndividualSong() -> FetchSongMetadata():\n{e}")
 
-        if metadata['id'] in song_db and os.path.exists(f"{config.SONGDB_PATH}/{metadata['id']}.mp3"):  # save the bandwidth
+        if metadata['id'] in song_db and os.path.exists(song_db[metadata['id']]['file_path']):  # save the bandwidth
             log_music.info(f"Song: \"{metadata['title']}\" already downloaded.")
             song = song_db[metadata['id']]
 

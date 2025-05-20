@@ -15,7 +15,6 @@ from openai import AsyncOpenAI  # cleaner than manually calling openai.OpenAI()
 
 # hathor internals
 import config                       # bot config
-import func                         #  bot specific functions (@decorators, err_classes, etc)
 from func import Error, ERROR_CODES # custom error class
 from logs import log_cogs           # logging
 
