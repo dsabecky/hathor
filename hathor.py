@@ -13,13 +13,35 @@ from pathlib import Path   # cog discovery
 
 # data analysis
 from collections import defaultdict   # type hints
+import inspect
+import re
 import time
 
 # hathor internals
-import config                                 # bot config
-import func                                   # bot specific functions (@decorators, err_ classes, etc)
-from func import FancyErrors, Settings        # error handling
-from logs import log_sys, log_msg, log_voice  # logging
+import config                                               # bot config
+from func import Error, ERROR_CODES, FancyErrors, Settings  # useful functions
+from logs import log_sys, log_msg, log_voice                # logging
+
+
+####################################################################
+# Configuration Validation
+####################################################################
+
+def _validate_config() -> None:
+    """
+    Ensure all config variables are defined.
+    """
+    missing = []
+    pattern = re.compile(r"^[A-Z][A-Z0-9_]+$")
+    for name, val in inspect.getmembers(config):
+        if pattern.match(name):
+            if not val and val != 0:
+                missing.append(name)
+    if missing:
+        raise RuntimeError(f"Missing config values: {', '.join(missing)}")
+    
+log_sys.info("Validating configurations from config.py...")
+_validate_config()
 
 
 ####################################################################
@@ -38,18 +60,18 @@ class Hathor(commands.Bot):
             case_insensitive=True
         )
 
-        self.cog_list = [
+        self.cog_list = [   # dynamic cog discovery
             f"cogs.{p.stem}"
             for p in (Path(__file__).parent / "cogs").glob("*.py")
-            if p.stem != "__init__"
+            if p.stem != "__init__" # ignore __init__.py
         ]
 
-        self.settings: dict[int, Settings] = defaultdict(Settings)
+        self.settings: dict[int, Settings] = {}
 
         self._patch_context()   # load patcher for embed logging
 
     async def start_bot(self):
-        await self.start(config.BOT_TOKEN)
+        await self.start(config.DISCORD_BOT_TOKEN)
 
     def _patch_context(self):    # patch Context.send and Context.reply to log embeds
         source_send = Context.send
@@ -77,43 +99,38 @@ class Hathor(commands.Bot):
     # 'on_' listeners
     ####################################################################
 
-    async def on_ready(self):
-        if config.MAINTENANCE:  # am i in maintenance mode?
+    async def on_ready(self) -> None:
+        """
+        Runs when the bot is ready.
+        """
+
+        if config.MAINTENANCE:  # am i in maintenance mode? ### TODO: customize maintenance message
             await self.change_presence(activity=discord.Activity(type=discord.ActivityType.competing, name="maintenance!!!1"), status=discord.Status.do_not_disturb)
 
+        ###
         ### TODO: implement some kind of songDB trim
+        ###
 
         log_sys.info(f"connected as \033[38;2;152;255;152m{self.user}\033[0m")   # log connection to console
 
         for guild in self.guilds:
-            allstates = self.settings[guild.id] # load defaults
-            allstates.load_settings_from_json(config.settings.setdefault(str(guild.id), {}))    # load saved settings if present
-            
-        config.SaveSettings()   # save settings
+            self.settings.setdefault(guild.id, Settings(guild.id))
 
     async def on_command_error(self, ctx: commands.Context, error: Exception):
         if isinstance(error, commands.CommandNotFound): # ignore command not found errors
             return
         
-        if isinstance(error, func.Error):   # handle known errors
+        if isinstance(error, Error):   # handle known errors
+            log_sys.warning(f"Caught known error: {error.code}")
             return await FancyErrors(error.code, ctx.channel)
         
         else:   # dump unknown errors
             raise error
         
     async def on_guild_join(self, guild: discord.Guild):
-        allstates = self.settings[guild.id] # load defaults
-        allstates.load_settings_from_json(config.settings.setdefault(str(guild.id), {}))    # load saved settings if present (maybe we rejoined a server)
+        allstates = self.settings.setdefault(guild.id, Settings(guild.id))
+        allstates._save_settings()
         
-        config.SaveSettings()   # save settings
-
-    async def on_voice_state_update(self, author: discord.Member, before: discord.VoiceState, after: discord.VoiceState) -> None:
-        if before.channel is None and after.channel is not None: # joined
-            log_voice.info(f"\033[38;2;152;255;152m{author}\033[0m: joined {after.channel.guild.name}/{after.channel}")
-        elif before.channel is not None and after.channel is None: # left
-            log_voice.info(f"\033[38;2;152;255;152m{author}\033[0m: left {before.channel.guild.name}/{before.channel}")
-        elif before.channel != after.channel: # changed
-            log_voice.info(f"\033[38;2;152;255;152m{author}\033[0m: moved in {before.channel.guild.name}: {before.channel} -> {after.channel}")
 
     async def on_message(self, message: discord.Message) -> None:
         """
@@ -130,17 +147,27 @@ class Hathor(commands.Bot):
         if message.author == self.user: # ignore messages from self
             return
         
+        if message.author.bot: # ignore messages from bots
+            return
+
         if not message.guild:    # ignore DMs
             return
         
         if len(allstates.perms['channel_id']) > 0 and message.channel.id not in allstates.perms['channel_id']:
-            print(f"ignoring {message.channel.name} ({message.channel.id})")
             return
 
         if message.content.lower() == "foxtest":    # test message
             await message.reply(f'The quick brown fox jumps over the lazy dog 1234567890 ({self.latency * 1000:.2f}ms)')
 
         await self.process_commands(message) # required to process @bot.command
+
+    async def on_voice_state_update(self, author: discord.Member, before: discord.VoiceState, after: discord.VoiceState) -> None:
+        if before.channel is None and after.channel is not None: # joined
+            log_voice.info(f"\033[38;2;152;255;152m{author}\033[0m: joined {after.channel.guild.name}/{after.channel}")
+        elif before.channel is not None and after.channel is None: # left
+            log_voice.info(f"\033[38;2;152;255;152m{author}\033[0m: left {before.channel.guild.name}/{before.channel}")
+        elif before.channel != after.channel: # changed
+            log_voice.info(f"\033[38;2;152;255;152m{author}\033[0m: moved in {before.channel.guild.name}: {before.channel} -> {after.channel}")
 
 
     ####################################################################
@@ -149,6 +176,7 @@ class Hathor(commands.Bot):
 
     async def _join_voice(self, ctx: commands.Context):
         allstates = self.settings[ctx.guild.id]
+
         try:
             if ctx.voice_client:
                 await ctx.voice_client.move_to(ctx.author.voice.channel)
@@ -156,7 +184,7 @@ class Hathor(commands.Bot):
                 await ctx.author.voice.channel.connect()
             allstates.last_active = time.time() # update the last active time
         except Exception:
-            raise func.err_voice_join()
+            raise Error(ERROR_CODES["voice_join"])
 
 
 ####################################################################

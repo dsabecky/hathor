@@ -8,13 +8,20 @@ from discord.ext import commands
 
 # system level stuff
 import json
-from typing import TypedDict, Any
+from typing import TypedDict
+from pathlib import Path
 
 # date, time, numbers
 import random
 
 # hathor internals
 import config
+
+####################################################################
+# Global Variables
+####################################################################
+
+SETTINGS_FILE = Path(__file__).parent / "settings.json"
 
 
 ####################################################################
@@ -34,47 +41,127 @@ class CurrentlyPlaying(TypedDict):
     thumbnail: str
     duration: int
 
+class Error(commands.CommandError):
+    """
+    Custom error class.
+    """
+
+    def __init__(self, code: str | Exception = None):
+        if isinstance(code, str) and code:  # known error code
+            msg = code
+        else:   # unknown error code, dump the exception
+            msg = str(code)
+
+        super().__init__(msg)
+        self.code = msg
+
 class Settings:
+    def __init__(self, guild_id: int):
+        self.guild_id = guild_id
+
+        self.perms = {"user_id": [], "role_id": [], "channel_id": []}
+
+        self.currently_playing = None
+        self.queue = []
+
+        self.volume = 20
+        self.repeat = False
+        self.shuffle = False
+
+        self.radio_intro = True
+        self.radio_station = None
+        self.radio_fusions = []
+        self.radio_fusions_playlist = []
+
+        self.voice_idle = 300
+        self.start_time = None
+        self.pause_time = None
+        self.last_active = None
+        self.intro_playing = False
+
+        # load saved overrides
+        self._load_settings()
+
+    def _load_settings(self) -> None:
+        try:
+            data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError):
+            return
+
+        saved = data.get(str(self.guild_id), {})
+        for key, val in saved.items():
+            # only set attributes that already exist
+            if hasattr(self, key):
+                setattr(self, key, val)
+
+    def _save_settings(self) -> None:
+        try:
+            data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError):
+            data = {}
+
+        data[str(self.guild_id)] = {
+            key: getattr(self, key)
+            for key in self.__dict__
+            if key != "guild_id"
+        }
+        SETTINGS_FILE.write_text(
+            json.dumps(data, ensure_ascii=False, indent=4),
+            encoding="utf-8"
+        )
+
+
+###############################################################
+# Functions
+###############################################################
+
+async def CheckPermissions(
+    bot: commands.Bot,
+    guild_id: int,
+    user_id: int,
+    user_roles: list[discord.Role]
+) -> bool:
     """
-    Volatile settings, called as 'allstates' in functions.
+    Check if a user has permissions to use elevated commands.
     """
 
-    def __init__(self):
-        self.perms: dict[str, list[int]] = { 'user_id': [], 'role_id': [], 'channel_id': [] }
+    guild = await bot.fetch_guild(guild_id) # required to get the owner_id
+    
+    guild_str = str(guild.id)
+    owner = await bot.fetch_user(guild.owner_id)
 
-        self.currently_playing: CurrentlyPlaying | None = None
-        self.queue: list[str] = []
+    if user_id == config.BOT_ADMIN:
+        return True
+    
+    elif user_id == owner.id:
+        return True
+    
+    elif user_id in bot.settings[guild_str]['perms']['user_id']:
+        return True
+    
+    elif any(role.id in bot.settings[guild_str]['perms']['role_id'] for role in user_roles):
+        return True
+    
+    else:
+        return False
+ 
+async def FancyErrors(
+    error: str,
+    channel: discord.TextChannel
+) -> None:
+    """
+    Send a formatted error message to a channel.
+    """
 
-        self.volume: int = 100
-        self.repeat: bool = False
-        self.shuffle: bool = False
+    embed = discord.Embed(title=random.choice(ERROR_FLAVOR), description=error, color=discord.Color.red())
+    await channel.send(embed=embed)
 
-        self.radio_station: str | None = None
-        self.radio_fusions: list[str] = []
-        self.radio_fusions_playlist: list[str] = []
-        self.radio_intro: bool = True
-
-        self.voice_idle: int = 300
-        self.start_time: float | None = None
-        self.pause_time: float | None = None
-        self.last_active: float | None = None
-        self.intro_playing: bool = False
-
-    def load_settings_from_json(self, data: dict[str, Any]):
-        if perms := data.get("perms"):
-            self.perms.update(perms)
-        if vol := data.get("volume"):
-            self.volume = vol
-        if voice_idle := data.get("voice_idle"):
-            self.voice_idle = voice_idle
-        if radio_intro := data.get("radio_intro"):
-            self.radio_intro = radio_intro
 
 ###############################################################
 # Quotable References
 ###############################################################
 
-error_flavor = [
+ERROR_FLAVOR = [
         "You must construct additional pylons.",
         "Not enough mana.",
         "Minions have spawned.",
@@ -87,56 +174,31 @@ error_flavor = [
         "What a horrible night to have a curse..."
 ]
 
-###############################################################
-# Error Classes
-###############################################################
+ERROR_CODES = {
+    "author_no_voice": "You are not in a voice channel",
+    "author_perms": "Insufficient permissions",
+    "bot_exist_voice": "Already in a voice channel",
+    "bot_no_voice": "I am not in a voice channel",
+    "bump_short": "Queue too short",
+    "duplicate_song": "This song already exists in the destination",
+    "message_short": "Message is too short",
+    "no_image": "No images attached",
+    "no_playing": "There is nothing playing",
+    "no_queue": "There is no queue",
+    "no_radio": "There is no active radio",
+    "no_song_found": "I couldn't find that song.",
+    "permissions_exist": "Permissions already exist",
+    "queue_range": "Request is out of range",
+    "radio_exist": "Radio station already exists",
+    "shuffle_no_playlist": "Playlists are not allowed in playnext, don't be greedy.",
+    "song_length": "Requested song is too long!",
+    "syntax": "Syntax error",
+    "voice_join": "I can't join that voice channel",
+    "voice_mismatch": "You must be in the same voice channel to do this",
+    "vol_range": "Invalid! Volume range is 1-100",
+    "wrong_fuse": "That station is not fused"
+}
 
-class Error(commands.CommandError):
-    pass
-class err_author_no_voice(Error):
-    code = "You are not in a voice channel"
-class err_author_perms(Error):
-    code = "Insufficient permissions"
-class err_bot_exist_voice(Error):
-    code = "Already in a voice channel"
-class err_bot_no_voice(Error):
-    code = "I am not in a voice channel"
-class err_bump_short(Error):
-    code = "Bump failed: queue too short"  
-class err_duplicate_song(Error):
-    code = "This song already exists in the destination"
-class err_message_short(Error):
-    code = "Message is too short"
-class err_no_image(Error):
-    code = "No images attached"
-class err_no_queue(Error):
-    code = "There is no queue"
-class err_no_playing(Error):
-    code = "There is nothing playing"
-class err_no_radio(Error):
-    code = "There is no active radio"
-class err_no_song_found(Error):
-    code = "I couldn't find that song."
-class err_queue_range(Error):
-    code = "Request is out of range"
-class err_permissions_exist(Error):
-    code = "Permissions already exist"
-class err_radio_exist(Error):
-    code = "Radio station already exists"
-class err_shuffle_no_playlist(Error):
-    code = "Playlists are not allowed in playnext, don't be greedy."
-class err_song_length(Error):
-    code = "Requested song is too long!"
-class err_syntax(Error):
-    code = "Syntax error"
-class err_voice_join(Error):
-    code = "I can't join that voice channel"
-class err_voice_mismatch(Error):
-    code = "You must be in the same voice channel to do this"
-class err_vol_range(Error):
-    code = "Invalid! Volume range is 1-100"
-class err_wrong_fuse(Error):
-    code = "That station is not fused"
 
 ###############################################################
 # Permission Checks (decorators)
@@ -148,14 +210,14 @@ def requires_author_perms():
         allowed = await CheckPermissions(message.bot, message.guild.id, message.author.id, message.author.roles)
 
         if not allowed:
-            raise err_author_perms()
+            raise Error(ERROR_CODES["author_perms"])
         return True
     return commands.check(predicate)
 
 def requires_author_voice():
     def predicate(message: discord.Message):
         if not message.author.voice:
-            raise err_author_no_voice()
+            raise Error(ERROR_CODES["author_no_voice"])
         return True
     return commands.check(predicate)
 
@@ -163,23 +225,14 @@ def requires_bot_playing():
     async def predicate(message: discord.Message):
         vc = message.guild.voice_client
         if not vc or (not vc.is_playing() and not vc.is_paused()):
-            raise err_no_playing()
+            raise Error(ERROR_CODES["no_playing"])
         return True
     return commands.check(predicate)
 
 def requires_bot_voice():
     def predicate(message: discord.Message):
         if not message.guild.voice_client:
-            raise err_bot_no_voice()
-        return True
-    return commands.check(predicate)
-
-def requires_message_length(min_len: int):
-    def predicate(message: discord.Message):
-        args = message.content.split(" ", 1)
-        val = args[1] if len(args) > 1 else ""
-        if len(val.strip()) < min_len:
-            raise err_message_short()
+            raise Error(ERROR_CODES["bot_no_voice"])
         return True
     return commands.check(predicate)
 
@@ -188,7 +241,7 @@ def requires_owner_perms():
         if message.author.id == config.BOT_ADMIN:
             return True
         else:
-            raise err_author_perms()
+            raise Error(ERROR_CODES["author_perms"])
     return commands.check(predicate)
 
 def requires_queue():
@@ -196,38 +249,7 @@ def requires_queue():
         allstates = message.bot.settings[message.guild.id]
 
         if not allstates.queue:
-            raise err_no_queue()
+            raise Error(ERROR_CODES["no_queue"])
         
         return True
     return commands.check(predicate)
-
-async def CheckPermissions(bot, guild_id, user_id, user_roles):
-    guild = await bot.fetch_guild(guild_id) # why cant i get this from ctx.guild???
-    
-    guild_id, guild_str = guild.id, str(guild.id)
-    owner = await bot.fetch_user(guild.owner_id)
-
-    if user_id == config.BOT_ADMIN:
-        return True
-    
-    elif user_id == owner.id:
-        return True
-    
-    elif user_id in config.settings[guild_str]['perms']['user_id']:
-        return True
-    
-    elif any(role.id in config.settings[guild_str]['perms']['role_id'] for role in user_roles):
-        return True
-    
-    else:
-        return False
-    
-###############################################################
-# Functions
-###############################################################
- 
-async def FancyErrors(error: str, channel):
-    flavor = random.choice(error_flavor)
-
-    embed = discord.Embed(title=flavor, description=error, color=discord.Color.red())
-    await channel.send(embed=embed)

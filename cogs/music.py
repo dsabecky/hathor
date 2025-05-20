@@ -5,7 +5,6 @@
 # discord imports
 import discord
 from discord.ext import commands, tasks
-from discord.ext.commands import Context
 
 # audio processing
 from gtts import gTTS   # song intros
@@ -16,12 +15,10 @@ import asyncio      # prevents thread locking
 import json         # logging (song history, settings, etc)
 import os           # system access
 import requests     # grabbing raw data from url
-import sys          # failure condition quits
 
 # data analysis
-import re                             # regex for various filtering
-from typing import Any, TypedDict     # legacy type hints
-from collections import defaultdict   # type hints
+import re                 # regex for various filtering
+from typing import Any    # legacy type hints
 
 # date, time, numbers
 import datetime     # timestamps for song history
@@ -35,17 +32,16 @@ from openai import AsyncOpenAI   # cleaner than manually calling openai.OpenAI()
 # hathor internals
 import config                        # bot config
 import func                          # bot specific functions (@decorators, err_ classes, etc)
-from func import Error, Settings     # bot specific errors
+from func import Error, ERROR_CODES  # bot specific errors
+from func import requires_author_perms, requires_author_voice, requires_bot_voice, requires_queue, requires_bot_playing
 from logs import log_cogs, log_music # logging
 
+
 ####################################################################
-# OpenAPI key validation
+# OpenAI Client
 ####################################################################
 
-if not config.BOT_OPENAI_KEY:
-    sys.exit("Missing OpenAI key. This is configured in hathor/config.py")
-
-client = AsyncOpenAI(api_key=config.BOT_OPENAI_KEY)
+client = AsyncOpenAI(api_key=config.OPENAI_API_KEY)
 
 
 ####################################################################
@@ -123,7 +119,7 @@ def SaveRadio() -> None:
 # Global variables
 ####################################################################
 
-BOT_SPOTIFY_KEY = ''
+SPOTIFY_ACCESS_TOKEN = ''
 song_history = LoadHistory()
 song_db = LoadSongDB()
 radio_playlists = LoadRadio()
@@ -225,7 +221,7 @@ class Music(commands.Cog, name="Music"):
                 if count > 0:
                     allstates.last_active = time.time()
 
-                if count == 0 and (time.time() - allstates.last_active) > config.settings[str(voice_client.guild.id)]["voice_idle"]:    # idle timeout
+                if count == 0 and (time.time() - allstates.last_active) > allstates.voice_idle:    # idle timeout
                     await voice_client.disconnect()
                     allstates.last_active = None
                     continue
@@ -234,7 +230,7 @@ class Music(commands.Cog, name="Music"):
                 await self.PlayNextSong(voice_client)
                 continue
 
-            if allstates.last_active and (time.time() - allstates.last_active) > config.settings[str(voice_client.guild.id)]["voice_idle"]:
+            if allstates.last_active and (time.time() - allstates.last_active) > allstates.voice_idle:
                 await voice_client.disconnect()
                 allstates.last_active = None
 
@@ -260,12 +256,12 @@ class Music(commands.Cog, name="Music"):
         Creates a new Spotify API Access Token.
         """
 
-        global BOT_SPOTIFY_KEY      # write access for global
+        global SPOTIFY_ACCESS_TOKEN      # write access for global
 
         def blocking_call():
             return requests.post(
                 "https://accounts.spotify.com/api/token", headers={"Content-Type": "application/x-www-form-urlencoded"},
-                data={ "grant_type": "client_credentials", "client_id": config.BOT_SPOTIFY_CLIENT, "client_secret": config.BOT_SPOTIFY_SECRET }
+                data={ "grant_type": "client_credentials", "client_id": config.SPOTIFY_CLIENT_ID, "client_secret": config.SPOTIFY_CLIENT_SECRET }
             )
 
         try:
@@ -275,7 +271,7 @@ class Music(commands.Cog, name="Music"):
 
         data = response.json()
         log_music.info("Generated new Spotify API Access Token.")
-        BOT_SPOTIFY_KEY = data['access_token']
+        SPOTIFY_ACCESS_TOKEN = data['access_token']
 
     @loop_spotify_key_creation.before_loop
     async def _before_spotify_key_creation(self):
@@ -378,11 +374,10 @@ class Music(commands.Cog, name="Music"):
         allstates = self.bot.settings[guild_id]
 
         # music settings
-        settings = config.settings[str(guild_id)]
-        volume = settings["volume"]
+        volume = allstates.volume
         repeat_status = "on" if allstates.repeat else "off"
         shuffle_status = "on" if allstates.shuffle else "off"        
-        intro = "on" if settings["radio_intro"] else "off"
+        intro = "on" if allstates.radio_intro else "off"
 
         return (   # build radio settings text
             f"```🔊 {volume}%  🔁 {repeat_status}  🔀 {shuffle_status}  📢 {intro}```"
@@ -454,9 +449,9 @@ class Music(commands.Cog, name="Music"):
 
         try:
             response = await client.chat.completions.create(
-                model=config.BOT_CHATGPT_MODEL,
+                model=config.CHATGPT_MODEL,
                 messages=conversation,
-                temperature=config.BOT_OPENAI_TEMPERATURE
+                temperature=config.CHATGPT_TEMPERATURE
             )
         except Exception as e:
             raise Error(f"_invoke_chatgpt() -> client.chat.completions.create():\n{e}")
@@ -476,7 +471,7 @@ class Music(commands.Cog, name="Music"):
             raise Error("_parse_spotify_playlist():\n No playlist ID found.")
 
         try:    # grab the playlist from spotify api
-            response = await asyncio.to_thread(requests.get, f'https://api.spotify.com/v1/playlists/{playlist_id}', headers={'Authorization': f'Bearer {BOT_SPOTIFY_KEY}'})
+            response = await asyncio.to_thread(requests.get, f'https://api.spotify.com/v1/playlists/{playlist_id}', headers={'Authorization': f'Bearer {SPOTIFY_ACCESS_TOKEN}'})
         except Exception as e:
             raise Error(f"_parse_spotify_playlist() -> Spotify.requests.get():\n{e}")
         
@@ -500,7 +495,7 @@ class Music(commands.Cog, name="Music"):
 
         try:    # grab the playlist from spotify api
             # First get playlist details
-            response = await asyncio.to_thread(requests.get, f'https://www.googleapis.com/youtube/v3/playlistItems?key={config.BOT_YOUTUBE_KEY}&part=snippet&maxResults=50&playlistId={playlist_id}')
+            response = await asyncio.to_thread(requests.get, f'https://www.googleapis.com/youtube/v3/playlistItems?key={config.YOUTUBE_API_KEY}&part=snippet&maxResults=50&playlistId={playlist_id}')
         except Exception as e:
             raise Error(f"_parse_youtube_playlist() -> YouTube.requests.get():\n{e}")
 
@@ -662,8 +657,6 @@ class Music(commands.Cog, name="Music"):
         """
 
         allstates = self.bot.settings[voice_client.guild.id]
-        guild_str = str(voice_client.guild.id)
-        cfg       = config.settings[guild_str]
 
         if voice_client.is_playing() or voice_client.is_paused():    # stop trying if we're playing something (or paused)
             return
@@ -683,10 +676,10 @@ class Music(commands.Cog, name="Music"):
         }
 
         allstates.start_time = time.time()
-        volume = cfg['volume'] / 100
-        intro_volume = cfg['volume'] < 80 and (cfg['volume'] + 20) / 100  # slightly bump intro volume
+        volume = allstates.volume / 100
+        intro_volume = allstates.volume < 80 and (allstates.volume + 20) / 100  # slightly bump intro volume
 
-        if song.get('song_artist') and cfg['radio_intro'] and random.random() < 0.4:   # add an intro (if radio is enabled)
+        if song.get('song_artist') and allstates.radio_intro and random.random() < 0.4:   # add an intro (if radio is enabled)
             await self.PlayRadioIntro(voice_client, song['id'], song['song_artist'], song['song_title'], intro_volume)
 
         def song_cleanup(error):    # song file cleanup
@@ -695,7 +688,7 @@ class Music(commands.Cog, name="Music"):
 
         voice_client.play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(allstates.currently_playing['file_path']), volume=volume), after=song_cleanup)    # actually play the song, cleanup after=
 
-        song_history[guild_str].append({ "timestamp": time.time(), "title": song['title'] })
+        song_history[str(voice_client.guild.id)].append({ "timestamp": time.time(), "title": song['title'] })
         SaveHistory()
 
     async def PlayRadioIntro(
@@ -709,8 +702,6 @@ class Music(commands.Cog, name="Music"):
         """
         Plays a radio intro.
         """
-
-        allstates = self.bot.settings[voice_client.guild.id]
 
         is_special = random.random() < 0.4  # 40% odds we use a song specific intro
         text = ""   # initiate the intro string
@@ -870,7 +861,7 @@ class Music(commands.Cog, name="Music"):
         if 'open.spotify.com/track/' in payload:
             track_id = re.search(r'/track/([a-zA-Z0-9]+)(?:[/?]|$)', payload).group(1)
             try:    # grab the trackid from spotify
-                response = await asyncio.to_thread(requests.get, f'https://api.spotify.com/v1/tracks/{track_id}', headers={'Authorization': f'Bearer {BOT_SPOTIFY_KEY}'})
+                response = await asyncio.to_thread(requests.get, f'https://api.spotify.com/v1/tracks/{track_id}', headers={'Authorization': f'Bearer {SPOTIFY_ACCESS_TOKEN}'})
             except Exception as e:  # finalize the message if we fail
                 embed = discord.Embed(description="❌ I ran into an issue with the Spotify API. 😢")
                 await message.edit(content=None, embed=embed)
@@ -930,7 +921,7 @@ class Music(commands.Cog, name="Music"):
     ####################################################################
 
     @commands.command(name="aiplaylist", aliases=['smartplaylist'])
-    @func.requires_author_voice()
+    @requires_author_voice()
     async def trigger_aiplaylist(
         self,
         ctx: commands.Context,
@@ -950,7 +941,7 @@ class Music(commands.Cog, name="Music"):
         allstates = self.bot.settings[ctx.guild.id]
 
         if not args or len(args) < 3:
-            raise func.err_syntax()
+            raise Error(ERROR_CODES['syntax'])
 
         if not ctx.guild.voice_client: # we're not in voice, lets change that
             await self.bot._join_voice(ctx)
@@ -981,9 +972,9 @@ class Music(commands.Cog, name="Music"):
         await asyncio.create_task(self.QueuePlaylist(ctx.guild.voice_client, playlist, message))
 
     @commands.command(name='bump')
-    @func.requires_author_perms()
-    @func.requires_author_voice()
-    @func.requires_queue()
+    @requires_author_perms()
+    @requires_author_voice()
+    @requires_queue()
     async def trigger_bump(
         self,
         ctx: commands.Context,
@@ -999,10 +990,10 @@ class Music(commands.Cog, name="Music"):
         allstates = self.bot.settings[ctx.guild.id]
 
         if len(allstates.queue) < 2:    # is there even enough songs to justify?
-            raise func.err_bump_short()
+            raise Error(ERROR_CODES['bump_short'])
 
         elif not song_number or not song_number.isdigit() or int(song_number) < 2:
-            raise func.err_syntax()
+            raise Error(ERROR_CODES['syntax'])
 
         bumped = allstates.queue.pop(int(song_number) - 1)
         allstates.queue.insert(0, bumped)
@@ -1010,8 +1001,8 @@ class Music(commands.Cog, name="Music"):
         await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='clear')
-    @func.requires_author_perms()
-    @func.requires_queue()
+    @requires_author_perms()
+    @requires_queue()
     async def trigger_clear(
         self,
         ctx: commands.Context
@@ -1030,8 +1021,8 @@ class Music(commands.Cog, name="Music"):
         allstates.queue = []
 
     @commands.command(name='defuse')
-    @func.requires_author_perms()
-    @func.requires_author_voice()
+    @requires_author_perms()
+    @requires_author_voice()
     async def trigger_defuse(
         self,
         ctx: commands.Context,
@@ -1048,10 +1039,10 @@ class Music(commands.Cog, name="Music"):
         allstates = self.bot.settings[ctx.guild.id]
 
         if not payload: # no station provided
-            raise func.err_syntax()
+            raise Error(ERROR_CODES['syntax'])
         
         if payload.lower() not in allstates.radio_fusions: # station not fused
-            raise func.err_radio_not_fused()
+            raise Error(ERROR_CODES['radio_not_fused'])
         
         if len(allstates.radio_fusions) == 1: # deny defusion of last station
             embed = discord.Embed(title="Error", description="❌ You must have at least one radio station fused.", color=discord.Color.red())
@@ -1066,8 +1057,8 @@ class Music(commands.Cog, name="Music"):
         await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='fuse')
-    @func.requires_author_perms()
-    @func.requires_author_voice()
+    @requires_author_perms()
+    @requires_author_voice()
     async def trigger_fuse(
         self,
         ctx: commands.Context,
@@ -1085,7 +1076,7 @@ class Music(commands.Cog, name="Music"):
         allstates = self.bot.settings[ctx.guild.id]
         
         if not payload: # no fusion provided
-            raise func.err_syntax()
+            raise Error(ERROR_CODES['syntax'])
 
         if not ctx.guild.voice_client: # we're not in voice, lets change that
             await self.bot._join_voice(ctx)
@@ -1162,7 +1153,7 @@ class Music(commands.Cog, name="Music"):
     #     message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='intro')
-    @func.requires_author_perms()
+    @requires_author_perms()
     async def trigger_intro(
         self,
         ctx: commands.Context
@@ -1174,19 +1165,18 @@ class Music(commands.Cog, name="Music"):
             !intro
         """
 
-        guild_str = str(ctx.guild.id)   # str() the guild id for json purposes
-        
-        config.settings[guild_str]['radio_intro'] = not config.settings[guild_str]['radio_intro']
-        config.SaveSettings()
+        allstates = self.bot.settings[ctx.guild.id]
+        allstates.radio_intro = not allstates.radio_intro
+        allstates._save_settings()
 
-        embed = discord.Embed(description=f"📢 Radio intros {config.settings[guild_str]['radio_intro'] and 'enabled' or 'disabled'}.")
+        embed = discord.Embed(description=f"📢 Radio intros {allstates.radio_intro and 'enabled' or 'disabled'}.")
         await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='pause')
-    @func.requires_author_perms()
-    @func.requires_author_voice()
-    @func.requires_bot_playing()
-    @func.requires_bot_voice()
+    @requires_author_perms()
+    @requires_author_voice()
+    @requires_bot_playing()
+    @requires_bot_voice()
     async def trigger_pause(
         self,
         ctx: commands.Context
@@ -1207,7 +1197,7 @@ class Music(commands.Cog, name="Music"):
         await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='play')
-    @func.requires_author_voice()
+    @requires_author_voice()
     async def trigger_play(
         self,
         ctx: commands.Context,
@@ -1225,7 +1215,7 @@ class Music(commands.Cog, name="Music"):
             await self.bot._join_voice(ctx)
 
         if not payload:    # no data provided
-            raise func.err_syntax(); return
+            raise Error(ERROR_CODES['syntax'])
 
         embed = discord.Embed(description=f"🔎 Searching for {payload}")
         message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
@@ -1237,8 +1227,8 @@ class Music(commands.Cog, name="Music"):
 
 
     @commands.command(name='playnext', aliases=['playbump'])
-    @func.requires_author_perms()
-    @func.requires_author_voice()
+    @requires_author_perms()
+    @requires_author_voice()
     async def trigger_playnext(
         self,
         ctx: commands.Context,
@@ -1256,11 +1246,11 @@ class Music(commands.Cog, name="Music"):
         """
 
         if not payload:    # no data provided
-            raise func.err_syntax()
+            raise Error(ERROR_CODES['syntax'])
 
         is_playlist = ('list=' in payload or 'open.spotify.com/playlist' in payload) and True or False
         if is_playlist:     # playlists not supported with playnext
-            raise func.err_shuffle_no_playlist()
+            raise Error(ERROR_CODES['shuffle_no_playlist'])
         
         if not ctx.guild.voice_client: # we're not in voice, lets change that
             await self.bot._join_voice(ctx)
@@ -1312,8 +1302,8 @@ class Music(commands.Cog, name="Music"):
         await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='radio', aliases=['dj'])
-    @func.requires_author_perms()
-    @func.requires_author_voice()
+    @requires_author_perms()
+    @requires_author_voice()
     async def trigger_radio(
         self,
         ctx: commands.Context,
@@ -1355,8 +1345,8 @@ class Music(commands.Cog, name="Music"):
         await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='remove')
-    @func.requires_author_perms()
-    @func.requires_queue()
+    @requires_author_perms()
+    @requires_queue()
     async def trigger_remove(self, ctx, args=None):
         """
         Removes the requested song from queue.
@@ -1368,11 +1358,11 @@ class Music(commands.Cog, name="Music"):
         allstates = self.bot.settings[ctx.guild.id]
         
         if not args or (args and not args.isdigit()):
-            raise func.err_syntax(); return
+            raise Error(ERROR_CODES['syntax'])
 
         args = int(args)
         if not allstates.queue[(args - 1)]:
-            raise func.err_queue_range(); return
+            raise Error(ERROR_CODES['queue_range'])
 
         else:
             song = allstates.queue.pop((int(args) - 1))
@@ -1380,7 +1370,7 @@ class Music(commands.Cog, name="Music"):
             await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='repeat', aliases=['loop'])
-    @func.requires_author_perms()
+    @requires_author_perms()
     async def trigger_repeat(self, ctx):
         """
         Toggles song repeating.
@@ -1399,10 +1389,10 @@ class Music(commands.Cog, name="Music"):
         await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='resume')
-    @func.requires_author_perms()
-    @func.requires_author_voice()
-    @func.requires_bot_playing()
-    @func.requires_bot_voice()
+    @requires_author_perms()
+    @requires_author_voice()
+    @requires_bot_playing()
+    @requires_bot_voice()
     async def trigger_resume(self, ctx, *, args=None):
         """
         Resume song playback.
@@ -1420,7 +1410,7 @@ class Music(commands.Cog, name="Music"):
         message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='shuffle')
-    @func.requires_author_perms()
+    @requires_author_perms()
     async def trigger_shuffle(self, ctx):
         """
         Toggles playlist shuffle.
@@ -1438,9 +1428,9 @@ class Music(commands.Cog, name="Music"):
         message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='skip')
-    @func.requires_author_perms()
-    @func.requires_bot_playing()
-    @func.requires_bot_voice()
+    @requires_author_perms()
+    @requires_bot_playing()
+    @requires_bot_voice()
     async def trigger_skip(self, ctx):
         """
         Skips the currently playing song.
@@ -1456,6 +1446,11 @@ class Music(commands.Cog, name="Music"):
         ctx.guild.voice_client.stop()   # actually skip the song
         if allstates.repeat:
             await self.PlayNextSong(ctx.guild.voice_client)
+
+
+####################################################################
+# Launch Cog
+####################################################################
 
 async def setup(bot):
     log_cogs.info("Loading Music cog...")
