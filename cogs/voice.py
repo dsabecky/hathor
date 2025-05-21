@@ -7,7 +7,7 @@ import discord
 from discord.ext import commands
 
 # hathor internals
-from func import Error, ERROR_CODES
+from func import ERROR_CODES, FancyError
 from func import requires_author_perms, requires_author_voice, requires_bot_voice
 from logs import log_cog
 
@@ -51,7 +51,7 @@ class Voice(commands.Cog, name="Voice"):
             return
 
         if not idle_time.isdigit():
-            raise Error(ERROR_CODES['syntax'])
+            raise FancyError(ERROR_CODES['syntax'])
         
         idle_time = int(idle_time)
 
@@ -61,7 +61,7 @@ class Voice(commands.Cog, name="Voice"):
             output = discord.Embed(title="Idle Time", description=f"Idle time is now {int(allstates.voice_idle / 60)} minutes.")
             await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
         else:
-            raise Error(ERROR_CODES['queue_range'])
+            raise FancyError(ERROR_CODES['queue_range'])
 
     @commands.command(name='join')
     @requires_author_voice()
@@ -86,6 +86,8 @@ class Voice(commands.Cog, name="Voice"):
             !leave
         """
 
+        embed = discord.Embed(description=f"👋 Leaving {ctx.guild.voice_client.channel.name}")
+        await ctx.send(embed=embed)
         await ctx.guild.voice_client.disconnect()
 
     @commands.command(name='volume', aliases=['vol'])
@@ -105,7 +107,7 @@ class Voice(commands.Cog, name="Voice"):
             await ctx.channel.send(f'Current volume is: {allstates.volume}%.'); return
         
         if not args.isdigit():
-            raise Error(ERROR_CODES['syntax'])
+            raise FancyError(ERROR_CODES['syntax'])
 
         args = int(args)
 
@@ -119,7 +121,7 @@ class Voice(commands.Cog, name="Voice"):
             await ctx.channel.send(f'Server volume changed to: {allstates.volume}%.')
 
         else:
-            raise Error(ERROR_CODES['vol_range'])
+            raise FancyError(ERROR_CODES['vol_range'])
 
 
 ####################################################################

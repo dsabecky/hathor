@@ -12,7 +12,7 @@ from typing import Literal  # type hints
 
 # hathor internals
 from func import requires_owner_perms, requires_author_perms
-from func import Error, ERROR_CODES
+from func import ERROR_CODES, FancyError
 from logs import log_cog
 
 ####################################################################
@@ -45,7 +45,7 @@ class Core(commands.Cog, name="Core"):
         """
 
         if not guild_id:
-            raise Error(ERROR_CODES["syntax"])
+            raise FancyError(ERROR_CODES["syntax"])
 
         guild = self.bot.get_guild(guild_id)
 
@@ -166,12 +166,12 @@ class Core(commands.Cog, name="Core"):
         allstates = self.bot.settings[ctx.guild.id]
 
         if not group or not target:    # syntax error
-            raise Error(ERROR_CODES["syntax"])
+            raise FancyError(ERROR_CODES["syntax"])
 
         target = int(target)    # convert to int
         
         if target in allstates.perms[f"{group}_id"]:
-            raise Error(ERROR_CODES["permissions_exist"])
+            raise FancyError(ERROR_CODES["permissions_exist"])
 
         allstates.perms[f"{group}_id"].append(target)
 
@@ -193,12 +193,12 @@ class Core(commands.Cog, name="Core"):
         allstates = self.bot.settings[ctx.guild.id]
 
         if not group or not target:    # syntax error
-            raise Error(ERROR_CODES["syntax"])
+            raise FancyError(ERROR_CODES["syntax"])
 
         target = int(target)    # convert to int
 
         if target not in allstates.perms[f"{group}_id"]:
-            raise Error(ERROR_CODES["permissions_exist"])
+            raise FancyError(ERROR_CODES["permissions_exist"])
 
         allstates.perms[f"{group}_id"].remove(target)
 

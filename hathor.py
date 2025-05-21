@@ -15,11 +15,12 @@ from pathlib import Path   # cog discovery
 import inspect  # inspect config variables
 import re       # various regex filters
 import time     # last active time updater
+import random   # random error flavor
 from rich.markup import escape
 
 # hathor internals
 import config
-from func import Error, ERROR_CODES, FancyErrors, Settings
+from func import Error, ERROR_CODES, ERROR_FLAVOR, FancyError, Settings
 from logs import log_sys, log_msg
 
 
@@ -39,7 +40,7 @@ def _validate_config() -> None:
             if not val and val != 0:
                 missing.append(name)
     if missing:
-        raise RuntimeError(f"Missing config values: {', '.join(missing)}")
+        raise Error(f"Missing config values: {', '.join(missing)}")
     
 log_sys.info("Validating configurations from config.py...")
 _validate_config()
@@ -114,9 +115,13 @@ class Hathor(commands.Bot):
         if isinstance(error, commands.CommandNotFound): # ignore command not found errors
             return
         
-        if isinstance(error, Error):   # handle known errors
+        if isinstance(error, FancyError):   # send error to channel
             log_sys.warning(f"[red]{escape(error.code)}[/]")
-            await FancyErrors(error.code, ctx.channel); return
+            embed = discord.Embed(title=random.choice(ERROR_FLAVOR), description=error, color=discord.Color.red())
+            await ctx.send(embed=embed); return
+        
+        if isinstance(error, Error):   # log error to console
+            log_sys.error(f"[red]{escape(error.code)}[/]"); return
         
         else:   # dump unknown errors
             raise error
@@ -181,7 +186,7 @@ class Hathor(commands.Bot):
                 await ctx.author.voice.channel.connect()
             allstates.last_active = time.time() # update the last active time
         except Exception:
-            raise Error(ERROR_CODES["voice_join"])
+            raise FancyError(ERROR_CODES["voice_join"])
 
 async def main():
     bot = Hathor()

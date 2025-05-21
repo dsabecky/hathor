@@ -14,9 +14,9 @@ from io import BytesIO  # raw image data handling
 from openai import AsyncOpenAI  # cleaner than manually calling openai.OpenAI()
 
 # hathor internals
-import config                       # bot config
-from func import Error, ERROR_CODES # custom error class
-from logs import log_cog           # logging
+import config                                   # bot config
+from func import Error, ERROR_CODES, FancyError # custom error class
+from logs import log_cog                        # logging
 
 
 ####################################################################
@@ -195,10 +195,10 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         """
 
         if not prompt: # did you even ask anything
-            raise Error(ERROR_CODES['syntax'])
+            raise FancyError(ERROR_CODES['syntax'])
         
         if len(prompt) < 3:    # what are you asking that's shorter, really
-            raise Error(ERROR_CODES['message_short'])
+            raise FancyError(ERROR_CODES['message_short'])
         
         embed = discord.Embed(title="ChatGPT", description="Sending request to ChatGPT...")
 
@@ -220,8 +220,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         except Error as e:
             embed = discord.Embed(title="Error!", description="I ran into an issue. 😢", color=discord.Color.red())
             embed.add_field(name="Error", value=str(e), inline=False)
-            await message.edit(content=None, embed=embed)
-            raise Error(f"trigger_chatgpt() -> _invoke_chatgpt():\n{e}")
+            await message.edit(content=None, embed=embed); return
 
         embed.description = (f"Response was generated using the **{config.CHATGPT_MODEL}** model.")
 
@@ -249,7 +248,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         """
 
         if not prompt:  # verify we have a prompt
-            raise Error(ERROR_CODES['syntax'])
+            raise FancyError(ERROR_CODES['syntax'])
 
         source_imgs = [  # collect up to 4 image attachments
             att
@@ -257,7 +256,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             if att.content_type and att.content_type.startswith("image/")
         ]
         if not source_imgs:  # verify we have images
-            raise Error(ERROR_CODES['no_image'])
+            raise FancyError(ERROR_CODES['no_image'])
 
         buffers: list[BytesIO] = []  # collect image buffers
         for att in source_imgs:
@@ -278,8 +277,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         except Exception as e:
             embed = discord.Embed(title="Error!", description="I ran into an issue. 😢", color=discord.Color.red())
             embed.add_field(name="Error", value=str(e), inline=False)
-            await message.edit(embed=embed, allowed_mentions=discord.AllowedMentions.none())
-            raise Error(f"_invoke_gptimage_edit():\n{e}")
+            await message.edit(embed=embed, allowed_mentions=discord.AllowedMentions.none()); return
 
         try:    # delete old message
             await message.delete()
@@ -307,10 +305,10 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         """
         
         if not prompt:     # did you even ask anything
-            raise Error(ERROR_CODES['syntax'])
+            raise FancyError(ERROR_CODES['syntax'])
         
         if len(prompt) < 5:    # what are you asking that's shorter, really
-            raise Error(ERROR_CODES['message_short'])
+            raise FancyError(ERROR_CODES['message_short'])
 
         embed = discord.Embed(title="ChatGPT + GPT-Image Generation", description="Generating request...")
         embed.add_field(name="Prompt:", value=prompt, inline=False)
@@ -326,8 +324,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         except Exception as e:
             embed = discord.Embed(title="Error!", description="I ran into an issue. 😢", color=discord.Color.red())
             embed.add_field(name="Error", value=str(e), inline=False)
-            await message.edit(embed=embed, allowed_mentions=discord.AllowedMentions.none())
-            raise Error(f"trigger_gptimagine() -> _invoke_chatgpt():\n{e}")
+            await message.edit(embed=embed, allowed_mentions=discord.AllowedMentions.none()); return
         
         embed.add_field(name="ChatGPT Prompt:", value=response, inline=False)
         await message.edit(content=None, embed=embed)
@@ -338,9 +335,8 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         except Exception as e:
             embed = discord.Embed(title="Error!", description="I ran into an issue. 😢", color=discord.Color.red())
             embed.add_field(name="Error", value=str(e), inline=False)
-            await message.edit(embed=embed, allowed_mentions=discord.AllowedMentions.none())
-            raise Error(f"trigger_gptimagine() -> _invoke_gptimage():\n{e}")
-        
+            await message.edit(embed=embed, allowed_mentions=discord.AllowedMentions.none()); return
+
         try:    # delete old message
             await message.delete()
         except:
@@ -367,10 +363,10 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         """
 
         if not prompt:   # did you even ask anything
-            raise Error(ERROR_CODES['syntax'])
+            raise FancyError(ERROR_CODES['syntax'])
 
         if len(prompt) < 3:    # what are you asking that's shorter, really
-            raise Error(ERROR_CODES['message_short'])
+            raise FancyError(ERROR_CODES['message_short'])
 
         embed = discord.Embed(title="Image Generation", description="Generating image request...")
         embed.add_field(name="Prompt:", value=prompt, inline=False)
@@ -380,7 +376,9 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             async with message.channel.typing():
                 response = await self._invoke_gptimage(prompt)
         except Exception as e:
-            raise Error(f"trigger_imagine() -> _invoke_gptimage():\n{e}")
+            embed = discord.Embed(title="Error!", description="I ran into an issue. 😢", color=discord.Color.red())
+            embed.add_field(name="Error", value=str(e), inline=False)
+            await message.edit(embed=embed, allowed_mentions=discord.AllowedMentions.none()); return
         
         try:    # delete old message
             await message.delete()

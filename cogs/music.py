@@ -31,7 +31,7 @@ from openai import AsyncOpenAI   # cleaner than manually calling openai.OpenAI()
 
 # hathor internals
 import config
-from func import Error, ERROR_CODES, SongDB
+from func import Error, ERROR_CODES, FancyError, SongDB
 from func import requires_author_perms, requires_author_voice, requires_bot_voice, requires_queue, requires_bot_playing
 from logs import log_cog
 
@@ -395,7 +395,7 @@ class Music(commands.Cog, name="Music"):
                 f"Make a playlist of 50 songs (formatted as: artist - song), do not number the list, themed around: {station}. Include similar artists and songs."
             )
         except Exception as e:
-            raise Error(f"_generate_radio_station() -> _invoke_chatgpt():\n{e}")
+            return
 
         if response == "":
             raise Error("_generate_radio_station() -> _invoke_chatgpt():\nChatGPT is responding empty strings.")
@@ -738,8 +738,7 @@ class Music(commands.Cog, name="Music"):
             except Exception as e:
                 if message:     # finalize message if we fail
                     embed = discord.Embed(description="❌ I ran into an issue with the Spotify API. 😢")
-                    await message.edit(content=None, embed=embed)
-                raise Error(f"QueuePlaylist() -> _parse_spotify_playlist():\n{e}")
+                    await message.edit(content=None, embed=embed); return
         
         elif 'list=' in payload:  # youtube playlist
             try:
@@ -748,8 +747,7 @@ class Music(commands.Cog, name="Music"):
             except Exception as e:
                 if message:     # finalize message if we fail
                     embed = discord.Embed(description="❌ I ran into an issue with the YouTube API. 😢")
-                    await message.edit(content=None, embed=embed)
-                raise Error(f"QueuePlaylist() -> _parse_youtube_playlist():\n{e}")
+                    await message.edit(content=None, embed=embed); return
 
         else:
             playlist_type, playlist_id, playlist, playlist_length = "ChatGPT", "ChatGPT", payload, len(payload) if len(payload) <= config.MUSIC_MAX_PLAYLIST else config.MUSIC_MAX_PLAYLIST
@@ -776,31 +774,38 @@ class Music(commands.Cog, name="Music"):
                     track    = item
                     metadata = await self.FetchSongMetadata(item)
             except Exception as e:   # fail gracefully
+                if "Sign in to confirm your age" in str(e):
+                    output = "❌ That content is age restricted. 😢\nMoving onto the next song. 🫡"
+                else:
+                    output = f"❌ I ran into an issue finding {track}. 😢\nMoving onto the next song. 🫡"
+
                 if message:
-                    embed = discord.Embed(description=f"❌ I ran into an issue finding {track}. 😢\nMoving onto the next song. 🫡")
-                    await message.edit(content=None, embed=embed)
-                log_cog.error(f"QueuePlaylist() -> FetchSongMetadata():\n{escape(e)}"); continue
+                    embed = discord.Embed(description=output)
+                    await message.edit(content=None, embed=embed); continue
 
             if metadata['id'] in song_db and os.path.exists(song_db[metadata['id']]['file_path']):  # save the bandwidth
-                log_cog.info(f"QueuePlaylist(): ([dark_orange]{i}[/]/[dark_orange]{playlist_length}[/]) [dark_orange]\"{metadata['title']}\"[/] already downloaded.")
+                log_cog.info(f"QueuePlaylist: ([dark_orange]{i}[/]/[dark_orange]{playlist_length}[/]) [dark_orange]\"{metadata['title']}\"[/] already downloaded.")
                 song = song_db[metadata['id']]
 
             elif metadata['duration'] >= config.MUSIC_MAX_DURATION: # song exceeds config.MUSIC_MAX_DURATION, fail gracefully
                 if message:
                     embed = discord.Embed(description=f"❌ Song is too long! ({metadata['duration']} > {config.MUSIC_MAX_DURATION}) 🕑\nMoving onto the next song. 🫡")
-                    await message.edit(content=None, embed=embed)
-                    log_cog.error(f"QueuePlaylist(): Song ([dark_orange]{metadata['title']}[/]) duration exceeds [dark_orange]{config.MUSIC_MAX_DURATION}[/] seconds."); continue
+                    await message.edit(content=None, embed=embed); continue
             
             else:  # seems good, download it
-                log_cog.info(f"QueuePlaylist(): ([dark_orange]{i}[/]/[dark_orange]{playlist_length}[/]) Downloading [dark_orange]\"{metadata['webpage_url']}\"[/]")
+                log_cog.info(f"QueuePlaylist: ([dark_orange]{i}[/]/[dark_orange]{playlist_length}[/]) Downloading [dark_orange]\"{metadata['webpage_url']}\"[/]")
 
                 try:
                     song = await self.DownloadSong(f"https://youtube.com/watch?v={metadata['id']}", track, None)
                 except Exception as e:   # fail gracefully
+                    if "Sign in to confirm your age" in str(e):
+                        output = "❌ That content is age restricted. 😢\nMoving onto the next song. 🫡"
+                    else:
+                        output = f"❌ I ran into an issue downloading {track}. 😢\nMoving onto the next song. 🫡"
+
                     if message:
-                        embed = discord.Embed(description=f"❌ I ran into an issue downloading {track}. 😢\nMoving onto the next song. 🫡")
-                        await message.edit(content=None, embed=embed)
-                    log_cog.error(f"QueuePlaylist() -> DownloadSong():\n{escape(e)}"); continue
+                        embed = discord.Embed(description=output)
+                        await message.edit(content=None, embed=embed); continue
 
             allstates.queue.append(song)    # add song to the queue
             lines.append(f"{i}. {track}")
@@ -840,8 +845,7 @@ class Music(commands.Cog, name="Music"):
                 response = await asyncio.to_thread(requests.get, f'https://api.spotify.com/v1/tracks/{track_id}', headers={'Authorization': f'Bearer {SPOTIFY_ACCESS_TOKEN}'})
             except Exception as e:  # finalize the message if we fail
                 embed = discord.Embed(description="❌ I ran into an issue with the Spotify API. 😢")
-                await message.edit(content=None, embed=embed)
-                raise Error(f"QueueIndividualSong() -> Spotify.requests.get():\n{e}")
+                await message.edit(content=None, embed=embed); return
 
             response_json = response.json()
             track = f"{response_json['artists'][0]['name']} - {response_json['name']}"
@@ -852,9 +856,14 @@ class Music(commands.Cog, name="Music"):
             else:   # regular
                 metadata = await self.FetchSongMetadata(payload)
         except Exception as e:
-            embed = discord.Embed(description="❌ I ran into an issue finding that song. 😢")
-            await message.edit(content=None, embed=embed)
-            raise Error(f"QueueIndividualSong() -> FetchSongMetadata():\n{e}")
+            if message:
+                if "Sign in to confirm your age" in str(e):
+                    output = "❌ That content is age restricted. 😢"
+                else:
+                    output = "❌ I ran into an issue finding that song. 😢"
+
+                embed = discord.Embed(description=output)
+                await message.edit(content=None, embed=embed); return
 
         if metadata['id'] in song_db and os.path.exists(song_db[metadata['id']]['file_path']):  # save the bandwidth
             log_cog.info(f"Song: [dark_orange]\"{metadata['title']}\"[/] already downloaded.")
@@ -862,8 +871,7 @@ class Music(commands.Cog, name="Music"):
 
         elif metadata['duration'] >= config.MUSIC_MAX_DURATION: # song exceeds config.MUSIC_MAX_DURATION
             embed = discord.Embed(description="❌ Song is too long! 🕑")
-            await message.edit(content=None, embed=embed)
-            raise Error(f"QueueIndividualSong() -> FetchSongMetadata():\nSong duration exceeds {config.MUSIC_MAX_DURATION} seconds.")
+            await message.edit(content=None, embed=embed); return
         
         else:  # seems good, download it
             log_cog.info(f"QueueIndividualSong(): Downloading [dark_orange]\"{metadata['webpage_url']}\"[/]")
@@ -873,9 +881,14 @@ class Music(commands.Cog, name="Music"):
             try:    # download the song
                 song = await self.DownloadSong(f"https://youtube.com/watch?v={metadata['id']}", track, None)
             except Exception as e:
-                embed = discord.Embed(description=f"❌ I ran into an issue downloading {metadata['title']}. 😢")
-                await message.edit(content=None, embed=embed)
-                raise Error(f"QueueIndividualSong() -> DownloadSong():\n{e}")
+                if message:
+                    output = f"❌ I ran into an issue downloading {metadata['title']}. 😢"
+
+                    if "Sign in to confirm your age" in str(e):
+                        output = "❌ That content is age restricted. 😢"
+
+                    embed = discord.Embed(description=output)
+                    await message.edit(content=None, embed=embed); return
 
         if is_priority:     # push to top of queue
             allstates.queue.insert(0, song)
@@ -966,10 +979,10 @@ class Music(commands.Cog, name="Music"):
         allstates = self.bot.settings[ctx.guild.id]
 
         if len(allstates.queue) < 2:    # is there even enough songs to justify?
-            raise Error(ERROR_CODES['bump_short'])
+            raise FancyError(ERROR_CODES['bump_short'])
 
         elif not song_number or not song_number.isdigit() or int(song_number) < 2:
-            raise Error(ERROR_CODES['syntax'])
+            raise FancyError(ERROR_CODES['syntax'])
 
         bumped = allstates.queue.pop(int(song_number) - 1)
         allstates.queue.insert(0, bumped)
@@ -1015,15 +1028,14 @@ class Music(commands.Cog, name="Music"):
         allstates = self.bot.settings[ctx.guild.id]
 
         if not payload: # no station provided
-            raise Error(ERROR_CODES['syntax'])
+            raise FancyError(ERROR_CODES['syntax'])
         
         if payload.lower() not in allstates.radio_fusions: # station not fused
-            raise Error(ERROR_CODES['radio_not_fused'])
+            raise FancyError(ERROR_CODES['radio_not_fused'])
         
         if len(allstates.radio_fusions) == 1: # deny defusion of last station
             embed = discord.Embed(title="Error", description="❌ You must have at least one radio station fused.", color=discord.Color.red())
-            await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
-            return
+            await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none()); return
 
         allstates.radio_fusions.remove(payload.lower())     # remove the station from the fusion list
         self._generate_fusion_playlist(ctx.guild.id)        # generate the fusion playlist
@@ -1052,7 +1064,7 @@ class Music(commands.Cog, name="Music"):
         allstates = self.bot.settings[ctx.guild.id]
         
         if not payload: # no fusion provided
-            raise Error(ERROR_CODES['syntax'])
+            raise FancyError(ERROR_CODES['syntax'])
 
         if not ctx.guild.voice_client: # we're not in voice, lets change that
             await self.bot._join_voice(ctx)
@@ -1079,8 +1091,7 @@ class Music(commands.Cog, name="Music"):
                         await self._generate_radio_station(station)
                     except Exception as e:
                         embed = discord.Embed(description=f"❌ I ran into an issue. 😢")
-                        await message.edit(content=None, embed=embed)
-                        raise Error(f"trigger_fuse() -> _generate_radio_station():\n{e}")
+                        await message.edit(content=None, embed=embed); return
 
             allstates.radio_fusions.append(station) # add to fusion list
 
@@ -1165,7 +1176,7 @@ class Music(commands.Cog, name="Music"):
         """
 
         allstates = self.bot.settings[ctx.guild.id]
-        
+
         allstates.pause_time = time.time()  # record when we paused
         ctx.guild.voice_client.pause()      # actually pause
 
@@ -1191,7 +1202,7 @@ class Music(commands.Cog, name="Music"):
             await self.bot._join_voice(ctx)
 
         if not payload:    # no data provided
-            raise Error(ERROR_CODES['syntax'])
+            raise FancyError(ERROR_CODES['syntax'])
 
         embed = discord.Embed(description=f"🔎 Searching for {payload}")
         message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
@@ -1222,11 +1233,11 @@ class Music(commands.Cog, name="Music"):
         """
 
         if not payload:    # no data provided
-            raise Error(ERROR_CODES['syntax'])
+            raise FancyError(ERROR_CODES['syntax'])
 
         is_playlist = ('list=' in payload or 'open.spotify.com/playlist' in payload) and True or False
         if is_playlist:     # playlists not supported with playnext
-            raise Error(ERROR_CODES['shuffle_no_playlist'])
+            raise FancyError(ERROR_CODES['shuffle_no_playlist'])
         
         if not ctx.guild.voice_client: # we're not in voice, lets change that
             await self.bot._join_voice(ctx)
@@ -1317,8 +1328,8 @@ class Music(commands.Cog, name="Music"):
             allstates.radio_station = False
             embed = discord.Embed(description=f"📻 Radio disabled.")
         
-        await self._radio_monitor()
         await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+        await self._radio_monitor() 
 
     @commands.command(name='remove')
     @requires_author_perms()
@@ -1334,11 +1345,11 @@ class Music(commands.Cog, name="Music"):
         allstates = self.bot.settings[ctx.guild.id]
         
         if not args or (args and not args.isdigit()):
-            raise Error(ERROR_CODES['syntax'])
+            raise FancyError(ERROR_CODES['syntax'])
 
         args = int(args)
-        if not allstates.queue[(args - 1)]:
-            raise Error(ERROR_CODES['queue_range'])
+        if args < 1 or args > len(allstates.queue):
+            raise FancyError(ERROR_CODES['queue_range'])
 
         else:
             song = allstates.queue.pop((int(args) - 1))

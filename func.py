@@ -43,7 +43,16 @@ class CurrentlyPlaying(TypedDict):
 
 class Error(commands.CommandError):
     """
-    Custom error class.
+    Custom error class (will be logged to the console only).
+    """
+
+    def __init__(self, code: str | Exception = None):
+        super().__init__(code)
+        self.code = code
+
+class FancyError(commands.CommandError):
+    """
+    Custom error class (will be formatted as an embed and sent to the channel).
     """
 
     def __init__(self, code: str | Exception = None):
@@ -148,7 +157,7 @@ class SongDB:
 # Functions
 ###############################################################
 
-async def CheckPermissions(
+async def _check_permissions(
     bot: commands.Bot,
     guild_id: int,
     user_id: int,
@@ -177,17 +186,6 @@ async def CheckPermissions(
     
     else:
         return False
- 
-async def FancyErrors(
-    error: str,
-    channel: discord.TextChannel
-) -> None:
-    """
-    Send a formatted error message to a channel.
-    """
-
-    embed = discord.Embed(title=random.choice(ERROR_FLAVOR), description=error, color=discord.Color.red())
-    await channel.send(embed=embed)
 
 
 ###############################################################
@@ -240,17 +238,17 @@ ERROR_CODES = {
 def requires_author_perms():
     async def predicate(message: discord.Message):
 
-        allowed = await CheckPermissions(message.bot, message.guild.id, message.author.id, message.author.roles)
+        allowed = await _check_permissions(message.bot, message.guild.id, message.author.id, message.author.roles)
 
         if not allowed:
-            raise Error(ERROR_CODES["author_perms"])
+            raise FancyError(ERROR_CODES["author_perms"])
         return True
     return commands.check(predicate)
 
 def requires_author_voice():
     def predicate(message: discord.Message):
         if not message.author.voice:
-            raise Error(ERROR_CODES["author_no_voice"])
+            raise FancyError(ERROR_CODES["author_no_voice"])
         return True
     return commands.check(predicate)
 
@@ -258,14 +256,14 @@ def requires_bot_playing():
     async def predicate(message: discord.Message):
         vc = message.guild.voice_client
         if not vc or (not vc.is_playing() and not vc.is_paused()):
-            raise Error(ERROR_CODES["no_playing"])
+            raise FancyError(ERROR_CODES["no_playing"])
         return True
     return commands.check(predicate)
 
 def requires_bot_voice():
     def predicate(message: discord.Message):
         if not message.guild.voice_client:
-            raise Error(ERROR_CODES["bot_no_voice"])
+            raise FancyError(ERROR_CODES["bot_no_voice"])
         return True
     return commands.check(predicate)
 
@@ -274,7 +272,7 @@ def requires_owner_perms():
         if message.author.id == config.BOT_ADMIN:
             return True
         else:
-            raise Error(ERROR_CODES["author_perms"])
+            raise FancyError(ERROR_CODES["author_perms"])
     return commands.check(predicate)
 
 def requires_queue():
@@ -282,7 +280,7 @@ def requires_queue():
         allstates = message.bot.settings[message.guild.id]
 
         if not allstates.queue:
-            raise Error(ERROR_CODES["no_queue"])
+            raise FancyError(ERROR_CODES["no_queue"])
         
         return True
     return commands.check(predicate)
