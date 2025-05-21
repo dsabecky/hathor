@@ -80,7 +80,7 @@ class Hathor(commands.Bot):
         async def send(self, *a, **kw):
             if kw.get("embed"):
                 log_msg.info(f"[dark_violet]{self.bot.user}[/]@{self.guild.name}#{self.channel.name}:\n{kw['embed'].to_dict()}")
-            await source_send(self, *a, **kw); return
+            return await source_send(self, *a, **kw)
 
         Context.send = send
 
