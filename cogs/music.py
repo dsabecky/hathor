@@ -658,7 +658,7 @@ class Music(commands.Cog, name="Music"):
         if song.get('song_artist') and allstates.radio_intro and random.random() < 0.4:   # add an intro (if radio is enabled)
             await self.PlayRadioIntro(voice_client, song['id'], song['song_artist'], song['song_title'], intro_volume)
 
-        def song_cleanup(error):    # song file cleanup
+        def song_cleanup(error: Exception | None = None):  # song file cleanup
             if allstates.repeat:    # don't cleanup if we're on repeat
                 allstates.queue.insert(0, song)
 
@@ -752,7 +752,7 @@ class Music(commands.Cog, name="Music"):
         else:
             playlist_type, playlist_id, playlist, playlist_length = "ChatGPT", "ChatGPT", payload, len(payload) if len(payload) <= config.MUSIC_MAX_PLAYLIST else config.MUSIC_MAX_PLAYLIST
 
-        log_cog.info(f"QueuePlaylist(): Playlist ([dark_orange]{playlist_id}[/]) true length [dark_orange]{playlist_length}[/]")
+        log_cog.info(f"QueuePlaylist: Playlist ([dark_orange]{playlist_id}[/]) playlist length [dark_orange]{playlist_length}[/]")
 
         lines = []   # temp playlist for text output
         for i, item in enumerate((playlist[:playlist_length]), start=1):
@@ -900,7 +900,7 @@ class Music(commands.Cog, name="Music"):
 
         else:   # add song to the queue
             allstates.queue.append(song)
-            embed = discord.Embed(description=f"▶️ Added {metadata['title']} to the queue.")
+            embed = discord.Embed(description=f"✅ Added {metadata['title']} to the queue.")
 
         await message.edit(content=None, embed=embed)   # send our final message
 
