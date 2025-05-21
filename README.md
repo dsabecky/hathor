@@ -2,7 +2,7 @@
 
 [![Discord](https://img.shields.io/badge/Discord-Bot-blue.svg)](#)  [![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](#LICENSE)
 
-**Hathor** is a free, fully-featured Discord music+AI bot built on `discord.py`, `gTTS`, `OpenAI`, `PyNaCl`, and `yt-dlp`. It offers:
+**Hathor** is a free, fully-featured Discord music+AI bot built on `discord.py`, `gTTS`, `OpenAI`, and `yt-dlp`. It offers:
 
 - Music playback from YouTube & Spotify  
 - Smart playlists via ChatGPT  
@@ -11,39 +11,29 @@
 - Full queue management (shuffle, repeat, bump, remove)  
 - ChatGPT chat & image generation/editing  
 
-## Features
-- `!play`, `!pause`, `!skip`, `!resume`, `!queue`, `!clear`, `!remove`, `!shuffle`, `!repeat`  
-- `!radio <theme>` endless radio with AI-generated playlists  
-- `!fuse <theme1> | <theme2> …` mix multiple radio themes  
-- `!aiplaylist <theme>` create 10–50 song smart playlists  
-- DJ voice intros (customizable “radio intro”)  
-- ChatGPT text chat (`!chatgpt`)
-- GPT-Image generation (`!imagine`), ChatGPT prompted GPT-Image generation (`!gptimagine`), image edits (`!gptedit`)  
-- Per-guild settings with persistence (JSON backing)
-
 ## Installation
 ```bash
-git clone https://github.com/you/hathor.git
+git clone https://github.com/dsabecky/hathor.git
 cd hathor
-pip install discord.py gtts openai pynacl yt_dlp
+pip install discord.py gtts openai pynacl rich yt_dlp
 ```
 
 ## Configuration
 
 1. Copy the example config:  
    ```bash
-   cp config.example.py config.py
+   cp config.py.example config.py
    ```  
 2. Fill in your keys & settings in `config.py`:
 (links to aquire api keys included in config)
    ```python
-   BOT_TOKEN           = "your discord bot token"
-   BOT_OPENAI_KEY      = "your openai api key"
-   BOT_SPOTIFY_CLIENT  = "your spotify api client key"
-   BOT_SPOTIFY_SECRET  = "your spotify client secret key"
-   BOT_YOUTUBE_KEY     = "your google api key"
+   DISCORD_BOT_TOKEN      = "your discord bot token"
+   OPENAI_API_KEY         = "your openai api key"
+   SPOTIFY_CLIENT_ID      = "your spotify api client key"
+   SPOTIFY_CLIENT_SECRET  = "your spotify client secret key"
+   YOUTUBE_API_KEY        = "your google api key"
 
-   BOT_ADMIN           = "your user accounts discord id"
+   BOT_ADMIN              = "your user accounts discord id"
    ```
 
 ## Running
