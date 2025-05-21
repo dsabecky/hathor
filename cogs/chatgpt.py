@@ -6,10 +6,6 @@
 import discord
 from discord.ext import commands
 
-# system level stuff
-import asyncio      # prevents thread locking
-import sys          # failure condition quits
-
 # data analysis
 import base64           # image data conversion
 from io import BytesIO  # raw image data handling
@@ -18,20 +14,16 @@ from io import BytesIO  # raw image data handling
 from openai import AsyncOpenAI  # cleaner than manually calling openai.OpenAI()
 
 # hathor internals
-import config                   # bot config
-import func                     # bot specific functions (@decorators, err_classes, etc)
-from func import Error          # custom error class
-from logs import log_cogs    # logging
+import config                       # bot config
+from func import Error, ERROR_CODES # custom error class
+from logs import log_cog           # logging
 
 
 ####################################################################
-# OpenAPI key validation
+# OpenAI Client
 ####################################################################
 
-if not config.BOT_OPENAI_KEY:
-    sys.exit("Missing OpenAI key. This is configured in hathor/config.py")
-
-client = AsyncOpenAI(api_key=config.BOT_OPENAI_KEY)
+client = AsyncOpenAI(api_key=config.OPENAI_API_KEY)
 
 
 ####################################################################
@@ -135,9 +127,9 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
 
         try:
             response = await client.chat.completions.create(
-                model=config.BOT_CHATGPT_MODEL,
+                model=config.CHATGPT_MODEL,
                 messages=conversation,
-                temperature=config.BOT_OPENAI_TEMPERATURE,
+                temperature=config.CHATGPT_TEMPERATURE,
                 max_completion_tokens=1000
             )
 
@@ -157,9 +149,9 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
 
         try:
             response = await client.images.generate(    # send image generation request
-                model=config.BOT_GPTIMAGE_MODEL,
+                model=config.GPTIMAGE_MODEL,
                 prompt=prompt,
-                quality="medium"
+                quality=config.GPTIMAGE_QUALITY
             )
         except Exception as e:
             raise Error(f"_invoke_gptimage():\n{e}")
@@ -178,7 +170,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
 
         try:
             response = await client.images.edit(
-                model=config.BOT_GPTIMAGE_MODEL,
+                model=config.GPTIMAGE_MODEL,
                 image=image_buffers,
                 prompt=prompt
             )
@@ -207,10 +199,10 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         """
 
         if not prompt: # did you even ask anything
-            raise func.err_syntax()
+            raise Error(ERROR_CODES['syntax'])
         
         if len(prompt) < 3:    # what are you asking that's shorter, really
-            raise func.err_message_short()
+            raise Error(ERROR_CODES['message_short'])
         
         embed = discord.Embed(title="ChatGPT", description="Sending request to ChatGPT...")
 
@@ -235,7 +227,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             await message.edit(content=None, embed=embed)
             raise Error(f"trigger_chatgpt() -> _invoke_chatgpt():\n{e}")
 
-        embed.description = (f"Response was generated using the **{config.BOT_CHATGPT_MODEL}** model.")
+        embed.description = (f"Response was generated using the **{config.CHATGPT_MODEL}** model.")
 
         if len(response) > 1024:   # if response is too long, send as a code block
             embed.add_field(name="Response:", value="Response over embed limit, see below...",inline=False)
@@ -261,7 +253,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         """
 
         if not prompt:  # verify we have a prompt
-            raise func.err_syntax()
+            raise Error(ERROR_CODES['syntax'])
 
         source_imgs = [  # collect up to 4 image attachments
             att
@@ -269,7 +261,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             if att.content_type and att.content_type.startswith("image/")
         ]
         if not source_imgs:  # verify we have images
-            raise func.err_no_image()
+            raise Error(ERROR_CODES['no_image'])
 
         buffers: list[BytesIO] = []  # collect image buffers
         for att in source_imgs:
@@ -299,7 +291,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             pass
 
         # send the edited image
-        embed = discord.Embed(title="Here's your edited image!", description=f"Image generated using the **{config.BOT_GPTIMAGE_MODEL}** model.", color=discord.Color.green())
+        embed = discord.Embed(title="Here's your edited image!", description=f"Image generated using the **{config.GPTIMAGE_MODEL}** model.", color=discord.Color.green())
         embed.add_field(name="Prompt", value=prompt, inline=False)
         embed.set_image(url="attachment://edited.png")
         await ctx.reply(content=None, embed=embed, files=[discord.File(response, filename="edited.png")])
@@ -319,10 +311,10 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         """
         
         if not prompt:     # did you even ask anything
-            raise func.err_syntax()
+            raise Error(ERROR_CODES['syntax'])
         
         if len(prompt) < 5:    # what are you asking that's shorter, really
-            raise func.err_message_short()
+            raise Error(ERROR_CODES['message_short'])
 
         embed = discord.Embed(title="ChatGPT + GPT-Image Generation", description="Generating request...")
         embed.add_field(name="Prompt:", value=prompt, inline=False)
@@ -358,7 +350,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         except:
             pass
 
-        embed = discord.Embed(title="Here's your image!", description=f"Image generated using the **{config.BOT_GPTIMAGE_MODEL}** model.", color=discord.Color.green())
+        embed = discord.Embed(title="Here's your image!", description=f"Image generated using the **{config.GPTIMAGE_MODEL}** model.", color=discord.Color.green())
         embed.add_field(name="Prompt:", value=prompt, inline=False)
         embed.add_field(name="ChatGPT Prompt:", value=response, inline=False)
         embed.set_image(url="attachment://generated.png")
@@ -379,10 +371,10 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         """
 
         if not prompt:   # did you even ask anything
-            raise func.err_syntax()
+            raise Error(ERROR_CODES['syntax'])
 
         if len(prompt) < 3:    # what are you asking that's shorter, really
-            raise func.err_message_short()
+            raise Error(ERROR_CODES['message_short'])
 
         embed = discord.Embed(title="Image Generation", description="Generating image request...")
         embed.add_field(name="Prompt:", value=prompt, inline=False)
@@ -399,11 +391,16 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         except:
             pass
 
-        embed = discord.Embed(title="Here's your image!", description=f"Image generated using the **{config.BOT_GPTIMAGE_MODEL}** model.", color=discord.Color.green())
+        embed = discord.Embed(title="Here's your image!", description=f"Image generated using the **{config.GPTIMAGE_MODEL}** model.", color=discord.Color.green())
         embed.add_field(name="Prompt:", value=prompt, inline=False)
         embed.set_image(url="attachment://generated.png")
         await ctx.reply(content=None, embed=embed, files=[discord.File(response, filename="generated.png")])
 
+
+####################################################################
+# Launch Cog
+####################################################################
+
 async def setup(bot):
-    log_cogs.info("Loading ChatGPT cog...")
+    log_cog.info("Loading [dark_orange]ChatGPT[/] cog...")
     await bot.add_cog(ChatGPT(bot))

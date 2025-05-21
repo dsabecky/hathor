@@ -1,35 +1,41 @@
+####################################################################
+# Library & Modules
+####################################################################
+
+# discord imports
 import discord
 from discord.ext import commands
-import datetime
-import time
-import asyncio
-import yt_dlp
-import os
-import json
 
-import config
-import func
-from logs import log_cogs
+# hathor internals
+from func import Error, ERROR_CODES
+from func import requires_author_perms, requires_author_voice, requires_bot_voice
+from logs import log_cog
+
+
+####################################################################
+# Global Variables
+####################################################################
 
 queue = {}
 currently_playing = {}
 start_time = {}
 last_activity_time = {}
 
-# define the class
+
+####################################################################
+# Classes
+####################################################################
+
 class Voice(commands.Cog, name="Voice"):
     def __init__(self, bot):
         self.bot = bot
 
+
     ####################################################################
-    # trigger: !idle
-    # ----
-    # idle_time: time (in minutes) that the bot will idle before d/c.
-    # ----
-    # Connects you to the users voice channel.
+    # Command Triggers
     ####################################################################
     @commands.command(name="idle")
-    @func.requires_author_perms()
+    @requires_author_perms()
     async def idle_time(self, ctx, idle_time=None):
         """
         Configure the time (mins) idle time before disconnecting.
@@ -37,32 +43,28 @@ class Voice(commands.Cog, name="Voice"):
         Syntax:
             !idle [1-30]
         """
+        allstates = self.bot.settings[ctx.guild.id]
 
         if not idle_time:
-            output = discord.Embed(title="Idle Time", description=f"I will currently idle for {int(config.settings[str(ctx.guild.id)]['voice_idle'] / 60)} minutes.")
+            output = discord.Embed(title="Idle Time", description=f"I will currently idle for {int(allstates.voice_idle / 60)} minutes.")
             await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
             return
 
         if not idle_time.isdigit():
-            raise func.err_syntax(); return
+            raise Error(ERROR_CODES['syntax'])
         
         idle_time = int(idle_time)
 
         if 1 <= idle_time <= 30:
-            config.settings[str(ctx.guild.id)]['voice_idle'] = idle_time * 60
-            config.SaveSettings()
-            output = discord.Embed(title="Idle Time", description=f"Idle time is now {int(config.settings[str(ctx.guild.id)]['voice_idle'] / 60)} minutes.")
+            allstates.voice_idle = idle_time * 60
+            allstates._save_settings()
+            output = discord.Embed(title="Idle Time", description=f"Idle time is now {int(allstates.voice_idle / 60)} minutes.")
             await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
         else:
-            raise func.err_queue_range(); return
+            raise Error(ERROR_CODES['queue_range'])
 
-    ####################################################################
-    # trigger: !join
-    # ----
-    # Connects you to the users voice channel.
-    ####################################################################
     @commands.command(name='join')
-    @func.requires_author_voice()
+    @requires_author_voice()
     async def join_voice(self, ctx):
         """
         Attempts to join the voice channel you reside.
@@ -71,17 +73,11 @@ class Voice(commands.Cog, name="Voice"):
             !join
         """
         
-        await JoinVoice(ctx)
+        await self.bot._join_voice(ctx)
 
-    ####################################################################
-    # trigger: !leave
-    # alias:   !part
-    # ----
-    # Leaves the current voice channel.
-    ####################################################################
     @commands.command(name='leave', aliases=['part'])
-    @func.requires_author_perms()
-    @func.requires_bot_voice()
+    @requires_author_perms()
+    @requires_bot_voice()
     async def leave_voice(self, ctx):
         """
         Leaves the current voice channel the bot resides.
@@ -92,14 +88,8 @@ class Voice(commands.Cog, name="Voice"):
 
         await ctx.guild.voice_client.disconnect()
 
-    ####################################################################
-    # trigger: !volume
-    # alias: !vol
-    # ----
-    # Adjusts the volume of the currently playing audio.
-    ####################################################################
     @commands.command(name='volume', aliases=['vol'])
-    @func.requires_author_perms()
+    @requires_author_perms()
     async def song_volume(self, ctx, args=None):
         """
         Sets the bot volume for current server.
@@ -108,44 +98,34 @@ class Voice(commands.Cog, name="Voice"):
             !volume <1-100>
         """
 
-        guild_id, guild_str = ctx.guild.id, str(ctx.guild.id)
+        allstates = self.bot.settings[ctx.guild.id]
         voice = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
 
         if not args:
-            await ctx.channel.send(f'Current volume is: {config.settings[guild_str]["volume"]}%.')
+            await ctx.channel.send(f'Current volume is: {allstates.volume}%.'); return
+        
+        if not args.isdigit():
+            raise Error(ERROR_CODES['syntax'])
 
-        elif args.isdigit():
-            if 0 <= int(args) <= 100:
-                
-                if guild_str in config.settings:
-                    config.settings[guild_str]['volume'] = int(args)
-                    config.SaveSettings()
+        args = int(args)
 
-                    if voice:
-                        voice.source.volume = config.settings[guild_str]["volume"] / 100
+        if 0 <= args <= 100:
+            allstates.volume = args
+            allstates._save_settings()
 
-                    await ctx.channel.send(f'Server volume changed to: {config.settings[guild_str]["volume"]}%.')
+            if voice:
+                voice.source.volume = allstates.volume / 100
 
-            else:
-                raise func.err_vol_range(); return
+            await ctx.channel.send(f'Server volume changed to: {allstates.volume}%.')
 
-
-####################################################################
-# function: JoinVoice(ctx)
-# ----
-# Joins the current voice channel.
-####################################################################
-async def JoinVoice(ctx: commands.Context):
-    allstates = ctx.bot.get_cog("Music").settings[ctx.guild.id]
-    try:
-        if ctx.voice_client:
-            await ctx.voice_client.move_to(ctx.author.voice.channel)
         else:
-            await ctx.author.voice.channel.connect()
-        allstates.last_active = time.time() # update the last active time
-    except Exception:
-        raise func.err_voice_join()
-    
+            raise Error(ERROR_CODES['vol_range'])
+
+
+####################################################################
+# Launch Cog
+####################################################################
+
 async def setup(bot):
-    log_cogs.info("Loading Voice cog...")
+    log_cog.info("Loading [dark_orange]Voice[/] cog...")
     await bot.add_cog(Voice(bot))
