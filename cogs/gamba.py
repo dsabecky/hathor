@@ -14,8 +14,7 @@ from typing import Optional     # this is supposed to be "cleaner" for array pre
 import random
 
 # hathor internals
-import func
-from logs import log_cogs
+from logs import log_cog
 
 ####################################################################
 # Classes
@@ -40,5 +39,5 @@ class Gamba(commands.Cog, name="Gamba"):    # main class for cog
             await interaction.response.send_message(embed=output)
 
 async def setup(bot):
-    log_cogs.info("Loading Gamba cog...")
+    log_cog.info("Loading [dark_orange]Gamba[/] cog...")
     await bot.add_cog(Gamba(bot))

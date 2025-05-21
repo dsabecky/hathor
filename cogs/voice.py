@@ -3,7 +3,7 @@ from discord.ext import commands
 
 from func import Error, ERROR_CODES
 from func import requires_author_perms, requires_author_voice, requires_bot_voice
-from logs import log_cogs
+from logs import log_cog
 
 queue = {}
 currently_playing = {}
@@ -131,5 +131,5 @@ class Voice(commands.Cog, name="Voice"):
 ####################################################################
 
 async def setup(bot):
-    log_cogs.info("Loading Voice cog...")
+    log_cog.info("Loading [dark_orange]Voice[/] cog...")
     await bot.add_cog(Voice(bot))

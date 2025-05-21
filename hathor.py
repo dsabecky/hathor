@@ -15,11 +15,12 @@ from pathlib import Path   # cog discovery
 import inspect  # inspect config variables
 import re       # various regex filters
 import time     # last active time updater
+from rich.markup import escape
 
 # hathor internals
 import config
 from func import Error, ERROR_CODES, FancyErrors, Settings
-from logs import log_sys, log_msg, log_voice
+from logs import log_sys, log_msg
 
 
 ####################################################################
@@ -30,6 +31,7 @@ def _validate_config() -> None:
     """
     Ensure all config variables are defined.
     """
+
     missing = []
     pattern = re.compile(r"^[A-Z][A-Z0-9_]+$")
     for name, val in inspect.getmembers(config):
@@ -79,12 +81,12 @@ class Hathor(commands.Bot):
         async def send(self, *a, **kw):
             if kw.get("embed"):
                 log_msg.info("EMBED:\n%s", kw["embed"].to_dict())
-            return await source_send(self, *a, **kw)
+            await source_send(self, *a, **kw); return
 
         async def reply(self, *a, **kw):
             if kw.get("embed"):
                 log_msg.info("EMBED:\n%s", kw["embed"].to_dict())
-            return await source_reply(self, *a, **kw)
+            await source_reply(self, *a, **kw); return
 
         Context.send = send
         Context.reply = reply
@@ -110,7 +112,7 @@ class Hathor(commands.Bot):
         ### TODO: implement some kind of songDB trim
         ###
 
-        log_sys.info(f"connected as \033[38;2;152;255;152m{self.user}\033[0m")   # log connection to console
+        log_sys.info(f"connected as [dark_violet]{self.user}[/].")   # log connection to console
 
         for guild in self.guilds:
             self.settings.setdefault(guild.id, Settings(guild.id))
@@ -120,8 +122,8 @@ class Hathor(commands.Bot):
             return
         
         if isinstance(error, Error):   # handle known errors
-            log_sys.warning(f"Caught known error: {error.code}")
-            return await FancyErrors(error.code, ctx.channel)
+            log_sys.warning(f"[red]{escape(error.code)}[/]")
+            await FancyErrors(error.code, ctx.channel); return
         
         else:   # dump unknown errors
             raise error
@@ -139,9 +141,9 @@ class Hathor(commands.Bot):
         allstates = self.settings[message.guild.id]
 
         if message.guild:   # log server messages to console
-            log_msg.info(f"\033[38;2;152;255;152m{message.author}@{message.guild.name}#{message.channel.name}\033[0m: {message.content}")
+            log_msg.info(f"[dark_violet]{message.author}[/]@{message.guild.name}#{message.channel.name}: {escape(message.content)}")
         else:   # log DMs to console
-            log_msg.info(f"\033[38;2;152;255;152m{message.author}\033[0m: {message.content}")
+            log_msg.info(f"[dark_violet]{message.author}[/]: {escape(message.content)}")
         
         if message.author == self.user: # ignore messages from self
             return
@@ -162,11 +164,11 @@ class Hathor(commands.Bot):
 
     async def on_voice_state_update(self, author: discord.Member, before: discord.VoiceState, after: discord.VoiceState) -> None:
         if before.channel is None and after.channel is not None: # joined
-            log_voice.info(f"\033[38;2;152;255;152m{author}\033[0m: joined {after.channel.guild.name}/{after.channel}")
+            log_sys.info(f"[dark_violet]{author}[/]@{after.channel.guild.name}: [firebrick]{after.channel}[/] 👋")
         elif before.channel is not None and after.channel is None: # left
-            log_voice.info(f"\033[38;2;152;255;152m{author}\033[0m: left {before.channel.guild.name}/{before.channel}")
+            log_sys.info(f"[dark_violet]{author}[/]@{before.channel.guild.name}: [firebrick]{before.channel}[/] ✌️")
         elif before.channel != after.channel: # changed
-            log_voice.info(f"\033[38;2;152;255;152m{author}\033[0m: moved in {before.channel.guild.name}: {before.channel} -> {after.channel}")
+            log_sys.info(f"[dark_violet]{author}[/]@{before.channel.guild.name}: [firebrick]{before.channel}[/] -> [firebrick]{after.channel}[/]")
 
 
     ####################################################################

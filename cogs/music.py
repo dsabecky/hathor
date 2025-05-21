@@ -19,6 +19,7 @@ import requests     # grabbing raw data from url
 # data analysis
 import re                 # regex for various filtering
 from typing import Any    # legacy type hints
+from rich.markup import escape
 
 # date, time, numbers
 import time         # epoch timing
@@ -32,7 +33,7 @@ from openai import AsyncOpenAI   # cleaner than manually calling openai.OpenAI()
 import config
 from func import Error, ERROR_CODES, SongDB
 from func import requires_author_perms, requires_author_voice, requires_bot_voice, requires_queue, requires_bot_playing
-from logs import log_cogs, log_music
+from logs import log_cog
 
 
 ####################################################################
@@ -246,7 +247,7 @@ class Music(commands.Cog, name="Music"):
             raise Error(f"loop_spotify_key_creation() -> Spotify.requests.post():\n{e}")
 
         data = response.json()
-        log_music.info("Generated new Spotify API Access Token.")
+        log_cog.info("Generated new Spotify API Access Token.")
         SPOTIFY_ACCESS_TOKEN = data['access_token']
 
     @loop_spotify_key_creation.before_loop
@@ -374,7 +375,7 @@ class Music(commands.Cog, name="Music"):
         for station in allstates.radio_fusions:
             temp_playlist.extend(random.sample(radio_playlists[station.lower()], songs_per_station))
 
-        log_music.info(f"Generated fusion playlist for {len(allstates.radio_fusions)} stations.")
+        log_cog.info(f"Generated fusion playlist for [dark_orange]{len(allstates.radio_fusions)}[/] stations.")
         allstates.radio_fusions_playlist = temp_playlist
         
     async def _generate_radio_station(
@@ -389,7 +390,7 @@ class Music(commands.Cog, name="Music"):
             raise Error("_generate_radio_station() -> Empty station name.")
 
         try:
-            log_music.info(f"Generating radio playlist for {station}...")
+            log_cog.info(f"Generating radio playlist for [dark_orange]{station}[/].")
             response = await self._invoke_chatgpt(
                 "Return only the information requested with no additional words or context.",
                 f"Make a playlist of 50 songs (formatted as: artist - song), do not number the list, themed around: {station}. Include similar artists and songs."
@@ -407,7 +408,7 @@ class Music(commands.Cog, name="Music"):
             radio_playlists[station.lower()].append(item.strip())
 
         SaveRadio()
-        log_music.info(f"Radio playlist for {station} generated.")
+        log_cog.info(f"Radio playlist for [dark_orange]{station}[/] generated.")
 
     async def _invoke_chatgpt(
         self,
@@ -512,7 +513,7 @@ class Music(commands.Cog, name="Music"):
                     try:
                         await self._generate_radio_station(allstates.radio_station)
                     except Exception as e:
-                        log_music.error(f"loop_radio_monitor() -> _generate_radio_station():\n{e}")
+                        log_cog.error(f"loop_radio_monitor() -> _generate_radio_station():\n{escape(e)}")
                         continue
 
                     playlist = random.sample(radio_playlists[allstates.radio_station.lower()], config.RADIO_QUEUE+1)
@@ -548,7 +549,7 @@ class Music(commands.Cog, name="Music"):
 
         loop = asyncio.get_running_loop()   # hooks the loop
         try:    # grabs song metadata
-            log_music.info(f"Fetching metadata for: {query}")
+            log_cog.info(f"Fetching metadata for: [dark_orange]{query}[/]")
             info = await loop.run_in_executor(None, yt_dlp.YoutubeDL(opts).extract_info, ytdlp_query)
         except Exception as e:
             raise Error(f"FetchSongMetadata() -> yt_dlp.YoutubeDL():\n{e}")
@@ -586,7 +587,7 @@ class Music(commands.Cog, name="Music"):
 
         loop = asyncio.get_running_loop()   # hooks the loop
         try:    # downloads the song
-            log_music.info(f"DownloadSong(): {query}")
+            log_cog.info(f"DownloadSong(): [dark_orange]{query}[/]")
             info = await loop.run_in_executor(None, yt_dlp.YoutubeDL(opts).extract_info, ytdlp_query)
         except Exception as e:
             raise Error(f"DownloadSong() -> yt_dlp.YoutubeDL():\n{e}")
@@ -595,7 +596,7 @@ class Music(commands.Cog, name="Music"):
             info = info["entries"][0]
 
         try:    # generates proper tags for songDB
-            log_music.info(f"DownloadSong(): Attemping to fetch proper tags for {info['title']}")
+            log_cog.info(f"DownloadSong(): Attemping to fetch proper tags for [dark_orange]{info['title']}[/]")
             response = await self._invoke_chatgpt(
                 "Respond with only the asked answer, in 'Artist - Song Title' format, or 'None' if you do not know.",
                 f"What is the name of this track: {info['title']}")
@@ -709,7 +710,7 @@ class Music(commands.Cog, name="Music"):
         def _on_done(_):
             done.set()
 
-        log_music.info(f"Radio Intro: {text}")
+        log_cog.info(f"Radio Intro: [dark_orange]{text}[/]")
         voice_client.play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(intro_path), volume=volume), after=_on_done)
 
         await done.wait()   # wait for song completion
@@ -754,7 +755,7 @@ class Music(commands.Cog, name="Music"):
         else:
             playlist_type, playlist_id, playlist, playlist_length = "ChatGPT", "ChatGPT", payload, len(payload) if len(payload) <= config.MUSIC_MAX_PLAYLIST else config.MUSIC_MAX_PLAYLIST
 
-        log_music.info(f"QueuePlaylist(): Playlist ({playlist_id}) true length {playlist_length}")
+        log_cog.info(f"QueuePlaylist(): Playlist ([dark_orange]{playlist_id}[/]) true length [dark_orange]{playlist_length}[/]")
 
         lines = []   # temp playlist for text output
         for i, item in enumerate((playlist[:playlist_length]), start=1):
@@ -779,20 +780,20 @@ class Music(commands.Cog, name="Music"):
                 if message:
                     embed = discord.Embed(description=f"❌ I ran into an issue finding {track}. 😢\nMoving onto the next song. 🫡")
                     await message.edit(content=None, embed=embed)
-                log_music.error(f"QueuePlaylist() -> FetchSongMetadata():\n{e}"); continue
+                log_cog.error(f"QueuePlaylist() -> FetchSongMetadata():\n{escape(e)}"); continue
 
             if metadata['id'] in song_db and os.path.exists(song_db[metadata['id']]['file_path']):  # save the bandwidth
-                log_music.info(f"QueuePlaylist(): ({i}/{playlist_length}) \"{metadata['title']}\" already downloaded.")
+                log_cog.info(f"QueuePlaylist(): ([dark_orange]{i}[/]/[dark_orange]{playlist_length}[/]) [dark_orange]\"{metadata['title']}\"[/] already downloaded.")
                 song = song_db[metadata['id']]
 
             elif metadata['duration'] >= config.MUSIC_MAX_DURATION: # song exceeds config.MUSIC_MAX_DURATION, fail gracefully
                 if message:
                     embed = discord.Embed(description=f"❌ Song is too long! ({metadata['duration']} > {config.MUSIC_MAX_DURATION}) 🕑\nMoving onto the next song. 🫡")
                     await message.edit(content=None, embed=embed)
-                    log_music.error(f"QueuePlaylist(): Song ({metadata['title']}) duration exceeds {config.MUSIC_MAX_DURATION} seconds."); continue
+                    log_cog.error(f"QueuePlaylist(): Song ([dark_orange]{metadata['title']}[/]) duration exceeds [dark_orange]{config.MUSIC_MAX_DURATION}[/] seconds."); continue
             
             else:  # seems good, download it
-                log_music.info(f"QueuePlaylist(): ({i}/{playlist_length}) Downloading \"{metadata['webpage_url']}\"")
+                log_cog.info(f"QueuePlaylist(): ([dark_orange]{i}[/]/[dark_orange]{playlist_length}[/]) Downloading [dark_orange]\"{metadata['webpage_url']}\"[/]")
 
                 try:
                     song = await self.DownloadSong(f"https://youtube.com/watch?v={metadata['id']}", track, None)
@@ -800,7 +801,7 @@ class Music(commands.Cog, name="Music"):
                     if message:
                         embed = discord.Embed(description=f"❌ I ran into an issue downloading {track}. 😢\nMoving onto the next song. 🫡")
                         await message.edit(content=None, embed=embed)
-                    log_music.error(f"QueuePlaylist() -> DownloadSong():\n{e}"); continue
+                    log_cog.error(f"QueuePlaylist() -> DownloadSong():\n{escape(e)}"); continue
 
             allstates.queue.append(song)    # add song to the queue
             lines.append(f"{i}. {track}")
@@ -857,7 +858,7 @@ class Music(commands.Cog, name="Music"):
             raise Error(f"QueueIndividualSong() -> FetchSongMetadata():\n{e}")
 
         if metadata['id'] in song_db and os.path.exists(song_db[metadata['id']]['file_path']):  # save the bandwidth
-            log_music.info(f"Song: \"{metadata['title']}\" already downloaded.")
+            log_cog.info(f"Song: [dark_orange]\"{metadata['title']}\"[/] already downloaded.")
             song = song_db[metadata['id']]
 
         elif metadata['duration'] >= config.MUSIC_MAX_DURATION: # song exceeds config.MUSIC_MAX_DURATION
@@ -866,8 +867,8 @@ class Music(commands.Cog, name="Music"):
             raise Error(f"QueueIndividualSong() -> FetchSongMetadata():\nSong duration exceeds {config.MUSIC_MAX_DURATION} seconds.")
         
         else:  # seems good, download it
-            log_music.info(f"QueueIndividualSong(): Downloading \"{metadata['webpage_url']}\"")
-            embed = discord.Embed(description=f"💾 Downloading \"{metadata['title']}\" ({metadata['webpage_url']})...")
+            log_cog.info(f"QueueIndividualSong(): Downloading [dark_orange]\"{metadata['webpage_url']}\"[/]")
+            embed = discord.Embed(description=f"💾 Downloading [dark_orange]\"{metadata['title']}\"[/] ([dark_orange]{metadata['webpage_url']}[/])...")
             await message.edit(content=None, embed=embed)
 
             try:    # download the song
@@ -926,7 +927,7 @@ class Music(commands.Cog, name="Music"):
         message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
         try:    # request our playlist
-            log_music.info(f"!aiplaylist: Generating playlist request...")
+            log_cog.info(f"!aiplaylist: Generating playlist request...")
             response = await self._invoke_chatgpt(
                 "Respond with only the asked answer, in 'Artist- Song Title' format. Always provide a reponse.",
                 f"Generate a playlist of {config.MUSIC_MAX_PLAYLIST} songs. Playlist theme: {args}. Include similar artists and songs.")
@@ -1383,7 +1384,7 @@ class Music(commands.Cog, name="Music"):
         ctx.guild.voice_client.resume()     # actually resume playing
 
         info_embed = discord.Embed(description=f"🤘 Playback resumed.")
-        message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
+        await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='shuffle')
     @requires_author_perms()
@@ -1401,7 +1402,7 @@ class Music(commands.Cog, name="Music"):
         allstates.shuffle = not allstates.shuffle   # update the shuffle variable
 
         embed = discord.Embed(description=f"🔀 Shuffle mode {allstates.shuffle and 'enabled' or 'disabled'}.")
-        message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+        await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='skip')
     @requires_author_perms()
@@ -1417,7 +1418,7 @@ class Music(commands.Cog, name="Music"):
 
         allstates = self.bot.settings[ctx.guild.id]
         embed = discord.Embed(description=f"⏭️ Skipping {allstates.currently_playing['title']}")
-        message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+        await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
         ctx.guild.voice_client.stop()   # actually skip the song
         if allstates.repeat:
@@ -1429,5 +1430,5 @@ class Music(commands.Cog, name="Music"):
 ####################################################################
 
 async def setup(bot):
-    log_cogs.info("Loading Music cog...")
+    log_cog.info("Loading [dark_orange]Music[/] cog...")
     await bot.add_cog(Music(bot))

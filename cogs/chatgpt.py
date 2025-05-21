@@ -16,7 +16,7 @@ from openai import AsyncOpenAI  # cleaner than manually calling openai.OpenAI()
 # hathor internals
 import config                       # bot config
 from func import Error, ERROR_CODES # custom error class
-from logs import log_cogs           # logging
+from logs import log_cog           # logging
 
 
 ####################################################################
@@ -402,5 +402,5 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
 ####################################################################
 
 async def setup(bot):
-    log_cogs.info("Loading ChatGPT cog...")
+    log_cog.info("Loading [dark_orange]ChatGPT[/] cog...")
     await bot.add_cog(ChatGPT(bot))

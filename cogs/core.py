@@ -13,7 +13,7 @@ from typing import Literal  # type hints
 # hathor internals
 from func import requires_owner_perms, requires_author_perms
 from func import Error, ERROR_CODES
-
+from logs import log_cog
 
 ####################################################################
 # Classes
@@ -22,7 +22,7 @@ from func import Error, ERROR_CODES
 class Core(commands.Cog, name="Core"):
     """Core commands."""
 
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
 
@@ -49,7 +49,7 @@ class Core(commands.Cog, name="Core"):
 
         guild = self.bot.get_guild(guild_id)
 
-        await ctx.send(f"👋 Leaving **{guild.name}** (ID: {guild.id})…")
+        await ctx.send(f"Leaving **{guild.name}** (ID: {guild.id}) ✌️")
         await guild.leave()
 
     @commands.command(name="botservers")
@@ -67,11 +67,7 @@ class Core(commands.Cog, name="Core"):
 
         lines = [f"{g.name} (ID: {g.id})" for g in self.bot.guilds]
 
-        embed = discord.Embed(
-            title="🤖 Bot is in the following guilds:",
-            description="\n".join(lines) or "None",
-            color=discord.Color.blurple()
-        )
+        embed = discord.Embed(title="🤖 Bot is in the following guilds:", description="\n".join(lines) or "None", color=discord.Color.purple())
         embed.set_footer(text=f"Total guilds: {len(lines)}")
         await ctx.send(embed=embed)
 
@@ -215,4 +211,5 @@ class Core(commands.Cog, name="Core"):
 ####################################################################
 
 async def setup(bot: commands.Bot):
+    log_cog.info("Loading [dark_orange]Core[/] cog...")
     await bot.add_cog(Core(bot))
