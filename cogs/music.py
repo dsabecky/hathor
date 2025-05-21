@@ -168,7 +168,6 @@ class Music(commands.Cog, name="Music"):
             return
 
         allstates = self.bot.settings[member.guild.id]
-        voice_client = member.guild.voice_client
 
         if before.channel is not None and after.channel is None:    # clear out last_active (we left voice)
             allstates.last_active = None
