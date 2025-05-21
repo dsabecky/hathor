@@ -167,9 +167,8 @@ async def _check_permissions(
     Check if a user has permissions to use elevated commands.
     """
 
+    allstates = bot.settings[guild_id]
     guild = await bot.fetch_guild(guild_id) # required to get the owner_id
-    
-    guild_str = str(guild.id)
     owner = await bot.fetch_user(guild.owner_id)
 
     if user_id == config.BOT_ADMIN:
@@ -178,10 +177,10 @@ async def _check_permissions(
     elif user_id == owner.id:
         return True
     
-    elif user_id in bot.settings[guild_str]['perms']['user_id']:
+    elif user_id in allstates.perms['user_id']:
         return True
     
-    elif any(role.id in bot.settings[guild_str]['perms']['role_id'] for role in user_roles):
+    elif any(role.id in allstates.perms['role_id'] for role in user_roles):
         return True
     
     else:
