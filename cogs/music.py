@@ -113,7 +113,7 @@ class Music(commands.Cog, name="Music"):
 
     def __init__(self, bot):
         self.bot = bot
-        self.radio_lock = asyncio.Lock()
+        self.radio_lock = asyncio.Lock()    # prevents looping in radio monitor
 
 
     ####################################################################
