@@ -48,48 +48,44 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         Handles Grok's responses to messages.
         """
 
-        if message.author.bot or message.guild is None: # ignore bots and DMs
+        if not message.content.lower().startswith("@grok") and not message.content.startswith(self.bot.user.mention):   # no @grok
             return
 
-        if message.content.lower().startswith("@grok"):     # did they raw post @grok
-            trigger_len = len("@grok")
-        elif message.content.startswith(self.bot.user.mention):     # or did they mention the bot
-            trigger_len = len(self.bot.user.mention)
-        else:
-            return
+        temp_prompt = message.content.replace(self.bot.user.mention, "@grok").strip()   # replace bot mention with @grok
 
+        if temp_prompt.lower() == "@grok":  # empty response, be snarky
+            log_cog.info(f"on_message() -> {message.author}: {message.content} (empty response)")
+            await message.reply("Ah, the classic 'say nothing, get nothing' approach—bold move. Try putting some words in there next time, genius. 🥱", mention_author=False); return
+        
         if message.reference and message.reference.message_id:  # check for and (optional) find replies
             try:
                 ref_msg = await message.channel.fetch_message(message.reference.message_id)
-                source = f"{message.author} replied \"{message.content}\" to {ref_msg.author}: \"{ref_msg.content}\""
+                temp_prompt = f"{message.author} replied '{temp_prompt}' to {ref_msg.author}'s message '{ref_msg.content}'"
             except discord.NotFound:
-                await message.reply("I can't find that message—maybe it got deleted?", mention_author=False); return
-        else:
-            source = message
+                log_cog.info(f"on_message() -> {message.author}: {message.content} (message not found)")
+                await message.reply("I see you tried to reply quote a message, but I can't access it.", mention_author=False); return
 
-        prompt_text = source.content.strip()    # grab text
         image_urls = [      # grab images
-            att.url for att in source.attachments
+            att.url for att in message.attachments
             if att.content_type and att.content_type.startswith("image/")
         ]
 
-        if not prompt_text and not image_urls:
-            await message.reply("There's nothing to process—no text or images found.", mention_author=False); return
+        if not temp_prompt and not image_urls:
+            log_cog.info(f"on_message() -> {message.author}: {message.content} (no prompt or images)")
+            await message.reply("Ah, the classic 'say nothing, get nothing' approach—bold move. Try putting some words in there next time, genius. 🥱", mention_author=False); return
 
-        follow_up = message.content[trigger_len:].strip()
-        full_prompt = prompt_text
-        if follow_up:
-            full_prompt += "\n\nFollow-up: " + follow_up
-
-        try:
-            response_text = await self._invoke_chatgpt(
-                "You are Grok, the snarky Twitter AI...",
-                full_prompt,
-                att=image_urls
-            )
-        except Error as e:
-            await message.reply("Grok is speechless… must be on coffee break.",mention_author=False)
-            raise Error(f"on_message() -> _invoke_chatgpt():\n{e}")
+        async with message.channel.typing():
+            try:
+                response_text = await self._invoke_chatgpt(
+                    "You are Grok, the snarky Twitter AI. "
+                    "You are inside Discord, so you can see images and use markdown. "
+                    "Be your typical rude self, but don't be too mean.",
+                    temp_prompt,
+                    att=image_urls
+                )
+            except Error as e:
+                await message.reply("Grok is speechless… must be on coffee break.",mention_author=False)
+                raise Error(f"on_message() -> _invoke_chatgpt():\n{e}")
 
         await message.reply(response_text, mention_author=False)
 
