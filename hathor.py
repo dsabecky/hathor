@@ -183,17 +183,20 @@ class Hathor(commands.Bot):
         except Exception:
             raise Error(ERROR_CODES["voice_join"])
 
+async def main():
+    bot = Hathor()
+    try:
+        await bot.start_bot()
+    except asyncio.CancelledError:
+        log_sys.info("Shutting down...")
+    except Exception as e:
+        raise e
+    finally:
+        await bot.close()
 
 ####################################################################
 # Launch
 ####################################################################
 
 if __name__ == "__main__":
-    bot = Hathor()
-    try:
-        asyncio.run(bot.start_bot())
-    except KeyboardInterrupt:
-        log_sys.info("Shutting down...")
-    except Exception as e:
-        log_sys.error(f"Error: {e}")
-        raise e
+    asyncio.run(main())
