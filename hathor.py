@@ -74,22 +74,15 @@ class Hathor(commands.Bot):
     async def start_bot(self):
         await self.start(config.DISCORD_BOT_TOKEN)
 
-    def _patch_context(self):    # patch Context.send and Context.reply to log embeds
+    def _patch_context(self):    # patch Context.send to log embeds
         source_send = Context.send
-        source_reply = Context.reply
 
         async def send(self, *a, **kw):
             if kw.get("embed"):
-                log_msg.info("EMBED:\n%s", kw["embed"].to_dict())
+                log_msg.info(f"[dark_violet]{self.author}[/]@{self.guild.name}#{self.channel.name}:\n{kw['embed'].to_dict()}")
             await source_send(self, *a, **kw); return
 
-        async def reply(self, *a, **kw):
-            if kw.get("embed"):
-                log_msg.info("EMBED:\n%s", kw["embed"].to_dict())
-            await source_reply(self, *a, **kw); return
-
         Context.send = send
-        Context.reply = reply
 
     async def setup_hook(self): # load extensions
         for ext in self.cog_list:
@@ -139,6 +132,9 @@ class Hathor(commands.Bot):
         """
 
         allstates = self.settings[message.guild.id]
+
+        if not message.content: # ignore empty messages
+            return
 
         if message.guild:   # log server messages to console
             log_msg.info(f"[dark_violet]{message.author}[/]@{message.guild.name}#{message.channel.name}: {escape(message.content)}")
