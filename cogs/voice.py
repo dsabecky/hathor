@@ -1,26 +1,38 @@
+####################################################################
+# Library & Modules
+####################################################################
+
+# discord imports
 import discord
 from discord.ext import commands
 
+# hathor internals
 from func import Error, ERROR_CODES
 from func import requires_author_perms, requires_author_voice, requires_bot_voice
 from logs import log_cog
+
+
+####################################################################
+# Global Variables
+####################################################################
 
 queue = {}
 currently_playing = {}
 start_time = {}
 last_activity_time = {}
 
-# define the class
+
+####################################################################
+# Classes
+####################################################################
+
 class Voice(commands.Cog, name="Voice"):
     def __init__(self, bot):
         self.bot = bot
 
+
     ####################################################################
-    # trigger: !idle
-    # ----
-    # idle_time: time (in minutes) that the bot will idle before d/c.
-    # ----
-    # Connects you to the users voice channel.
+    # Command Triggers
     ####################################################################
     @commands.command(name="idle")
     @requires_author_perms()
@@ -51,11 +63,6 @@ class Voice(commands.Cog, name="Voice"):
         else:
             raise Error(ERROR_CODES['queue_range'])
 
-    ####################################################################
-    # trigger: !join
-    # ----
-    # Connects you to the users voice channel.
-    ####################################################################
     @commands.command(name='join')
     @requires_author_voice()
     async def join_voice(self, ctx):
@@ -68,12 +75,6 @@ class Voice(commands.Cog, name="Voice"):
         
         await self.bot._join_voice(ctx)
 
-    ####################################################################
-    # trigger: !leave
-    # alias:   !part
-    # ----
-    # Leaves the current voice channel.
-    ####################################################################
     @commands.command(name='leave', aliases=['part'])
     @requires_author_perms()
     @requires_bot_voice()
@@ -87,12 +88,6 @@ class Voice(commands.Cog, name="Voice"):
 
         await ctx.guild.voice_client.disconnect()
 
-    ####################################################################
-    # trigger: !volume
-    # alias: !vol
-    # ----
-    # Adjusts the volume of the currently playing audio.
-    ####################################################################
     @commands.command(name='volume', aliases=['vol'])
     @requires_author_perms()
     async def song_volume(self, ctx, args=None):
@@ -125,6 +120,7 @@ class Voice(commands.Cog, name="Voice"):
 
         else:
             raise Error(ERROR_CODES['vol_range'])
+
 
 ####################################################################
 # Launch Cog
