@@ -270,7 +270,7 @@ class Music(commands.Cog, name="Music"):
         allstates = self.bot.settings[guild_id]
         currently_playing = allstates.currently_playing
 
-        if not voice_client or not currently_playing or not (voice_client.is_playing() or voice_client.is_paused()):
+        if not voice_client or not currently_playing or not voice_client.is_playing():
             return "No song playing.", "", None
 
         # build now playing text
