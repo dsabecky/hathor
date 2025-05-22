@@ -197,7 +197,7 @@ class Music(commands.Cog, name="Music"):
                 if count > 0:
                     allstates.last_active = time.time()
 
-                if count == 0 and (time.time() - allstates.last_active) > allstates.voice_idle:    # idle timeout
+                if count == 0 and (time.time() - allstates.last_active) > allstates.voice_idle:    # we're the only one in the voice channel for too long
                     await voice_client.disconnect()
                     allstates.last_active = None
                     continue
@@ -206,7 +206,7 @@ class Music(commands.Cog, name="Music"):
                 await self.PlayNextSong(voice_client)
                 continue
 
-            if allstates.last_active and (time.time() - allstates.last_active) > allstates.voice_idle:
+            if allstates.last_active and (time.time() - allstates.last_active) > allstates.voice_idle:  # idle timeout
                 await voice_client.disconnect()
                 allstates.last_active = None
 
@@ -1198,11 +1198,11 @@ class Music(commands.Cog, name="Music"):
             !play [ <search query> | <link> ]
         """
 
-        if not ctx.guild.voice_client: # we're not in voice, lets change that
-            await self.bot._join_voice(ctx)
-
         if not payload:    # no data provided
             raise FancyError(ERROR_CODES['syntax'])
+
+        if not ctx.guild.voice_client: # we're not in voice, lets change that
+            await self.bot._join_voice(ctx)        
 
         embed = discord.Embed(description=f"🔎 Searching for {payload}")
         message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
@@ -1235,7 +1235,7 @@ class Music(commands.Cog, name="Music"):
         if not payload:    # no data provided
             raise FancyError(ERROR_CODES['syntax'])
 
-        is_playlist = ('list=' in payload or 'open.spotify.com/playlist' in payload) and True or False
+        is_playlist = ('list=' in payload or 'open.spotify.com/playlist' in payload)
         if is_playlist:     # playlists not supported with playnext
             raise FancyError(ERROR_CODES['shuffle_no_playlist'])
         
