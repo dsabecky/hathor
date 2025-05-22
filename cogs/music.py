@@ -31,7 +31,7 @@ from openai import AsyncOpenAI   # cleaner than manually calling openai.OpenAI()
 
 # hathor internals
 import config
-from func import Error, ERROR_CODES, FancyError, SongDB
+from func import Error, ERROR_CODES, FancyError, RADIO_INTROS, SongDB
 from func import requires_author_perms, requires_author_voice, requires_bot_voice, requires_queue, requires_bot_playing
 from logs import log_cog
 
@@ -359,6 +359,42 @@ class Music(commands.Cog, name="Music"):
             f"```🔊 {volume}%  🔁 {repeat_status}  🔀 {shuffle_status}  📢 {intro}```"
         )
     
+    async def _fetch_metadata_ytdlp(
+        self,
+        query: str,
+        index: int | None = None
+    ) -> dict[str, Any] | None:
+
+        """
+        Wrapper for Youtube-DLP.
+
+        Fetches metadata (no download) for queried information.
+        If passed index, will grab that individual instance (does not support multi).
+        """
+
+        ytdlp_query = query if query.startswith("https://") else f"ytsearch:{query} audio"    # attach ytsearch: if it's not a link
+
+        opts = {   # ytdlp options
+            "skip_download": True,
+            "quiet": True,
+            "no_warnings": True
+        }
+
+        if index is not None:   # we're grabbing a specific item from a playlist
+            opts["playlist_items"] = str(index)
+
+        loop = asyncio.get_running_loop()   # hooks the loop
+        try:    # grabs song metadata
+            log_cog.info(f"Fetching metadata for: [dark_orange]{query}[/]")
+            info = await loop.run_in_executor(None, yt_dlp.YoutubeDL(opts).extract_info, ytdlp_query)
+        except Exception as e:
+            raise Error(f"_fetch_metadata_ytdlp() -> yt_dlp.YoutubeDL():\n{e}")
+
+        if info.get('entries'):
+            return info['entries'][0]
+        
+        return info
+    
     def _generate_fusion_playlist(
         self,
         guild_id: int
@@ -522,42 +558,6 @@ class Music(commands.Cog, name="Music"):
     # Internal: Core Functions
     ####################################################################
 
-    async def FetchSongMetadata(
-        self,
-        query: str,
-        index: int | None = None
-    ) -> dict[str, Any] | None:
-
-        """
-        Wrapper for Youtube-DLP.
-
-        Fetches metadata (no download) for queried information.
-        If passed index, will grab that individual instance (does not support multi).
-        """
-
-        ytdlp_query = query if query.startswith("https://") else f"ytsearch:{query} audio"    # attach ytsearch: if it's not a link
-
-        opts = {   # ytdlp options
-            "skip_download": True,
-            "quiet": True,
-            "no_warnings": True
-        }
-
-        if index is not None:   # we're grabbing a specific item from a playlist
-            opts["playlist_items"] = str(index)
-
-        loop = asyncio.get_running_loop()   # hooks the loop
-        try:    # grabs song metadata
-            log_cog.info(f"Fetching metadata for: [dark_orange]{query}[/]")
-            info = await loop.run_in_executor(None, yt_dlp.YoutubeDL(opts).extract_info, ytdlp_query)
-        except Exception as e:
-            raise Error(f"FetchSongMetadata() -> yt_dlp.YoutubeDL():\n{e}")
-
-        if info.get('entries'):
-            return info['entries'][0]
-        
-        return info
-
     async def DownloadSong(
         self,
         query: str,
@@ -689,17 +689,10 @@ class Music(commands.Cog, name="Music"):
             )
         
         else:   # regular intro
-            regular_intros = [
-                f"Ladies and gentlemen, hold onto your seats because we're about to unveil the magic of {title} by {artist}. Only here at {voice_client.guild.name} radio.",
-                f"Turning it up to 11! brace yourselves for {artist}'s masterpiece {title}. Here on {voice_client.guild.name} radio.",
-                f"Rock on, warriors! We're cranking up the intensity with {title} by {artist} on {voice_client.guild.name} radio.",
-                f"Welcome to the virtual airwaves! Get ready for a wild ride with a hot track by {artist} on {voice_client.guild.name} radio.",
-                f"Buckle up, folks! We're about to take you on a musical journey through the neon-lit streets of {voice_client.guild.name} radio.",
-                f"Hello, virtual world! It's your DJ, {self.bot.user.display_name or self.bot.user.name}, in the house, spinning {title} by {artist}. Only here on {voice_client.guild.name} radio.",
-                f"Greetings from the digital realm! Tune in, turn up, and let the beats of {artist} with {title} take over your senses, here on {voice_client.guild.name} radio.",
-                f"Time to crank up the volume and immerse yourself in the eclectic beats of {voice_client.guild.name} radio. Let the madness begin with {title} by {artist}!"
-            ]
-            text = random.choice(regular_intros)    # pick a random intro
+            repls = { "%SERVER%": voice_client.guild.name, "%BOT%": voice_client.bot.user.display_name or voice_client.bot.user.name, "%TITLE%": title, "%ARTIST%": artist }
+            text = random.choice(RADIO_INTROS)
+            for placeholder, value in repls.items():
+                text = text.replace(placeholder, value)
 
         tts = await asyncio.to_thread(gTTS, text, lang="en")
         intro_path = f"{config.SONGDB_PATH}/intro_{voice_client.guild.id}.mp3"
@@ -764,15 +757,15 @@ class Music(commands.Cog, name="Music"):
             try:    # fetch song metadata
                 if playlist_type == "Spotify":  # spotify filtering
                     track    = f"{item['track']['artists'][0]['name']} - {item['track']['name']}"
-                    metadata = await self.FetchSongMetadata(track)
+                    metadata = await self._fetch_metadata_ytdlp(track)
 
                 elif playlist_type == "YouTube":    # youtube filtering
                     track    = item['snippet']['title']
-                    metadata = await self.FetchSongMetadata(f"https://youtube.com/watch?v={item['snippet']['resourceId']['videoId']}")
+                    metadata = await self._fetch_metadata_ytdlp(f"https://youtube.com/watch?v={item['snippet']['resourceId']['videoId']}")
 
                 else:   # just chatgpt
                     track    = item
-                    metadata = await self.FetchSongMetadata(item)
+                    metadata = await self._fetch_metadata_ytdlp(item)
             except Exception as e:   # fail gracefully
                 if "Sign in to confirm your age" in str(e):
                     output = "❌ That content is age restricted. 😢\nMoving onto the next song. 🫡"
@@ -852,9 +845,9 @@ class Music(commands.Cog, name="Music"):
 
         try:    # fetch song metadata
             if track:   #spotify
-                metadata = await self.FetchSongMetadata(track)
+                metadata = await self._fetch_metadata_ytdlp(track)
             else:   # regular
-                metadata = await self.FetchSongMetadata(payload)
+                metadata = await self._fetch_metadata_ytdlp(payload)
         except Exception as e:
             if message:
                 if "Sign in to confirm your age" in str(e):

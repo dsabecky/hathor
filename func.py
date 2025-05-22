@@ -229,6 +229,17 @@ ERROR_CODES = {
     "wrong_fuse": "That station is not fused"
 }
 
+RADIO_INTROS = [
+    f"Ladies and gentlemen, hold onto your seats because we're about to unveil the magic of %TITLE% by %ARTIST%. Only here at %SERVER% radio.",
+    f"Turning it up to 11! brace yourselves for %ARTIST%'s masterpiece %TITLE%. Here on %SERVER% radio.",
+    f"Rock on, warriors! We're cranking up the intensity with %TITLE% by %ARTIST% on %SERVER% radio.",
+    f"Welcome to the virtual airwaves! Get ready for a wild ride with a hot track by %ARTIST% on %SERVER% radio.",
+    f"Buckle up, folks! We're about to take you on a musical journey through the neon-lit streets of %SERVER% radio.",
+    f"Hello, virtual world! It's your DJ, %BOT%, in the house, spinning %TITLE% by %ARTIST%. Only here on %SERVER% radio.",
+    f"Greetings from the digital realm! Tune in, turn up, and let the beats of %ARTIST% with %TITLE% take over your senses, here on %SERVER% radio.",
+    f"Time to crank up the volume and immerse yourself in the eclectic beats of %SERVER% radio. Let the madness begin with %TITLE% by %ARTIST%!"
+]
+
 
 ###############################################################
 # Permission Checks (decorators)
