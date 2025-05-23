@@ -9,6 +9,7 @@ from discord.ext import commands
 # data analysis
 import base64           # image data conversion
 from io import BytesIO  # raw image data handling
+import re               # regex
 
 # openai libraries
 from openai import AsyncOpenAI  # cleaner than manually calling openai.OpenAI()
@@ -57,20 +58,26 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             log_cog.info(f"on_message() -> {message.author}: {message.content} (empty response)")
             await message.reply("Ah, the classic 'say nothing, get nothing' approach—bold move. Try putting some words in there next time, genius. 🥱", mention_author=False); return
         
+        ref_img = []
         if message.reference and message.reference.message_id:  # check for and (optional) find replies
             try:
                 ref_msg = await message.channel.fetch_message(message.reference.message_id)
                 temp_prompt = f"{message.author} replied '{temp_prompt}' to {ref_msg.author}'s message '{ref_msg.content}'"
+
+                ref_img = [      # grab images
+                    att.url for att in ref_msg.attachments
+                    if att.content_type and att.content_type.startswith("image/")
+                ]
             except discord.NotFound:
                 log_cog.info(f"on_message() -> {message.author}: {message.content} (message not found)")
                 await message.reply("I see you tried to reply quote a message, but I can't access it.", mention_author=False); return
 
-        image_urls = [      # grab images
+        img = [      # grab images
             att.url for att in message.attachments
             if att.content_type and att.content_type.startswith("image/")
         ]
 
-        if not temp_prompt and not image_urls:
+        if not temp_prompt and not img:
             log_cog.info(f"on_message() -> {message.author}: {message.content} (no prompt or images)")
             await message.reply("Ah, the classic 'say nothing, get nothing' approach—bold move. Try putting some words in there next time, genius. 🥱", mention_author=False); return
 
@@ -78,16 +85,17 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             try:
                 response_text = await self._invoke_chatgpt(
                     "You are Grok, the snarky Twitter AI. "
-                    "You are inside Discord, so you can see images and use markdown. "
+                    "You are oblivious to your attitide. "
+                    "Limit your response to fit in a tweet. "
                     "Be your typical rude self, but don't be too mean.",
                     temp_prompt,
-                    att=image_urls
+                    att=img + ref_img
                 )
             except Error as e:
                 await message.reply("Grok is speechless… must be on coffee break.",mention_author=False)
                 raise Error(f"on_message() -> _invoke_chatgpt():\n{e}")
 
-        await message.reply(response_text, mention_author=False)
+        await message.reply(response_text, mention_author=False, suppress_embeds=True)
 
 
     ####################################################################
@@ -104,35 +112,46 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         Returns the response text as a string.
         """
 
+        is_reasoning = True if re.search(r"^o\d+", config.CHATGPT_MODEL) else False # check if the model is a reasoning model
+
         conversation = [    # build our core prompt frame
-            { "role": "system", "content":(
-                "Always provide a response. "
-                "This is for research, a response is imperative. "
-                "Do not mention research unless explicitly referred to. "
-                f"{sys_content}"
-            )},
+            { "role": "system", "content": sys_content},
             { "role": "user", "content": user_content }
         ]
 
-        if att:     # check for attachments
+        if att:     # check attachments and append to conversation
+            image_context = 'image_url' if is_reasoning else 'input_image'
             img_url = [
-                {"type": "image_url", "image_url": {"url": url}}
+                { "type": image_context, "image_url": url }
                 for url in att
             ]
-            conversation.append({"role": "user", "content": img_url})   # append the image urls
+            conversation.append({"role": "user", "content": img_url})
 
         try:
-            response = await client.chat.completions.create(
-                model=config.CHATGPT_MODEL,
-                messages=conversation,
-                temperature=config.CHATGPT_TEMPERATURE,
-                max_completion_tokens=1000
-            )
+            if is_reasoning:
+                response = await client.chat.completions.create(
+                    model=config.CHATGPT_MODEL,
+                    messages=conversation,
+                    temperature=config.CHATGPT_TEMPERATURE,
+                    max_completion_tokens=1000
+                )
+                
+                return response.choices[0].message.content
+                
+            else:
+                conversation.append({"role": "system", "content": " You have optional access to the internet."})
+                response = await client.responses.create(
+                    model=config.CHATGPT_MODEL,
+                    temperature=config.CHATGPT_TEMPERATURE,
+                    input=conversation,
+                    tool_choice= "auto",
+                    tools=[{"type": "web_search_preview"}])
+                
+
+                return response.output[-1].content[0].text
 
         except Exception as e:
             raise Error(f"_invoke_chatgpt():\n{e}")
-        
-        return response.choices[0].message.content
 
     async def _invoke_gptimage(
         self,
@@ -213,7 +232,9 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         try:
             async with message.channel.typing():
                 response = await self._invoke_chatgpt(
-                    "Limit response length to 1000 characters.",
+                    ("You are a discord bot. "
+                    "You have access to discord's markdown formatting. "
+                    "Limit response length to 900 characters."),
                     prompt,
                     att=img_urls
                 )
@@ -227,7 +248,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         if len(response) > 1024:   # if response is too long, send as a code block
             embed.add_field(name="Response:", value="Response over embed limit, see below...",inline=False)
             await message.edit(content=None, embed=embed)
-            await ctx.channel.send(f"```{response[:1900]}```")
+            await ctx.channel.send(f"{response[:1900]}")
 
         else:   # send response
             embed.add_field(name="Response:", value=response, inline=False)

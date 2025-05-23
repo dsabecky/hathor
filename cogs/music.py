@@ -423,12 +423,14 @@ class Music(commands.Cog, name="Music"):
         Generates a radio station playlist.
         """
 
+        chatgpt = self.bot.get_cog("ChatGPT")
+
         if not station:
             raise Error("_generate_radio_station() -> Empty station name.")
 
         try:
             log_cog.info(f"Generating radio playlist for [dark_orange]{station}[/].")
-            response = await self._invoke_chatgpt(
+            response = await chatgpt._invoke_chatgpt(
                 "Return only the information requested with no additional words or context.",
                 f"Make a playlist of 50 songs (formatted as: artist - song), do not number the list, themed around: {station}. Include similar artists and songs."
             )
@@ -446,31 +448,6 @@ class Music(commands.Cog, name="Music"):
 
         SaveRadio()
         log_cog.info(f"Radio playlist for [dark_orange]{station}[/] generated.")
-
-    async def _invoke_chatgpt(
-        self,
-        sys_content: str,
-        user_content: str
-    ) -> str:
-        """
-        Helper function that uses ChatGPT to generate a response as a string.
-        """
-
-        conversation = [
-            { "role": "system", "content": sys_content },
-            { "role": "user", "content": user_content }
-        ]
-
-        try:
-            response = await client.chat.completions.create(
-                model=config.CHATGPT_MODEL,
-                messages=conversation,
-                temperature=config.CHATGPT_TEMPERATURE
-            )
-        except Exception as e:
-            raise Error(f"_invoke_chatgpt() -> client.chat.completions.create():\n{e}")
-
-        return response.choices[0].message.content
 
     async def _parse_spotify_playlist(
         self,
@@ -576,6 +553,8 @@ class Music(commands.Cog, name="Music"):
         If passed index, will grab that individual instance (does not support multi).
         """
 
+        chatgpt = self.bot.get_cog("ChatGPT")
+
         ytdlp_query = query if query.startswith("https://") else f"ytsearch:{query} audio"    # attach ytsearch: if it's not a link
 
         opts = {      # ytdlp options
@@ -613,7 +592,7 @@ class Music(commands.Cog, name="Music"):
         else:   # couldn't find the artist or title, so we'll have to ask chatgpt
             try:
                 log_cog.info(f"DownloadSong: Attemping to fetch proper tags for [dark_orange]{info['title']} {info['webpage_url']}[/]")
-                response = await self._invoke_chatgpt(
+                response = await chatgpt._invoke_chatgpt(
                     "Respond with only the asked answer, in 'Artist - Song Title' format, or 'None' if you do not know.",
                     f"What is the name of this track: {info['title']}? The webpage is: {info['webpage_url']}.")
             except Exception as e:
@@ -696,11 +675,13 @@ class Music(commands.Cog, name="Music"):
         Plays a radio intro.
         """
 
+        chatgpt = self.bot.get_cog("ChatGPT")
+
         is_special = random.random() < 0.4  # 40% odds we use a song specific intro
         text = ""   # initiate the intro string
 
         if is_special:  # special intro
-            text = await self._invoke_chatgpt(
+            text = await chatgpt._invoke_chatgpt(
                 'Return only the information requested with no additional words or context. Do not wrap in quotes.',
                 f'Give me a short radio dj intro for "{artist} - {title}". Intro should include info about the song. Limit of 2 sentences.'
             )
@@ -924,6 +905,7 @@ class Music(commands.Cog, name="Music"):
             !smartplaylist
         """
 
+        chatgpt = self.bot.get_cog("ChatGPT")
         allstates = self.bot.settings[ctx.guild.id]
 
         if not args or len(args) < 3:
@@ -937,13 +919,12 @@ class Music(commands.Cog, name="Music"):
 
         try:    # request our playlist
             log_cog.info(f"!aiplaylist: Generating playlist request...")
-            response = await self._invoke_chatgpt(
+            response = await chatgpt._invoke_chatgpt(
                 "Respond with only the asked answer, in 'Artist- Song Title' format. Always provide a reponse.",
                 f"Generate a playlist of {config.MUSIC_MAX_PLAYLIST} songs. Playlist theme: {args}. Include similar artists and songs.")
         except Exception as e:  # well this is embarrasing
             embed = discord.Embed(description="❌ I ran into an issue. 😢")
-            await message.edit(content=None, embed=embed);
-            raise Error(f"!aiplaylist() -> _invoke_chatgpt():\n{e}")
+            await message.edit(content=None, embed=embed); return
 
         parsed_response = response.split('\n')  # filter out the goop
         playlist = []   # build the playlist and send it to the queue
@@ -953,7 +934,7 @@ class Music(commands.Cog, name="Music"):
         if not playlist:
             embed = discord.Embed(description=f"❌ I ran into an issue. 😢")
             await message.edit(content=None, embed=embed);
-            raise Error(f"!aiplaylist() -> _invoke_chatgpt():\nCould not parse playlist[] {playlist}")
+            raise Error(f"!aiplaylist:\nCould not parse playlist[] {playlist}")
 
         await asyncio.create_task(self.QueuePlaylist(ctx.guild.voice_client, playlist, message))
 
