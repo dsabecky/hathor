@@ -31,9 +31,11 @@ from openai import AsyncOpenAI   # cleaner than manually calling openai.OpenAI()
 
 # hathor internals
 import config
-from func import Error, ERROR_CODES, FancyError, RADIO_INTROS, SongDB
-from func import requires_author_perms, requires_author_voice, requires_bot_voice, requires_queue, requires_bot_playing
-from logs import log_cog
+from func import Error, ERROR_CODES, FancyError # error handling
+from func import SongDB # song database
+from func import _get_random_radio_intro # radio intros
+from func import requires_author_perms, requires_author_voice, requires_bot_voice, requires_queue, requires_bot_playing # permission checks
+from logs import log_cog # logging
 
 
 ####################################################################
@@ -687,12 +689,8 @@ class Music(commands.Cog, name="Music"):
                 'Return only the information requested with no additional words or context. Do not wrap in quotes.',
                 f'Give me a short radio dj intro for "{artist} - {title}". Intro should include info about the song. Limit of 2 sentences.'
             )
-        
         else:   # regular intro
-            repls = { "%SERVER%": voice_client.guild.name, "%BOT%": voice_client.bot.user.display_name or voice_client.bot.user.name, "%TITLE%": title, "%ARTIST%": artist }
-            text = random.choice(RADIO_INTROS)
-            for placeholder, value in repls.items():
-                text = text.replace(placeholder, value)
+            text = await _get_random_radio_intro(voice_client.bot, voice_client.guild.name, title, artist)
 
         tts = await asyncio.to_thread(gTTS, text, lang="en")
         intro_path = f"{config.SONGDB_PATH}/intro_{voice_client.guild.id}.mp3"

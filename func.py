@@ -185,6 +185,17 @@ async def _check_permissions(
     
     else:
         return False
+    
+async def _get_random_radio_intro(bot: commands.Bot, guild_name: str, title: str, artist: str) -> str:
+    """
+    Returns a random radio intro for a given guild.
+    """
+
+    repls = { "%SERVER%": guild_name, "%BOT%": bot.user.display_name or bot.user.name, "%TITLE%": title, "%ARTIST%": artist }
+    intro = random.choice(RADIO_INTROS)
+    for placeholder, value in repls.items():
+        intro = intro.replace(placeholder, value)
+    return intro
 
 
 ###############################################################
