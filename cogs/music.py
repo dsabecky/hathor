@@ -853,7 +853,7 @@ class Music(commands.Cog, name="Music"):
         
         else:  # seems good, download it
             log_cog.info(f"QueueIndividualSong(): Downloading [dark_orange]\"{metadata['webpage_url']}\"[/]")
-            embed = discord.Embed(description=f"💾 Downloading \"{metadata['title']}\" ({metadata['webpage_url']})...")
+            embed = discord.Embed(description=f"💾 Downloading \"{metadata['title']}\" ({metadata['webpage_url']})")
             await message.edit(content=None, embed=embed)
 
             try:    # download the song
