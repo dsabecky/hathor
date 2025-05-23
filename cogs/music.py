@@ -480,12 +480,15 @@ class Music(commands.Cog, name="Music"):
         Helper function that parses spotify playlists.
         """
 
-        playlist_id = re.search(r'/playlist/([a-zA-Z0-9]+)(?:[/?]|$)', payload).group(1)
+        playlist_id = re.search(r'/(?:playlist|album)/([A-Za-z0-9]+)(?:[/?]|$)', payload).group(1)
         if not playlist_id:
-            raise Error("_parse_spotify_playlist():\n No playlist ID found.")
-
-        try:    # grab the playlist from spotify api
-            response = await asyncio.to_thread(requests.get, f'https://api.spotify.com/v1/playlists/{playlist_id}', headers={'Authorization': f'Bearer {SPOTIFY_ACCESS_TOKEN}'})
+            raise Error("_parse_spotify_playlist(): No playlist or album ID found.")
+        
+        base = 'albums' if '/album/' in payload else 'playlists'
+        url = f"https://api.spotify.com/v1/{base}/{playlist_id}"
+        
+        try:
+            response = await asyncio.to_thread(requests.get, url, headers={"Authorization": f"Bearer {SPOTIFY_ACCESS_TOKEN}"})
         except Exception as e:
             raise Error(f"_parse_spotify_playlist() -> Spotify.requests.get():\n{e}")
         
@@ -723,7 +726,7 @@ class Music(commands.Cog, name="Music"):
         allstates = self.bot.settings[voice_client.guild.id]
 
         playlist_type, playlist_id, playlist, playlist_length = None, None, None, None
-        if 'open.spotify.com/playlist/' in payload: # spotify playlist
+        if 'spotify.com/' in payload: # spotify playlist
             try:
                 playlist_type, playlist_id, playlist, playlist_length = await self._parse_spotify_playlist(payload)
             except Exception as e:
@@ -754,7 +757,8 @@ class Music(commands.Cog, name="Music"):
 
             try:    # fetch song metadata
                 if playlist_type == "Spotify":  # spotify filtering
-                    track    = f"{item['track']['artists'][0]['name']} - {item['track']['name']}"
+                    data = item.get('track') or item
+                    track  = f"{data['artists'][0]['name']} - {data['name']}"
                     metadata = await self._fetch_metadata_ytdlp(track)
 
                 elif playlist_type == "YouTube":    # youtube filtering
@@ -827,10 +831,10 @@ class Music(commands.Cog, name="Music"):
         """
 
         allstates = self.bot.settings[voice_client.guild.id]
-        track = None
+        track = payload
 
 
-        if 'open.spotify.com/track/' in payload:
+        if 'spotify.com/track/' in payload:
             track_id = re.search(r'/track/([a-zA-Z0-9]+)(?:[/?]|$)', payload).group(1)
             try:    # grab the trackid from spotify
                 response = await asyncio.to_thread(requests.get, f'https://api.spotify.com/v1/tracks/{track_id}', headers={'Authorization': f'Bearer {SPOTIFY_ACCESS_TOKEN}'})
@@ -842,17 +846,10 @@ class Music(commands.Cog, name="Music"):
             track = f"{response_json['artists'][0]['name']} - {response_json['name']}"
 
         try:    # fetch song metadata
-            if track:   #spotify
-                metadata = await self._fetch_metadata_ytdlp(track)
-            else:   # regular
-                metadata = await self._fetch_metadata_ytdlp(payload)
+            metadata = await self._fetch_metadata_ytdlp(track)
         except Exception as e:
             if message:
-                if "Sign in to confirm your age" in str(e):
-                    output = "❌ That content is age restricted. 😢"
-                else:
-                    output = "❌ I ran into an issue finding that song. 😢"
-
+                output = "❌ That content is age restricted. 😢" if 'Sign in to confirm your age' in str(e) else "❌ I ran into an issue finding that song. 😢"
                 embed = discord.Embed(description=output)
                 await message.edit(content=None, embed=embed); return
 
@@ -870,7 +867,7 @@ class Music(commands.Cog, name="Music"):
             await message.edit(content=None, embed=embed)
 
             try:    # download the song
-                song = await self.DownloadSong(f"https://youtube.com/watch?v={metadata['id']}", track, None)
+                song = await self.DownloadSong(metadata['webpage_url'], metadata, None)
             except Exception as e:
                 if message:
                     output = f"❌ I ran into an issue downloading {metadata['title']}. 😢"
@@ -1198,7 +1195,7 @@ class Music(commands.Cog, name="Music"):
         embed = discord.Embed(description=f"🔎 Searching for {payload}")
         message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
-        if 'list=' in payload or 'open.spotify.com/playlist' in payload:
+        if 'list=' in payload or 'spotify.com/playlist' in payload or 'spotify.com/album' in payload:
             await asyncio.create_task(self.QueuePlaylist(ctx.guild.voice_client, payload, message))
         else:
             await asyncio.create_task(self.QueueIndividualSong(ctx.guild.voice_client, payload, False, message))
@@ -1226,7 +1223,7 @@ class Music(commands.Cog, name="Music"):
         if not payload:    # no data provided
             raise FancyError(ERROR_CODES['syntax'])
 
-        is_playlist = ('list=' in payload or 'open.spotify.com/playlist' in payload)
+        is_playlist = ('list=' in payload or 'spotify.com/playlist' in payload or 'spotify.com/album' in payload)
         if is_playlist:     # playlists not supported with playnext
             raise FancyError(ERROR_CODES['shuffle_no_playlist'])
         
