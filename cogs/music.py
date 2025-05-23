@@ -584,10 +584,11 @@ class Music(commands.Cog, name="Music"):
             song_artist = ", ".join(metadata['artists'])
             song_title = metadata['title']
 
-        elif metadata.get('tags') and len(metadata['tags']) >= 2: # youtube (typically) includes the artist and title as first two params of 'tags'
-            log_cog.info(f"DownloadSong: 'tags' tag found for [dark_orange]{info['title']} {info['webpage_url']}[/]")
-            song_artist = metadata['tags'][0]
-            song_title = metadata['tags'][1]
+        # TODO: figure out a better / more accurate way to do this
+        # elif metadata.get('tags') and len(metadata['tags']) >= 2: # youtube (typically) includes the artist and title as first two params of 'tags'
+        #     log_cog.info(f"DownloadSong: 'tags' tag found for [dark_orange]{info['title']} {info['webpage_url']}[/]")
+        #     song_artist = metadata['tags'][0]
+        #     song_title = metadata['tags'][1]
 
         else:   # couldn't find the artist or title, so we'll have to ask chatgpt
             try:
