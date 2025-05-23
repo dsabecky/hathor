@@ -770,21 +770,18 @@ class Music(commands.Cog, name="Music"):
             try:    # fetch song metadata
                 if playlist_type == "Spotify":  # spotify filtering
                     data = item.get('track') or item
-                    track  = f"{data['artists'][0]['name']} - {data['name']}"
-                    metadata = await self._fetch_metadata_ytdlp(track)
+                    metadata = await self._fetch_metadata_ytdlp(f"{data['artists'][0]['name']} - {data['name']}")
 
                 elif playlist_type == "YouTube":    # youtube filtering
-                    track    = item['snippet']['title']
-                    metadata = await self._fetch_metadata_ytdlp(f"https://youtube.com/watch?v={item['snippet']['resourceId']['videoId']}")
+                    metadata = await self._fetch_metadata_ytdlp(f"{item['snippet']['webpage_url']}")
 
                 else:   # just chatgpt
-                    track    = item
                     metadata = await self._fetch_metadata_ytdlp(item)
             except Exception as e:   # fail gracefully
                 if "Sign in to confirm your age" in str(e):
                     output = "❌ That content is age restricted. 😢\nMoving onto the next song. 🫡"
                 else:
-                    output = f"❌ I ran into an issue finding {track}. 😢\nMoving onto the next song. 🫡"
+                    output = f"❌ I ran into an issue finding metadata for {metadata['title']}. 😢\nMoving onto the next song. 🫡"
 
                 if message:
                     embed = discord.Embed(description=output)
@@ -803,19 +800,19 @@ class Music(commands.Cog, name="Music"):
                 log_cog.info(f"QueuePlaylist: ([dark_orange]{i}[/]/[dark_orange]{playlist_length}[/]) Downloading [dark_orange]\"{metadata['webpage_url']}\"[/]")
 
                 try:
-                    song = await self.DownloadSong(f"https://youtube.com/watch?v={metadata['id']}", track, None)
+                    song = await self.DownloadSong(f"https://youtube.com/watch?v={metadata['id']}", metadata, None)
                 except Exception as e:   # fail gracefully
                     if "Sign in to confirm your age" in str(e):
                         output = "❌ That content is age restricted. 😢\nMoving onto the next song. 🫡"
                     else:
-                        output = f"❌ I ran into an issue downloading {track}. 😢\nMoving onto the next song. 🫡"
+                        output = f"❌ I ran into an issue downloading {metadata['title']}. 😢\nMoving onto the next song. 🫡"
 
                     if message:
                         embed = discord.Embed(description=output)
                         await message.edit(content=None, embed=embed); continue
 
             allstates.queue.append(song)    # add song to the queue
-            lines.append(f"{i}. {track}")
+            lines.append(f"{i}. {song['song_artist']} - {song['song_title']}")
 
         if message: # if we bound a message, complete it.
             if playlist_length > 10:
@@ -875,7 +872,7 @@ class Music(commands.Cog, name="Music"):
         
         else:  # seems good, download it
             log_cog.info(f"QueueIndividualSong(): Downloading [dark_orange]\"{metadata['webpage_url']}\"[/]")
-            embed = discord.Embed(description=f"💾 Downloading [dark_orange]\"{metadata['title']}\"[/] ([dark_orange]{metadata['webpage_url']}[/])...")
+            embed = discord.Embed(description=f"💾 Downloading \"{metadata['title']}\" ({metadata['webpage_url']})...")
             await message.edit(content=None, embed=embed)
 
             try:    # download the song
