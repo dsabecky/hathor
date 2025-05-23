@@ -583,6 +583,7 @@ class Music(commands.Cog, name="Music"):
             "postprocessors": [{ "key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192" }],
             "outtmpl": f"{config.SONGDB_PATH}/%(id)s.%(ext)s",
             "ignoreerrors": True,
+            "no_warnings": True,
             "quiet": True,
         }
 
