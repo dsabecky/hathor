@@ -705,7 +705,7 @@ class Music(commands.Cog, name="Music"):
                 f'Give me a short radio dj intro for "{artist} - {title}". Intro should include info about the song. Limit of 2 sentences.'
             )
         else:   # regular intro
-            text = await _get_random_radio_intro(voice_client.bot, voice_client.guild.name, title, artist)
+            text = await _get_random_radio_intro(self.bot, voice_client.guild.name, title, artist)
 
         tts = await asyncio.to_thread(gTTS, text, lang="en")
         intro_path = f"{config.SONGDB_PATH}/intro_{voice_client.guild.id}.mp3"
