@@ -566,7 +566,7 @@ class Music(commands.Cog, name="Music"):
     async def DownloadSong(
         self,
         query: str,
-        query_context: str | None = None,
+        metadata: dict[str, Any],
         index: int | None = None
     ) -> dict[str, Any] | None:
         """
@@ -600,19 +600,30 @@ class Music(commands.Cog, name="Music"):
         if info and info.get('entries'):    # remove nest if nested
             info = info["entries"][0]
 
-        try:    # generates proper tags for songDB
-            log_cog.info(f"DownloadSong(): Attemping to fetch proper tags for [dark_orange]{info['title']}[/]")
-            response = await self._invoke_chatgpt(
-                "Respond with only the asked answer, in 'Artist - Song Title' format, or 'None' if you do not know.",
-                f"What is the name of this track: {info['title']}")
-        except Exception as e:
-            raise Error(f"DownloadSong() -> _invoke_chatgpt():\n{e}")
+        if metadata.get('artists'): # soundcloud provides the artists tag in metadata
+            log_cog.info(f"DownloadSong: 'artists' tag found for [dark_orange]{info['title']} {info['webpage_url']}[/]")
+            song_artist = ", ".join(metadata['artists'])
+            song_title = metadata['title']
 
-        if " - " in response:
-            s = response.split(" - ", 1)
-            song_artist, song_title = s[0].strip(), s[1].strip()    # kill any "bonus" whitespace
-        else:
-            song_artist, song_title = None, None
+        elif metadata.get('tags') and len(metadata['tags']) >= 2: # youtube (typically) includes the artist and title as first two params of 'tags'
+            log_cog.info(f"DownloadSong: 'tags' tag found for [dark_orange]{info['title']} {info['webpage_url']}[/]")
+            song_artist = metadata['tags'][0]
+            song_title = metadata['tags'][1]
+
+        else:   # couldn't find the artist or title, so we'll have to ask chatgpt
+            try:
+                log_cog.info(f"DownloadSong: Attemping to fetch proper tags for [dark_orange]{info['title']} {info['webpage_url']}[/]")
+                response = await self._invoke_chatgpt(
+                    "Respond with only the asked answer, in 'Artist - Song Title' format, or 'None' if you do not know.",
+                    f"What is the name of this track: {info['title']}? The webpage is: {info['webpage_url']}.")
+            except Exception as e:
+                return
+
+            if " - " in response:
+                s = response.split(" - ", 1)
+                song_artist, song_title = s[0].strip(), s[1].strip()    # kill any "bonus" whitespace
+            else:
+                song_artist, song_title = None, None
 
         result: dict[str, Any] = {  # build our response
             "id":          info['id'],
