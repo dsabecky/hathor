@@ -186,6 +186,36 @@ async def _check_permissions(
     else:
         return False
     
+def _build_embed(
+    title: str,
+    description: str,
+    color: str = "p",
+    fields: list[tuple[str, str, bool]] = None
+) -> discord.Embed:
+    """
+    Builds an embed with a title, description, and color.
+    """
+
+    map = {
+        'p': discord.Color.dark_purple(),
+        'r': discord.Color.red(),
+        'g': discord.Color.green(),
+        'err': random.choice(ERROR_FLAVOR),
+        'img': f'Image generated using the **{config.GPTIMAGE_MODEL}** model.',
+        'imgtxt': f'Image and text generated using the **{config.CHATGPT_MODEL}** and **{config.GPTIMAGE_MODEL}** models.',
+        'txt': f'Text generated using the **{config.CHATGPT_MODEL}** model.'
+    }
+
+    title = map[title.lower()] if title.lower() in map.keys() else title
+    description = map[description.lower()] if description.lower() in map.keys() else description
+    embed = discord.Embed(title=title, description=description, color=map[color.lower()])
+
+    if fields:
+        for name, value, inline in fields:
+            embed.add_field(name=name, value=value, inline=inline)
+    return embed
+
+    
 async def _get_random_radio_intro(bot: commands.Bot, guild_name: str, title: str, artist: str) -> str:
     """
     Returns a random radio intro for a given guild.
