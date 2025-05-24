@@ -190,7 +190,9 @@ class Music(commands.Cog, name="Music"):
 
                 if count == 0 and (time.time() - allstates.last_active) > allstates.voice_idle:    # we're the only one in the voice channel for too long
                     await voice_client.disconnect()
-                    allstates.last_active = None
+                    allstates.last_active, allstates.start_time, allstates.pause_time = None, None, None
+                    allstates.currently_playing, allstates.repeat, allstates.queue = None, False, []
+                    allstates.radio_station, allstates.radio_fusions, allstates.radio_fusions_playlist = None, None, None
                     continue
 
             if not voice_client.is_playing() and not voice_client.is_paused() and allstates.queue:  # should be, but we're not
@@ -199,7 +201,9 @@ class Music(commands.Cog, name="Music"):
 
             if allstates.last_active and (time.time() - allstates.last_active) > allstates.voice_idle:  # idle timeout
                 await voice_client.disconnect()
-                allstates.last_active = None
+                allstates.last_active, allstates.start_time, allstates.pause_time = None, None, None
+                allstates.currently_playing, allstates.repeat, allstates.queue = None, False, []
+                allstates.radio_station, allstates.radio_fusions, allstates.radio_fusions_playlist = None, None, None
 
     @loop_voice_monitor.before_loop
     async def _before_voice_monitor(self):
