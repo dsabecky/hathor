@@ -1,6 +1,6 @@
 # Hathor
 
-[![Discord](https://img.shields.io/badge/Discord-Bot-blue.svg)](#)  [![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](#LICENSE)
+[![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=fff)](#) [![Discord](https://img.shields.io/badge/Discord-Bot-blue.svg)](#) [![ChatGPT](https://img.shields.io/badge/ChatGPT-74aa9c?logo=openai&logoColor=white)](#)   [![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](#LICENSE)
 
 **Hathor** is a free, fully-featured Discord music+AI bot built on `discord.py`, `gTTS`, `OpenAI`, and `yt-dlp`. It offers:
 
@@ -46,7 +46,8 @@ python3 hathor.py
 **Music**  
 ```
 - !play <query|url>  
-- !playnext <query|url>  
+- !playnext <query|url>
+- !aiplaylist <theme>
 - !pause / !resume / !skip  
 - !queue / !clear / !remove <#> / !bump <#>  
 - !shuffle / !repeat
@@ -62,8 +63,8 @@ python3 hathor.py
 
 **AI**
 ```
-- !chatgpt <prompt>  
-- !aiplaylist <theme>  
+- !chatgpt <prompt>
+- !imagine <prompt>
 - !gptimagine <prompt>  
 - !gptedit <prompt> + image attachments
 ```
