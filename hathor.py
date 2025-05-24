@@ -117,8 +117,7 @@ class Hathor(commands.Bot):
         
         if isinstance(error, FancyError):   # send error to channel
             log_sys.warning(f"[red]{escape(error.code)}[/]")
-            embed = discord.Embed(title=random.choice(ERROR_FLAVOR), description=error, color=discord.Color.red())
-            await ctx.send(embed=embed); return
+            await ctx.send(embed=discord.Embed(title=random.choice(ERROR_FLAVOR), description=error, color=discord.Color.red())); return
         
         if isinstance(error, Error):   # log error to console
             log_sys.error(f"[red]{escape(error.code)}[/]"); return
@@ -136,24 +135,11 @@ class Hathor(commands.Bot):
         Runs when a message is sent in a server or DM.
         """
 
+        if message.author == self.user or message.author.bot or not message.guild or not message.content: # ignore [self, bot, dm, empty]
+            return
+
         allstates = self.settings[message.guild.id]
-
-        if not message.content: # ignore empty messages
-            return
-
-        if message.guild:   # log server messages to console
-            log_msg.info(f"[dark_violet]{message.author}[/]@{message.guild.name}#{message.channel.name}: {escape(message.content)}")
-        else:   # log DMs to console
-            log_msg.info(f"[dark_violet]{message.author}[/]: {escape(message.content)}")
-        
-        if message.author == self.user: # ignore messages from self
-            return
-        
-        if message.author.bot: # ignore messages from bots
-            return
-
-        if not message.guild:    # ignore DMs
-            return
+        log_msg.info(f"[dark_violet]{message.author}[/]@{message.guild.name}#{message.channel.name}: {escape(message.content)}")
         
         if len(allstates.perms['channel_id']) > 0 and message.channel.id not in allstates.perms['channel_id']:
             return
