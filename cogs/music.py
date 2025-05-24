@@ -109,9 +109,6 @@ radio_playlists = LoadRadio()
 ####################################################################
 
 class Music(commands.Cog, name="Music"):
-    """
-    Core cog for music functionality.
-    """
 
     def __init__(self, bot):
         self.bot = bot
@@ -124,9 +121,6 @@ class Music(commands.Cog, name="Music"):
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
-        """
-        Initializes the bot when it's ready.
-        """
 
         for guild in self.bot.guilds:
 
@@ -143,9 +137,7 @@ class Music(commands.Cog, name="Music"):
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild) -> None:
-        """
-        Initializes server settings when the bot joins a new guild.
-        """
+
         guild_str = str(guild.id)               # json is stupid and forces the key to be a string
 
         if not guild_str in song_history:       # build and save song history (if required)
@@ -162,9 +154,6 @@ class Music(commands.Cog, name="Music"):
         before: discord.VoiceState,
         after: discord.VoiceState
     ) -> None:
-        """
-        Handles voice state updates for the bot.
-        """
 
         if self.bot.user.id != member.id:   # ignore everyone else
             return
