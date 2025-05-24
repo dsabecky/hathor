@@ -277,14 +277,34 @@ ERROR_CODES = {
 }
 
 RADIO_INTROS = [
-    f"Ladies and gentlemen, hold onto your seats because we're about to unveil the magic of %TITLE% by %ARTIST%. Only here at %SERVER% radio.",
-    f"Turning it up to 11! brace yourselves for %ARTIST%'s masterpiece %TITLE%. Here on %SERVER% radio.",
-    f"Rock on, warriors! We're cranking up the intensity with %TITLE% by %ARTIST% on %SERVER% radio.",
-    f"Welcome to the virtual airwaves! Get ready for a wild ride with a hot track by %ARTIST% on %SERVER% radio.",
-    f"Buckle up, folks! We're about to take you on a musical journey through the neon-lit streets of %SERVER% radio.",
-    f"Hello, virtual world! It's your DJ, %BOT%, in the house, spinning %TITLE% by %ARTIST%. Only here on %SERVER% radio.",
-    f"Greetings from the digital realm! Tune in, turn up, and let the beats of %ARTIST% with %TITLE% take over your senses, here on %SERVER% radio.",
-    f"Time to crank up the volume and immerse yourself in the eclectic beats of %SERVER% radio. Let the madness begin with %TITLE% by %ARTIST%!"
+    "Ladies and gentlemen, hold onto your seats because we're about to unveil the magic of %TITLE% by %ARTIST%. Only here at %SERVER% radio.",
+    "Turning it up to 11! brace yourselves for %ARTIST%'s masterpiece %TITLE%. Here on %SERVER% radio.",
+    "Rock on, warriors! We're cranking up the intensity with %TITLE% by %ARTIST% on %SERVER% radio.",
+    "Welcome to the virtual airwaves! Get ready for a wild ride with a hot track by %ARTIST% on %SERVER% radio.",
+    "Buckle up, folks! We're about to take you on a musical journey through the neon-lit streets of %SERVER% radio.",
+    "Hello, virtual world! It's your DJ, %BOT%, in the house, spinning %TITLE% by %ARTIST%. Only here on %SERVER% radio.",
+    "Greetings from the digital realm! Tune in, turn up, and let the beats of %ARTIST% with %TITLE% take over your senses, here on %SERVER% radio.",
+    "Time to crank up the volume and immerse yourself in the eclectic beats of %SERVER% radio. Let the madness begin with %TITLE% by %ARTIST%!",
+    "Next up on %SERVER% radio, a track that needs no introduction: %TITLE% by the one and only %ARTIST%.",
+    "Get ready to vibe! %BOT% is dropping %TITLE% by %ARTIST% right here on %SERVER% radio.",
+    "From the heart of the digital soundscape, here's %TITLE% by %ARTIST%, exclusively on %SERVER% radio.",
+    "Let the rhythm take control! Up next, %TITLE% by %ARTIST% on your favorite station, %SERVER% radio.",
+    "Another banger coming your way! This is %TITLE% by %ARTIST%, only on %SERVER% radio.",
+    "Feel the energy, feel the beat! It's time for %TITLE% by %ARTIST% on %SERVER% radio.",
+    "Broadcasting across the virtual universe, here's %TITLE% by %ARTIST%—brought to you by %BOT% on %SERVER% radio.",
+    "Ready for a sonic adventure? Here comes %TITLE% by %ARTIST%, spinning now on %SERVER% radio.",
+    "Turn up your speakers! %BOT% is serving %TITLE% by %ARTIST% on %SERVER% radio.",
+    "Let's make some noise! Up next is %TITLE% by %ARTIST%, only on %SERVER% radio.",
+    "Your soundtrack for the moment: %TITLE% by %ARTIST%. Enjoy it here on %SERVER% radio.",
+    "Stay tuned, stay hyped! %TITLE% by %ARTIST% is about to drop on %SERVER% radio.",
+    "Get lost in the music! Here's %TITLE% by %ARTIST%, exclusively on %SERVER% radio.",
+    "Another hit, another vibe. This is %TITLE% by %ARTIST% right here on %SERVER% radio.",
+    "Let the good times roll with %TITLE% by %ARTIST%, only on %SERVER% radio.",
+    "From the archives of greatness, here's %TITLE% by %ARTIST% on %SERVER% radio.",
+    "Feel the pulse, feel the groove! It's %TITLE% by %ARTIST% on %SERVER% radio.",
+    "Your DJ %BOT% is back with another track: %TITLE% by %ARTIST%, on %SERVER% radio.",
+    "Music that moves you—here's %TITLE% by %ARTIST%, spinning now on %SERVER% radio.",
+    "Let's get this party started! Up next: %TITLE% by %ARTIST% on %SERVER% radio.",
 ]
 
 
