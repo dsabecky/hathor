@@ -192,7 +192,7 @@ class Music(commands.Cog, name="Music"):
                     await voice_client.disconnect()
                     allstates.last_active, allstates.start_time, allstates.pause_time = None, None, None
                     allstates.currently_playing, allstates.repeat, allstates.queue = None, False, []
-                    allstates.radio_station, allstates.radio_fusions, allstates.radio_fusions_playlist = None, None, None
+                    allstates.radio_station, allstates.radio_fusions, allstates.radio_fusions_playlist = None, [], []
                     continue
 
             if not voice_client.is_playing() and not voice_client.is_paused() and allstates.queue:  # should be, but we're not
@@ -203,7 +203,7 @@ class Music(commands.Cog, name="Music"):
                 await voice_client.disconnect()
                 allstates.last_active, allstates.start_time, allstates.pause_time = None, None, None
                 allstates.currently_playing, allstates.repeat, allstates.queue = None, False, []
-                allstates.radio_station, allstates.radio_fusions, allstates.radio_fusions_playlist = None, None, None
+                allstates.radio_station, allstates.radio_fusions, allstates.radio_fusions_playlist = None, [], []
 
     @loop_voice_monitor.before_loop
     async def _before_voice_monitor(self):
@@ -990,26 +990,27 @@ class Music(commands.Cog, name="Music"):
         if not ctx.guild.voice_client: # we're not in voice, lets change that
             await self.bot._join_voice(ctx)
 
-        payload_list = [s.lower().strip() for s in payload.split("|")]
-        if allstates.radio_station:   # add the current station to the list, if it exists
+        payload_list = [ s.lower().strip() for s in payload.split("|") ]    # convert the payload into a list
+
+        if allstates.radio_station and allstates.radio_station.lower() not in payload_list: # mixin radio with the payload
             payload_list.append(allstates.radio_station.lower())
 
-        if len(payload_list + allstates.radio_fusions) > 5:
-            await ctx.reply(content=None, embed=_build_embed('err', '❌ You can only fuse up to 5 radio stations at a time. 😢', 'r')); return
-
+        if allstates.radio_fusions and len(payload_list + allstates.radio_fusions) > 5: # max fusions threshold
+            raise FancyError('❌ You can only fuse up to 5 radio stations at a time. 😢')
+        
         message = await ctx.reply(content=None, embed=_build_embed('Music', '🧠 Fusing radio stations...', 'p'), allowed_mentions=discord.AllowedMentions.none())
 
         for station in payload_list: # add to fusion list, if not already in it
-            if not station or station in allstates.radio_fusions:
+            if not station: # sanity check
                 continue
 
-            if station not in radio_playlists: # not already generated?
+            if station not in radio_playlists: # not already generated
                 async with ctx.channel.typing():
                     try:
                         await self._generate_radio_station(station)
                     except Exception as e:
                         await message.edit(content=None, embed=_build_embed('err', '❌ I ran into an issue. 😢', 'r')); return
-
+                    
             allstates.radio_fusions.append(station) # add to fusion list
 
         self._generate_fusion_playlist(ctx.guild.id)    # generate the fusion playlist
@@ -1209,10 +1210,10 @@ class Music(commands.Cog, name="Music"):
             await self.bot._join_voice(ctx)
 
         if not payload and (allstates.radio_station or allstates.radio_fusions):
-            allstates.radio_station, allstates.radio_fusions, allstates.radio_fusions_playlist = None, None, None
+            allstates.radio_station, allstates.radio_fusions, allstates.radio_fusions_playlist = None, [], []
             await ctx.reply(content=None, embed=_build_embed('Music', '📻 Radio disabled.', 'g'), allowed_mentions=discord.AllowedMentions.none()); return
         
-        allstates.radio_fusions, allstates.radio_fusions_playlist = None, None
+        allstates.radio_fusions, allstates.radio_fusions_playlist = [], []
         allstates.radio_station = payload if payload else config.RADIO_DEFAULT_THEME
         await ctx.reply(content=None, embed=_build_embed('Music', f'📻 Radio enabled, theme: **{allstates.radio_station}**.', 'g'), allowed_mentions=discord.AllowedMentions.none())
         await self._radio_monitor() 
