@@ -4,7 +4,7 @@
 
 **Hathor** is a free, fully-featured Discord music+AI bot built on `discord.py`, `gTTS`, `OpenAI`, and `yt-dlp`. It offers:
 
-- Music playback from YouTube & Spotify  
+- Music playback from Soundcloud, Spotify, and YouTube
 - Smart playlists via ChatGPT  
 - Endless “radio” with fusion of multiple themes  
 - In-voice DJ intros powered by gTTS or ChatGPT  
@@ -14,7 +14,8 @@
 ## Installation
 ```bash
 git clone https://github.com/dsabecky/hathor.git
-cd hathor
+```
+```bash
 pip install discord.py gtts openai pynacl rich yt_dlp
 ```
 
