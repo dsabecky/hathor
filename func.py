@@ -109,10 +109,16 @@ class Settings:
         except (FileNotFoundError, json.JSONDecodeError):
             data = {}
 
+        map = [
+            'currently_playing', 'guild_id', 'intro_playing', 'last_active',
+            'pause_time', 'queue', 'radio_fusions', 'radio_fusions_playlist',
+            'radio_station', 'repeat', 'start_time'
+        ]
+
         data[str(self.guild_id)] = {
             key: getattr(self, key)
             for key in self.__dict__
-            if key != "guild_id"
+            if key not in map
         }
         SETTINGS_FILE.write_text(
             json.dumps(data, ensure_ascii=False, indent=4),
