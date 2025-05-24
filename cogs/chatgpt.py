@@ -17,6 +17,7 @@ from openai import AsyncOpenAI  # cleaner than manually calling openai.OpenAI()
 # hathor internals
 import config                                   # bot config
 from func import Error, ERROR_CODES, FancyError # custom error class
+from func import _build_embed                   # custom embeds
 from logs import log_cog                        # logging
 
 
@@ -204,8 +205,8 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         self,
         ctx: commands.Context,
         *,
-        prompt: str = commands.parameter(default=None, description="Prompt request")
-    ):
+        prompt: str | None = None
+    ) -> None:
         """
         Generates a ChatGPT prompt.
 
@@ -219,12 +220,9 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         if len(prompt) < 3:    # what are you asking that's shorter, really
             raise FancyError(ERROR_CODES['message_short'])
         
-        embed = discord.Embed(title="ChatGPT", description="Sending request to ChatGPT...")
+        message = await ctx.reply(embed=_build_embed('ChatGPT', 'Sending request to ChatGPT…', 'p', [('Prompt:', prompt, False)]), allowed_mentions=discord.AllowedMentions.none())
 
-        embed.add_field(name="Prompt:", value=prompt, inline=False)
-        message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
-
-        img_urls = [    # check if there are images
+        img = [    # check if there are images
             a.url for a in ctx.message.attachments
             if a.content_type and a.content_type.startswith("image/")
         ]
@@ -232,34 +230,26 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         try:
             async with message.channel.typing():
                 response = await self._invoke_chatgpt(
-                    ("You are a discord bot. "
+                    "You are a discord bot. "
                     "You have access to discord's markdown formatting. "
-                    "Limit response length to 900 characters."),
-                    prompt,
-                    att=img_urls
+                    "Limit response length to 900 characters.",
+                    prompt, att=img
                 )
         except Error as e:
-            embed = discord.Embed(title="Error!", description="I ran into an issue. 😢", color=discord.Color.red())
-            embed.add_field(name="Error", value=str(e), inline=False)
-            await message.edit(content=None, embed=embed); return
-
-        embed.description = (f"Response was generated using the **{config.CHATGPT_MODEL}** model.")
-
-        if len(response) > 1024:   # if response is too long, send as a code block
-            embed.add_field(name="Response:", value="Response over embed limit, see below...",inline=False)
-            await message.edit(content=None, embed=embed)
-            await ctx.channel.send(f"{response[:1900]}")
-
-        else:   # send response
-            embed.add_field(name="Response:", value=response, inline=False)
-            await message.edit(content=None, embed=embed)
+            await message.edit(content=None, embed=_build_embed('err', 'I ran into an issue. 😢', 'r', [('Prompt:', prompt, False), ('Error:', str(e), False)])); return
+        try:
+            await message.edit(content=None, embed=_build_embed('ChatGPT', 'txt', 'g', [('Prompt:', prompt, False), ('Response:', response, False)]))
+        except:
+            await message.edit(content=None, embed=_build_embed('ChatGPT', 'txt', 'g', [('Prompt:', prompt, False), ('Response:', 'Response below (over embed limit).', False)]))
+            await message.reply(f"{response[:1900]}", mention_author=False)
+            
 
     @commands.command(name="gptedit")
     async def trigger_gptedit(
         self,
         ctx: commands.Context,
         *,
-        prompt: str = commands.parameter(default=None, description="What should I do to these images?")
+        prompt: str | None = None
     ) -> None:
         """
         Edits up to 4 attached images according to the prompt.
@@ -271,34 +261,31 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         if not prompt:  # verify we have a prompt
             raise FancyError(ERROR_CODES['syntax'])
 
-        source_imgs = [  # collect up to 4 image attachments
+        if len(prompt) < 3:    # what are you asking that's shorter, really
+            raise FancyError(ERROR_CODES['message_short'])
+
+        img = [  # collect up to 4 image attachments
             att
             for att in ctx.message.attachments[:4]
-            if att.content_type and att.content_type.startswith("image/")
+            if att.content_type and att.content_type.startswith('image/')
         ]
-        if not source_imgs:  # verify we have images
+        if not img:  # verify we have images
             raise FancyError(ERROR_CODES['no_image'])
 
         buffers: list[BytesIO] = []  # collect image buffers
-        for att in source_imgs:
+        for att in img:
             data = await att.read()
-            bio = BytesIO(data)
-            bio.name = att.filename
-            bio.content_type = att.content_type
+            bio = BytesIO(data); bio.name = att.filename; bio.content_type = att.content_type
             buffers.append(bio)
 
         # send the prompt
-        embed = discord.Embed(title="Image Edit", description="Generating edited image…")
-        embed.add_field(name="Prompt", value=prompt, inline=False)
-        message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+        message = await ctx.reply(embed=_build_embed('Image Edit', 'Generating edited image…', 'p', [('Prompt:', prompt, False)]), allowed_mentions=discord.AllowedMentions.none())
 
         try:    # generate the edited image
             async with message.channel.typing():
                 response = await self._invoke_gptimage_edit(prompt, buffers)
         except Exception as e:
-            embed = discord.Embed(title="Error!", description="I ran into an issue. 😢", color=discord.Color.red())
-            embed.add_field(name="Error", value=str(e), inline=False)
-            await message.edit(embed=embed, allowed_mentions=discord.AllowedMentions.none()); return
+            await message.edit(embed=_build_embed('err', 'I ran into an issue. 😢', 'r', [('Prompt:', prompt, False), ('Error:', str(e), False)])); return
 
         try:    # delete old message
             await message.delete()
@@ -306,9 +293,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             pass
 
         # send the edited image
-        embed = discord.Embed(title="Here's your edited image!", description=f"Image generated using the **{config.GPTIMAGE_MODEL}** model.", color=discord.Color.green())
-        embed.add_field(name="Prompt", value=prompt, inline=False)
-        embed.set_image(url="attachment://edited.png")
+        embed = _build_embed('Image Edit', 'img', 'g', [('Prompt:', prompt, False)]); embed.set_image(url="attachment://edited.png")
         await ctx.reply(content=None, embed=embed, files=[discord.File(response, filename="edited.png")])
 
     @commands.command(name='gptimagine')
@@ -317,7 +302,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         ctx: commands.Context,
         *,
         prompt: str = commands.parameter(default=None, description="Prompt request")
-    ):
+    ) -> None:
         """
         Uses ChatGPT to create a GPT-Image prompt, then returns the result.
 
@@ -331,9 +316,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         if len(prompt) < 5:    # what are you asking that's shorter, really
             raise FancyError(ERROR_CODES['message_short'])
 
-        embed = discord.Embed(title="ChatGPT + GPT-Image Generation", description="Generating request...")
-        embed.add_field(name="Prompt:", value=prompt, inline=False)
-        message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+        message = await ctx.reply(embed=_build_embed('ChatGPT + Image Generation', 'Generating request…', 'p', [('Prompt:', prompt, False)]), allowed_mentions=discord.AllowedMentions.none())
 
         try:
             async with message.channel.typing():
@@ -343,30 +326,22 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
                     f"Write an AI image generation prompt for the following: {prompt}"
                 )
         except Exception as e:
-            embed = discord.Embed(title="Error!", description="I ran into an issue. 😢", color=discord.Color.red())
-            embed.add_field(name="Error", value=str(e), inline=False)
-            await message.edit(embed=embed, allowed_mentions=discord.AllowedMentions.none()); return
+            await message.edit(content=None, embed=_build_embed('err', 'I ran into an issue. 😢', 'r', [('Prompt:', prompt, False), ('Error:', str(e), False)])); return
         
-        embed.add_field(name="ChatGPT Prompt:", value=response, inline=False)
-        await message.edit(content=None, embed=embed)
+        await message.edit(content=None, embed=_build_embed('ChatGPT + Image Generation', 'txt', 'p', [('Prompt:', prompt, False), ('Response:', response, False)]))
 
         try:
             async with message.channel.typing():
                 image_response = await self._invoke_gptimage(response)
         except Exception as e:
-            embed = discord.Embed(title="Error!", description="I ran into an issue. 😢", color=discord.Color.red())
-            embed.add_field(name="Error", value=str(e), inline=False)
-            await message.edit(embed=embed, allowed_mentions=discord.AllowedMentions.none()); return
+            await message.edit(content=None, embed=_build_embed('err', 'I ran into an issue. 😢', 'r', [('Prompt:', prompt, False), ('Error:', str(e), False)])); return
 
         try:    # delete old message
             await message.delete()
         except:
             pass
 
-        embed = discord.Embed(title="Here's your image!", description=f"Image generated using the **{config.GPTIMAGE_MODEL}** model.", color=discord.Color.green())
-        embed.add_field(name="Prompt:", value=prompt, inline=False)
-        embed.add_field(name="ChatGPT Prompt:", value=response, inline=False)
-        embed.set_image(url="attachment://generated.png")
+        embed = _build_embed('ChatGPT + Image Generation', 'imgtxt', 'g', [('Prompt:', prompt, False), ('Response:', response, False)]); embed.set_image(url="attachment://generated.png")
         await ctx.reply(content=None,embed=embed, files=[discord.File(image_response, filename="generated.png")])
 
     @commands.command(name="imagine")
@@ -375,7 +350,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         ctx: commands.Context,
         *,
         prompt: str = commands.parameter(default=None, description="Prompt request")
-    ):
+    ) -> None:
         """
         Generates a GPT-Image image.
 
@@ -389,26 +364,20 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         if len(prompt) < 3:    # what are you asking that's shorter, really
             raise FancyError(ERROR_CODES['message_short'])
 
-        embed = discord.Embed(title="Image Generation", description="Generating image request...")
-        embed.add_field(name="Prompt:", value=prompt, inline=False)
-        message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+        message = await ctx.reply(embed=_build_embed('Image Generation', 'Generating image request…', 'p', [('Prompt:', prompt, False)]), allowed_mentions=discord.AllowedMentions.none())
 
         try:
             async with message.channel.typing():
                 response = await self._invoke_gptimage(prompt)
         except Exception as e:
-            embed = discord.Embed(title="Error!", description="I ran into an issue. 😢", color=discord.Color.red())
-            embed.add_field(name="Error", value=str(e), inline=False)
-            await message.edit(embed=embed, allowed_mentions=discord.AllowedMentions.none()); return
+            await message.edit(embed=_build_embed('err', 'I ran into an issue. 😢', 'r', [('Prompt:', prompt, False), ('Error:', str(e), False)])); return
         
         try:    # delete old message
             await message.delete()
         except:
             pass
 
-        embed = discord.Embed(title="Here's your image!", description=f"Image generated using the **{config.GPTIMAGE_MODEL}** model.", color=discord.Color.green())
-        embed.add_field(name="Prompt:", value=prompt, inline=False)
-        embed.set_image(url="attachment://generated.png")
+        embed = _build_embed('Image Generation', 'img', 'g', [('Prompt:', prompt, False)]); embed.set_image(url="attachment://generated.png")
         await ctx.reply(content=None, embed=embed, files=[discord.File(response, filename="generated.png")])
 
 
