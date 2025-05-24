@@ -130,8 +130,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
                 response = await client.chat.completions.create(
                     model=config.CHATGPT_MODEL,
                     messages=conversation,
-                    temperature=config.CHATGPT_TEMPERATURE,
-                    max_completion_tokens=1000
+                    temperature=config.CHATGPT_TEMPERATURE
                 )
                 
                 return response.choices[0].message.content
