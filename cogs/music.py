@@ -854,7 +854,6 @@ class Music(commands.Cog, name="Music"):
         """
 
         chatgpt = self.bot.get_cog("ChatGPT")
-        allstates = self.bot.settings[ctx.guild.id]
 
         if not args or len(args) < 3:
             raise Error(ERROR_CODES['syntax'])
@@ -997,7 +996,6 @@ class Music(commands.Cog, name="Music"):
         message = await ctx.reply(content=None, embed=_build_embed('Music', '🧠 Fusing radio stations...', 'p'), allowed_mentions=discord.AllowedMentions.none())
 
         for station in payload_list: # add to fusion list, if not already in it
-            print(f"for() station: {station}")
             if not station or station in allstates.radio_fusions:
                 continue
 
