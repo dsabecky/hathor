@@ -56,7 +56,6 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         temp_prompt = message.content.replace(self.bot.user.mention, "@grok").strip()   # replace bot mention with @grok
 
         if temp_prompt.lower() == "@grok":  # empty response, be snarky
-            log_cog.info(f"on_message() -> {message.author}: {message.content} (empty response)")
             await message.reply("Ah, the classic 'say nothing, get nothing' approach—bold move. Try putting some words in there next time, genius. 🥱", mention_author=False); return
         
         ref_img = []
@@ -70,7 +69,6 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
                     if att.content_type and att.content_type.startswith("image/")
                 ]
             except discord.NotFound:
-                log_cog.info(f"on_message() -> {message.author}: {message.content} (message not found)")
                 await message.reply("I see you tried to reply quote a message, but I can't access it.", mention_author=False); return
 
         img = [      # grab images
@@ -79,7 +77,6 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         ]
 
         if not temp_prompt and not img:
-            log_cog.info(f"on_message() -> {message.author}: {message.content} (no prompt or images)")
             await message.reply("Ah, the classic 'say nothing, get nothing' approach—bold move. Try putting some words in there next time, genius. 🥱", mention_author=False); return
 
         async with message.channel.typing():
