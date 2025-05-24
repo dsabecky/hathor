@@ -99,9 +99,6 @@ class Hathor(commands.Bot):
         Runs when the bot is ready.
         """
 
-        if config.MAINTENANCE:  # am i in maintenance mode? ### TODO: customize maintenance message
-            await self.change_presence(activity=discord.Activity(type=discord.ActivityType.competing, name="maintenance!!!1"), status=discord.Status.do_not_disturb)
-
         ###
         ### TODO: implement some kind of songDB trim
         ###

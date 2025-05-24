@@ -22,6 +22,7 @@ import config
 ####################################################################
 
 SETTINGS_FILE = Path(__file__).parent / "settings.json"
+LAST_STATUS = None
 
 
 ####################################################################
@@ -233,6 +234,28 @@ async def _get_random_radio_intro(bot: commands.Bot, guild_name: str, title: str
         intro = intro.replace(placeholder, value)
     return intro
 
+async def _set_profile_status(
+        bot: commands.Bot,
+        activity: str | None = None
+) -> None:
+    """
+    Set the profile status of the bot.
+    """
+
+    global LAST_STATUS
+
+    if LAST_STATUS == activity:
+        return
+
+    elif activity:
+        LAST_STATUS = activity
+        await bot.change_presence(status=discord.Status.online, activity=discord.Activity(type=discord.ActivityType.listening, name=activity))
+
+    else:
+        LAST_STATUS = None
+        await bot.change_presence(status=discord.Status.online, activity=None)
+
+    print("updated status")
 
 ###############################################################
 # Quotable References

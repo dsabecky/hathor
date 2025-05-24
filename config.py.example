@@ -12,7 +12,6 @@ SPOTIFY_CLIENT_SECRET = ''  # https://developer.spotify.com/dashboard/
 #  Bot Settings
 ####################################################################
 BOT_PREFIX = '!'    # set your commandprefix
-MAINTENANCE = False  # set to True if bot is in maintenance mode
 BOT_ADMIN  = 0  # set the bot administrator (your personal userID)
 SONGDB_PATH = 'db'  # path to the song database
 

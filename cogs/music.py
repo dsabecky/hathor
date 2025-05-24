@@ -33,7 +33,7 @@ from openai import AsyncOpenAI   # cleaner than manually calling openai.OpenAI()
 import config
 from func import Error, ERROR_CODES, FancyError # error handling
 from func import SongDB # song database
-from func import _get_random_radio_intro, _build_embed
+from func import _get_random_radio_intro, _build_embed, _set_profile_status
 from func import requires_author_perms, requires_author_voice, requires_bot_voice, requires_queue, requires_bot_playing # permission checks
 from logs import log_cog # logging
 
@@ -177,6 +177,13 @@ class Music(commands.Cog, name="Music"):
         Monitors voice activity for idle, broken playing, etc.
         """
 
+        active_count = sum(1 for guild in self.bot.guilds if self.bot.settings[guild.id].currently_playing and guild.voice_client)
+        if active_count == 0:
+            await _set_profile_status(self.bot)
+
+        elif active_count > 1:
+            await _set_profile_status(self.bot, f"music in {active_count} servers")
+
         for voice_client in self.bot.voice_clients:
             allstates = self.bot.settings[voice_client.guild.id]
 
@@ -184,11 +191,16 @@ class Music(commands.Cog, name="Music"):
                 continue
 
             if voice_client.is_playing():   # we're playing something, update last_active
-                count = len([member for member in voice_client.channel.members if not member.bot])
-                if count > 0:
+                user_count = sum(1 for member in voice_client.channel.members if not member.bot)
+                song = allstates.currently_playing['song_artist'] + " - " + allstates.currently_playing['song_title'] if allstates.currently_playing.get('song_artist') else allstates.currently_playing['title']
+
+                if active_count == 1:
+                    await _set_profile_status(self.bot, song)
+
+                if user_count > 0:
                     allstates.last_active = time.time()
 
-                if count == 0 and (time.time() - allstates.last_active) > allstates.voice_idle:    # we're the only one in the voice channel for too long
+                if user_count == 0 and (time.time() - allstates.last_active) > allstates.voice_idle:    # we're the only one in the voice channel for too long
                     await voice_client.disconnect()
                     allstates.last_active, allstates.start_time, allstates.pause_time = None, None, None
                     allstates.currently_playing, allstates.repeat, allstates.queue = None, False, []
@@ -413,8 +425,7 @@ class Music(commands.Cog, name="Music"):
 
         elif info.get('artists'): # soundcloud provides the artists tag in metadata
             log_cog.info(f"_download_media: 'artists' tag found for [dark_orange]{info['title']} {info['webpage_url']}[/]")
-            song_artist = ", ".join(info['artists'])
-            song_title = info['title']
+            song_artist, song_title = ", ".join(info['artists']), info['title']
 
         # TODO: figure out a better / more accurate way to do this
         # elif metadata.get('tags') and len(metadata['tags']) >= 2: # youtube (typically) includes the artist and title as first two params of 'tags'
@@ -748,7 +759,7 @@ class Music(commands.Cog, name="Music"):
             if allstates.repeat:    # don't cleanup if we're on repeat
                 allstates.queue.insert(0, song)
 
-        voice_client.play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(allstates.currently_playing['file_path']), volume=volume), after=song_cleanup)    # actually play the song, cleanup after=
+        voice_client.play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(allstates.currently_playing['file_path']), volume=volume), after=song_cleanup)    # actually play the song
 
         history_text = { "timestamp": time.time(), "title": song['title'] }
         if song.get('song_artist') and song.get('song_title'):
