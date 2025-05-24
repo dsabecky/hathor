@@ -194,7 +194,7 @@ class Music(commands.Cog, name="Music"):
                     continue
 
             if not voice_client.is_playing() and not voice_client.is_paused() and allstates.queue:  # should be, but we're not
-                await self.PlayNextSong(voice_client)
+                await self._play_next_song(voice_client)
                 continue
 
             if allstates.last_active and (time.time() - allstates.last_active) > allstates.voice_idle:  # idle timeout
@@ -248,6 +248,30 @@ class Music(commands.Cog, name="Music"):
     ####################################################################
     # Internal: Helper Functions
     ####################################################################
+
+    async def _add_media_to_queue(
+        self,
+        voice_client: discord.VoiceClient,
+        song: dict[str, Any],
+        is_priority: bool
+    ) -> str:
+        """
+        Helper function for adding media to the queue.
+        """
+
+        allstates = self.bot.settings[voice_client.guild.id]
+
+        if is_priority:     # push to top of queue
+            allstates.queue.insert(0, song)
+            return "⬆️", "the top of the queue"
+
+        elif allstates.shuffle:     # shuffle the song into the queue
+            allstates.queue.insert(random.randint(0, len(allstates.queue)), song)
+            return "🔀", "the shuffled queue"
+
+        else:   # add song to the queue
+            allstates.queue.append(song)
+            return "✅", "the queue"
 
     def _build_now_playing_embed(
         self,
@@ -350,10 +374,139 @@ class Music(commands.Cog, name="Music"):
             f"```🔊 {volume}%  🔁 {repeat_status}  🔀 {shuffle_status}  📢 {intro}```"
         )
     
+    async def _download_media(
+        self,
+        url: str
+    ) -> dict[str, Any]:
+        """
+        Helper function that downloads media from a given url.
+        """
+
+        chatgpt = self.bot.get_cog("ChatGPT")
+
+        opts = {
+            "format": "bestaudio/best",
+            "postprocessors": [{ "key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192" }],
+            "outtmpl": f"{config.SONGDB_PATH}/%(id)s.%(ext)s",
+            "ignoreerrors": True,
+            "no_warnings": True,
+            "quiet": True,
+        }
+
+        loop = asyncio.get_running_loop()
+        try:
+            info = await loop.run_in_executor(None, yt_dlp.YoutubeDL(opts).extract_info, url)
+        except Exception as e:
+            raise Error(f"_download_media() -> yt_dlp.YoutubeDL():\n{e}")
+        
+        if info and info.get('entries'):    # remove nest if nested
+            info = info["entries"][0]
+
+        if info.get('artists'): # soundcloud provides the artists tag in metadata
+            log_cog.info(f"_download_media: 'artists' tag found for [dark_orange]{info['title']} {info['webpage_url']}[/]")
+            song_artist = ", ".join(info['artists'])
+            song_title = info['title']
+
+        # TODO: figure out a better / more accurate way to do this
+        # elif metadata.get('tags') and len(metadata['tags']) >= 2: # youtube (typically) includes the artist and title as first two params of 'tags'
+        #     log_cog.info(f"DownloadSong: 'tags' tag found for [dark_orange]{info['title']} {info['webpage_url']}[/]")
+        #     song_artist = metadata['tags'][0]
+        #     song_title = metadata['tags'][1]
+
+        else:
+            try:
+                log_cog.info(f"_download_media: no tags found for [dark_orange]{info['title']} {info['webpage_url']}[/]. Asking ChatGPT...")
+                response = await chatgpt._invoke_chatgpt(
+                    "Respond with only the asked answer, in 'Artist - Song Title' format, or 'None' if you do not know.",
+                    f"What is the name of this track: {info['title']}? The webpage is: {info['webpage_url']}.")
+            except Exception as e:
+                raise Error(f"_download_media() -> chatgpt._invoke_chatgpt():\n{e}")
+            
+            if ' - ' in response:
+                song_artist, song_title = response.split(" - ", 1)
+            else:
+                song_artist, song_title = None, None
+
+        result: dict[str, Any] = {  # build our response
+            "id":          info['id'],
+            "title":       info['title'],
+            "file_path":   f"{config.SONGDB_PATH}/{info['id']}.mp3",
+            "duration":    info['duration'],
+            "thumbnail":   info.get('thumbnail'),
+            "url":         info['webpage_url'],
+            "song_artist": song_artist,
+            "song_title":  song_title
+        }
+
+        song_db[result['id']] = result  # add to database
+        song_db.save()  # save the database
+
+        return result
+    
+    async def enqueue_media(
+        self,
+        voice_client: discord.VoiceClient,
+        payload: list[str],
+        is_priority: bool,
+        message: discord.Message | None = None
+    ) -> None:
+        """
+        Handler function for enqueueing media.
+        """
+
+        if 'https://' in payload[0]:    # send urls to link parser
+            try:
+                payload = await self.parse_media(payload)
+            except Exception:
+                if message:
+                    embed = discord.Embed(description=f"❌ I ran into an issue parsing your request. 😢")
+                    await message.edit(content=None, embed=embed); return
+
+        lines: list[str] = []   # stage empty list
+        for i, item in enumerate(payload, start=1):
+            if message:
+                embed = discord.Embed(description=f"🧠 Preparing your media ({i}/{len(payload)})")
+                await message.edit(content=None, embed=embed)
+
+            try:    # fetch metadata
+                metadata = await self._fetch_metadata_ytdlp(item)
+            except Exception:
+                continue
+
+            if metadata['id'] in song_db and os.path.exists(song_db[metadata['id']]['file_path']):  # save the bandwidth
+                log_cog.info(f"enqueue_media: [dark_orange]\"{metadata['title']}\"[/] already downloaded. ([dark_orange]{i}[/]/[dark_orange]{len(payload)}[/])")
+                song = song_db[metadata['id']]
+
+            elif metadata['duration'] >= config.MUSIC_MAX_DURATION: # song exceeds max duration
+                log_cog.info(f"enqueue_media: ([dark_orange]{i}[/]/[dark_orange]{len(payload)}[/]) [dark_orange]\"{metadata['title']}\"[/] exceeds max duration.")
+                continue
+
+            else:    # download media
+                try:
+                    log_cog.info(f"enqueue_media: Downloading [dark_orange]\"{metadata['webpage_url']}\"[/] ([dark_orange]{i}[/]/[dark_orange]{len(payload)}[/])")
+                    song = await self._download_media(metadata['webpage_url'])
+                except Exception:
+                    continue
+
+            log_cog.info(f"enqueue_media: Adding [dark_orange]\"{song['song_artist']} - {song['song_title']}\"[/] to queue")
+            queue_icon, queue_string = await self._add_media_to_queue(voice_client, song, is_priority)
+            lines.append(f"{i}. {song['song_artist']} - {song['song_title']}")
+
+        if message:
+            if len(lines) > 10:
+                shown = lines[:10]
+                shown.append(f"... and {len(lines) - 10} more.")
+            else:
+                shown = lines
+
+            embed_list = "\n".join(shown)
+            embed = discord.Embed(description=f"{queue_icon} Your media has been added to {queue_string}!")
+            embed.add_field(name="Added:", value=embed_list, inline=False)
+            await message.edit(content=None, embed=embed)
+    
     async def _fetch_metadata_ytdlp(
         self,
-        query: str,
-        index: int | None = None
+        query: str
     ) -> dict[str, Any] | None:
 
         """
@@ -370,9 +523,6 @@ class Music(commands.Cog, name="Music"):
             "quiet": True,
             "no_warnings": True
         }
-
-        if index is not None:   # we're grabbing a specific item from a playlist
-            opts["playlist_items"] = str(index)
 
         loop = asyncio.get_running_loop()   # hooks the loop
         try:    # grabs song metadata
@@ -397,7 +547,7 @@ class Music(commands.Cog, name="Music"):
         allstates = self.bot.settings[guild_id]
 
         temp_playlist = []
-        songs_per_station = math.ceil(40 / len(allstates.radio_fusions))
+        songs_per_station = math.ceil(50 / len(allstates.radio_fusions))
         for station in allstates.radio_fusions:
             temp_playlist.extend(random.sample(radio_playlists[station.lower()], songs_per_station))
 
@@ -438,184 +588,133 @@ class Music(commands.Cog, name="Music"):
         SaveRadio()
         log_cog.info(f"Radio playlist for [dark_orange]{station}[/] generated.")
 
-    async def _parse_spotify_playlist(
+    async def parse_media(
         self,
-        payload: str
-    ) -> tuple[str, str, list[dict[str, Any]], int]:
+        payload: list[str]
+    ) -> list[dict[str, Any]]:
         """
-        Helper function that parses spotify playlists.
+        Parses media from a list of strings.
         """
 
-        playlist_id = re.search(r'/(?:playlist|album)/([A-Za-z0-9]+)(?:[/?]|$)', payload).group(1)
-        if not playlist_id:
-            raise Error("_parse_spotify_playlist(): No playlist or album ID found.")
+        if 'youtu.be/' in payload[0] or 'youtube.com/' in payload[0]:
+            log_cog.info(f"parse_media -> _parse_youtube_link: [dark_orange]{payload[0]}[/]")
+            return await self._parse_youtube_link(payload[0])
+
+        elif 'spotify.com/' in payload[0]:
+            log_cog.info(f"parse_media -> _parse_spotify_link: [dark_orange]{payload[0]}[/]")
+            return await self._parse_spotify_link(payload[0])
         
-        base = 'albums' if '/album/' in payload else 'playlists'
-        url = f"https://api.spotify.com/v1/{base}/{playlist_id}"
+        elif 'soundcloud.com/' in payload[0]:
+            log_cog.info(f"parse_media -> _parse_soundcloud_link: [dark_orange]{payload[0]}[/]")
+            return await self._parse_soundcloud_link(payload[0])
+
+        else:
+            log_cog.info(f"parse_media -> return: [dark_orange]{payload[0]}[/]")
+            return [payload[0]]
+        
+    async def _parse_soundcloud_link(
+        self,
+        payload: str
+    ) -> list[str]:
+        """
+        Helper function that parses soundcloud links.
+        """
+
+        if '/sets/' in payload:
+            opts = { "skip_download": True, "quiet": True, "no_warnings": True }
+
+            loop = asyncio.get_running_loop()
+            try:
+                response = await loop.run_in_executor(None, yt_dlp.YoutubeDL(opts).extract_info, payload)
+            except Exception as e:
+                raise Error(f"_parse_soundcloud_link() -> yt_dlp.YoutubeDL():\n{e}")
+
+            if response.get('entries'):
+                response = response['entries']
+            
+            lines: list[str] = [
+                item['webpage_url']
+                for item in response
+            ]
+            return lines
+        
+        else:
+            return [payload]
+
+    async def _parse_spotify_link(
+        self,
+        payload: str
+    ) -> list[str]:
+        """
+        Helper function that parses spotify links.
+        """
+
+        spotify_id = re.search(r'/(?:playlist|album|track)/([A-Za-z0-9]+)(?:[/?]|$)', payload).group(1) # regex the id
+        if not spotify_id:
+            raise Error("_parse_spotify_link(): No playlist, album, or track ID found.")
+    
+        base = (    # determine the base of the link
+            'playlists' if 'playlist/' in payload else
+            'albums' if 'album/' in payload else
+            'tracks'
+        )
+        url = f"https://api.spotify.com/v1/{base}/{spotify_id}"    # build the url
         
         try:
             response = await asyncio.to_thread(requests.get, url, headers={"Authorization": f"Bearer {SPOTIFY_ACCESS_TOKEN}"})
         except Exception as e:
-            raise Error(f"_parse_spotify_playlist() -> Spotify.requests.get():\n{e}")
+            raise Error(f"_parse_spotify_link() -> Spotify.requests.get():\n{e}")
         
         response_json = response.json()     # convert response to json
-        playlist = response_json['tracks']['items']     # just get the tracklist
-        playlist_length = len(playlist) if len(playlist) <= config.MUSIC_MAX_PLAYLIST else config.MUSIC_MAX_PLAYLIST    # trim list length if needed
 
-        return "Spotify", playlist_id, playlist, playlist_length
-    
-    async def _parse_youtube_playlist(
+        if base == 'playlists' or base == 'albums':
+            lines: list[str] = [
+                f"{item['artists'][0]['name']} - {item['name']}"
+                for item in response_json['tracks']['items']
+            ]
+            return lines
+        
+        else:
+            return [f"{response_json['artists'][0]['name']} - {response_json['name']}"]
+
+    async def _parse_youtube_link(
         self,
         payload: str
-    ) -> tuple[str, str, list[dict[str, Any]], int]:
+    ) -> list[str]:
         """
-        Helper function that parses youtube playlists.
-        """
-
-        playlist_id = re.search(r'[&?]list=([a-zA-Z0-9_-]+)', payload).group(1)
-        if not playlist_id:
-            raise Error("_parse_youtube_playlist():\n No playlist ID found.")
-
-        try:    # grab the playlist from spotify api
-            # First get playlist details
-            response = await asyncio.to_thread(requests.get, f'https://www.googleapis.com/youtube/v3/playlistItems?key={config.YOUTUBE_API_KEY}&part=snippet&maxResults=50&playlistId={playlist_id}')
-        except Exception as e:
-            raise Error(f"_parse_youtube_playlist() -> YouTube.requests.get():\n{e}")
-
-        response_json = response.json()     # convert response to json
-        playlist = response_json['items']  # get the tracklist from items
-        playlist_length = int(response_json['pageInfo']['totalResults']) if int(response_json['pageInfo']['totalResults']) <= config.MUSIC_MAX_PLAYLIST else config.MUSIC_MAX_PLAYLIST  # trim list length if needed
-
-        return "YouTube", playlist_id, playlist, playlist_length
-
-    async def _radio_monitor(self) -> None:
-        """
-        Monitors radio stations for new songs.
+        Helper function that parses youtube links.
         """
 
-        async with self.radio_lock:
-            for guild in self.bot.guilds:
-
-                allstates = self.bot.settings[guild.id]
-                voice_client = guild.voice_client
-
-                if not voice_client:    # no voice client, skip
-                    continue
-
-                if not allstates.radio_station and not allstates.radio_fusions: # no radio station or fusions, skip
-                    continue
-
-                elif allstates.radio_fusions and allstates.radio_fusions_playlist and len(allstates.queue) < config.RADIO_QUEUE:     # fuse radio checkpoint🔞
-                    playlist = random.sample(allstates.radio_fusions_playlist, config.RADIO_QUEUE+1)
-                    await self.QueuePlaylist(voice_client, playlist, None)
-                    continue
-
-                elif (allstates.radio_station and allstates.radio_station.lower() in radio_playlists) and len(allstates.queue) < config.RADIO_QUEUE:  # radio station checkpoint 🔞
-                    playlist = random.sample(radio_playlists[allstates.radio_station.lower()], config.RADIO_QUEUE+1)
-                    await self.QueuePlaylist(voice_client, playlist, None)
-                    continue
-
-                elif allstates.radio_station and allstates.radio_station.lower() not in radio_playlists:   # previously ungenerated radio station
-                    try:
-                        await self._generate_radio_station(allstates.radio_station)
-                    except Exception as e:
-                        log_cog.error(f"loop_radio_monitor() -> _generate_radio_station():\n{escape(e)}")
-                        continue
-
-                    playlist = random.sample(radio_playlists[allstates.radio_station.lower()], config.RADIO_QUEUE+1)
-                    await self.QueuePlaylist(voice_client, playlist, None)
-
-    ####################################################################
-    # Internal: Core Functions
-    ####################################################################
-
-    async def DownloadSong(
-        self,
-        query: str,
-        metadata: dict[str, Any],
-        index: int | None = None
-    ) -> dict[str, Any] | None:
-        """
-        Wrapper for YouTube-DLP.
-        
-        Fetches media from a provided query (string or direct url).
-        If passed index, will grab that individual instance (does not support multi).
-        """
-
-        chatgpt = self.bot.get_cog("ChatGPT")
-
-        ytdlp_query = query if query.startswith("https://") else f"ytsearch:{query} audio"    # attach ytsearch: if it's not a link
-
-        opts = {      # ytdlp options
-            "format": "bestaudio/best",
-            "postprocessors": [{ "key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192" }],
-            "outtmpl": f"{config.SONGDB_PATH}/%(id)s.%(ext)s",
-            "ignoreerrors": True,
-            "no_warnings": True,
-            "quiet": True,
-        }
-
-        if index is not None:   # we're grabbing a specific item from a playlist
-            opts["playlist_items"] = str(index)
-
-        loop = asyncio.get_running_loop()   # hooks the loop
-        try:    # downloads the song
-            log_cog.info(f"DownloadSong(): [dark_orange]{query}[/]")
-            info = await loop.run_in_executor(None, yt_dlp.YoutubeDL(opts).extract_info, ytdlp_query)
-        except Exception as e:
-            raise Error(f"DownloadSong() -> yt_dlp.YoutubeDL():\n{e}")
-
-        if info and info.get('entries'):    # remove nest if nested
-            info = info["entries"][0]
-
-        if metadata.get('artists'): # soundcloud provides the artists tag in metadata
-            log_cog.info(f"DownloadSong: 'artists' tag found for [dark_orange]{info['title']} {info['webpage_url']}[/]")
-            song_artist = ", ".join(metadata['artists'])
-            song_title = metadata['title']
-
-        # TODO: figure out a better / more accurate way to do this
-        # elif metadata.get('tags') and len(metadata['tags']) >= 2: # youtube (typically) includes the artist and title as first two params of 'tags'
-        #     log_cog.info(f"DownloadSong: 'tags' tag found for [dark_orange]{info['title']} {info['webpage_url']}[/]")
-        #     song_artist = metadata['tags'][0]
-        #     song_title = metadata['tags'][1]
-
-        else:   # couldn't find the artist or title, so we'll have to ask chatgpt
+        if 'list=' in payload:
+            playlist_id = re.search(r'[&?]list=([a-zA-Z0-9_-]+)', payload).group(1)
+            if not playlist_id:
+                raise Error("_parse_youtube_link():\n No playlist ID found.")
+            
             try:
-                log_cog.info(f"DownloadSong: Attemping to fetch proper tags for [dark_orange]{info['title']} {info['webpage_url']}[/]")
-                response = await chatgpt._invoke_chatgpt(
-                    "Respond with only the asked answer, in 'Artist - Song Title' format, or 'None' if you do not know.",
-                    f"What is the name of this track: {info['title']}? The webpage is: {info['webpage_url']}.")
+                response = await asyncio.to_thread(requests.get, f'https://www.googleapis.com/youtube/v3/playlistItems?key={config.YOUTUBE_API_KEY}&part=snippet&maxResults=20&playlistId={playlist_id}')
+                response_json = response.json()
             except Exception as e:
-                return
-
-            if " - " in response:
-                s = response.split(" - ", 1)
-                song_artist, song_title = s[0].strip(), s[1].strip()    # kill any "bonus" whitespace
-            else:
-                song_artist, song_title = None, None
-
-        result: dict[str, Any] = {  # build our response
-            "id":          info['id'],
-            "title":       info['title'],
-            "file_path":   f"{config.SONGDB_PATH}/{info['id']}.mp3",
-            "duration":    info['duration'],
-            "thumbnail":   info.get('thumbnail'),
-            "url":         info['webpage_url'],
-            "song_artist": song_artist,
-            "song_title":  song_title
-        }
-
-        song_db[result['id']] = result  # add to database
-        song_db.save()
-
-        return result
-
-    async def PlayNextSong(
+                raise Error(f"_parse_youtube_link() -> YouTube.requests.get():\n{e}")
+            
+            lines: list[str] = [
+                f"https://youtube.com/watch?v={item['snippet']['resourceId']['videoId']}"
+                for item in response_json['items']
+            ]
+            return lines
+        
+        else:
+            url = re.search(r'[&?]v=([a-zA-Z0-9_-]+)', payload).group(1)
+            if not url:
+                raise Error("_parse_youtube_link():\n No video ID found.")
+            
+            return [f"https://youtube.com/watch?v={url}"]
+        
+    async def _play_next_song(
         self,
         voice_client: discord.VoiceClient
     ) -> None:
         """
-        Plays the next song in the queue.
+        Helper function that plays the next song in the queue.
         """
 
         allstates = self.bot.settings[voice_client.guild.id]
@@ -642,7 +741,7 @@ class Music(commands.Cog, name="Music"):
         intro_volume = allstates.volume < 80 and (allstates.volume + 20) / 100  # slightly bump intro volume
 
         if song.get('song_artist') and allstates.radio_intro and random.random() < 0.4:   # add an intro (if radio is enabled)
-            await self.PlayRadioIntro(voice_client, song['id'], song['song_artist'], song['song_title'], intro_volume)
+            await self._play_radio_intro(voice_client, song['song_artist'], song['song_title'], intro_volume)
 
         def song_cleanup(error: Exception | None = None):  # song file cleanup
             if allstates.repeat:    # don't cleanup if we're on repeat
@@ -652,17 +751,16 @@ class Music(commands.Cog, name="Music"):
 
         song_history[str(voice_client.guild.id)].append({ "timestamp": time.time(), "title": song['title'] })
         SaveHistory()
-
-    async def PlayRadioIntro(
+        
+    async def _play_radio_intro(
         self,
         voice_client: discord.VoiceClient,
-        song_id: str,
         artist: str,
         title: str,
         volume: float
     ) -> None:
         """
-        Plays a radio intro.
+        Helper function that plays a radio intro.
         """
 
         chatgpt = self.bot.get_cog("ChatGPT")
@@ -671,10 +769,13 @@ class Music(commands.Cog, name="Music"):
         text = ""   # initiate the intro string
 
         if is_special:  # special intro
-            text = await chatgpt._invoke_chatgpt(
-                'Return only the information requested with no additional words or context. Do not wrap in quotes.',
-                f'Give me a short radio dj intro for "{artist} - {title}". Intro should include info about the song. Limit of 2 sentences.'
-            )
+            try:
+                text = await chatgpt._invoke_chatgpt(
+                    'Return only the information requested with no additional words or context. Do not wrap in quotes.',
+                    f'Give me a short radio dj intro for "{artist} - {title}". Intro should include info about the song. Limit of 2 sentences.'
+                )
+            except Exception:
+                pass
         else:   # regular intro
             text = await _get_random_radio_intro(self.bot, voice_client.guild.name, title, artist)
 
@@ -694,183 +795,44 @@ class Music(commands.Cog, name="Music"):
         try:    # file cleanup
             os.remove(intro_path)
         except Exception as e:
-            raise Error(f"PlayRadioIntro() -> os.remove():\n{e}")
+            raise Error(f"_play_radio_intro() -> os.remove():\n{e}")
 
-    async def QueuePlaylist(
-        self,
-        voice_client: discord.VoiceClient,
-        payload: str,
-        message: discord.Message | None = None
-    ) -> None:
+    async def _radio_monitor(self) -> None:
         """
-        Helper function that queues playlists for the radio.
+        Monitors radio stations for new songs.
         """
 
-        allstates = self.bot.settings[voice_client.guild.id]
+        async with self.radio_lock:
+            for guild in self.bot.guilds:
 
-        playlist_type, playlist_id, playlist, playlist_length = None, None, None, None
-        if 'spotify.com/' in payload: # spotify playlist
-            try:
-                playlist_type, playlist_id, playlist, playlist_length = await self._parse_spotify_playlist(payload)
-            except Exception as e:
-                if message:     # finalize message if we fail
-                    embed = discord.Embed(description="❌ I ran into an issue with the Spotify API. 😢")
-                    await message.edit(content=None, embed=embed); return
-        
-        elif 'list=' in payload:  # youtube playlist
-            try:
-                playlist_type, playlist_id, playlist, playlist_length = await self._parse_youtube_playlist(payload)
+                allstates = self.bot.settings[guild.id]
+                voice_client = guild.voice_client
 
-            except Exception as e:
-                if message:     # finalize message if we fail
-                    embed = discord.Embed(description="❌ I ran into an issue with the YouTube API. 😢")
-                    await message.edit(content=None, embed=embed); return
+                if not voice_client:    # no voice client, skip
+                    continue
 
-        else:
-            playlist_type, playlist_id, playlist, playlist_length = "ChatGPT", "ChatGPT", payload, len(payload) if len(payload) <= config.MUSIC_MAX_PLAYLIST else config.MUSIC_MAX_PLAYLIST
+                if not allstates.radio_station and not allstates.radio_fusions: # no radio station or fusions, skip
+                    continue
 
-        log_cog.info(f"QueuePlaylist: Playlist ([dark_orange]{playlist_id}[/]) playlist length [dark_orange]{playlist_length}[/]")
+                elif allstates.radio_fusions and allstates.radio_fusions_playlist and len(allstates.queue) < config.RADIO_QUEUE:     # fuse radio checkpoint🔞
+                    playlist = random.sample(allstates.radio_fusions_playlist, config.RADIO_QUEUE+1)
+                    await self.enqueue_media(voice_client, playlist, False)
+                    continue
 
-        lines = []   # temp playlist for text output
-        for i, item in enumerate((playlist[:playlist_length]), start=1):
+                elif (allstates.radio_station and allstates.radio_station.lower() in radio_playlists) and len(allstates.queue) < config.RADIO_QUEUE:  # radio station checkpoint 🔞
+                    playlist = random.sample(radio_playlists[allstates.radio_station.lower()], config.RADIO_QUEUE+1)
+                    await self.enqueue_media(voice_client, playlist, False)
+                    continue
 
-            if message:     # update associated message if applicable
-                embed = discord.Embed(description=f"🧠 Preparing your {playlist_type} playlist ({i}/{playlist_length})...")
-                await message.edit(content=None, embed=embed)
+                elif allstates.radio_station and allstates.radio_station.lower() not in radio_playlists:   # previously ungenerated radio station
+                    try:
+                        await self._generate_radio_station(allstates.radio_station)
+                    except Exception as e:
+                        log_cog.error(f"loop_radio_monitor() -> _generate_radio_station():\n{escape(e)}")
+                        continue
 
-            try:    # fetch song metadata
-                if playlist_type == "Spotify":  # spotify filtering
-                    data = item.get('track') or item
-                    metadata = await self._fetch_metadata_ytdlp(f"{data['artists'][0]['name']} - {data['name']}")
-
-                elif playlist_type == "YouTube":    # youtube filtering
-                    metadata = await self._fetch_metadata_ytdlp(f"{item['snippet']['webpage_url']}")
-
-                else:   # just chatgpt
-                    metadata = await self._fetch_metadata_ytdlp(item)
-            except Exception as e:   # fail gracefully
-                if "Sign in to confirm your age" in str(e):
-                    output = "❌ That content is age restricted. 😢\nMoving onto the next song. 🫡"
-                else:
-                    output = f"❌ I ran into an issue finding metadata for {metadata['title']}. 😢\nMoving onto the next song. 🫡"
-
-                if message:
-                    embed = discord.Embed(description=output)
-                    await message.edit(content=None, embed=embed); continue
-
-            if metadata['id'] in song_db and os.path.exists(song_db[metadata['id']]['file_path']):  # save the bandwidth
-                log_cog.info(f"QueuePlaylist: ([dark_orange]{i}[/]/[dark_orange]{playlist_length}[/]) [dark_orange]\"{metadata['title']}\"[/] already downloaded.")
-                song = song_db[metadata['id']]
-
-            elif metadata['duration'] >= config.MUSIC_MAX_DURATION: # song exceeds config.MUSIC_MAX_DURATION, fail gracefully
-                if message:
-                    embed = discord.Embed(description=f"❌ Song is too long! ({metadata['duration']} > {config.MUSIC_MAX_DURATION}) 🕑\nMoving onto the next song. 🫡")
-                    await message.edit(content=None, embed=embed); continue
-            
-            else:  # seems good, download it
-                log_cog.info(f"QueuePlaylist: ([dark_orange]{i}[/]/[dark_orange]{playlist_length}[/]) Downloading [dark_orange]\"{metadata['webpage_url']}\"[/]")
-
-                try:
-                    song = await self.DownloadSong(f"https://youtube.com/watch?v={metadata['id']}", metadata, None)
-                except Exception as e:   # fail gracefully
-                    if "Sign in to confirm your age" in str(e):
-                        output = "❌ That content is age restricted. 😢\nMoving onto the next song. 🫡"
-                    else:
-                        output = f"❌ I ran into an issue downloading {metadata['title']}. 😢\nMoving onto the next song. 🫡"
-
-                    if message:
-                        embed = discord.Embed(description=output)
-                        await message.edit(content=None, embed=embed); continue
-
-            allstates.queue.append(song)    # add song to the queue
-            lines.append(f"{i}. {song['song_artist']} - {song['song_title']}")
-
-        if message: # if we bound a message, complete it.
-            if playlist_length > 10:
-                shown = lines[:10]
-                not_shown = playlist_length - 10
-                shown.append(f"... and {not_shown} more.")
-            else:
-                shown = lines
-
-            embed_list = "\n".join(shown)
-            embed = discord.Embed(description=f"✅ Your {playlist_type} playlist has been added to queue!")
-            embed.add_field(name="Added:", value=embed_list, inline=False)
-
-            await message.edit(content=None, embed=embed)
-
-    async def QueueIndividualSong(
-        self,
-        voice_client: discord.VoiceClient,
-        payload: str,
-        is_priority: bool,
-        message: discord.Message | None = None
-    ) -> None:
-        """
-        Helper function for queueing individual songs.
-        """
-
-        allstates = self.bot.settings[voice_client.guild.id]
-        track = payload
-
-
-        if 'spotify.com/track/' in payload:
-            track_id = re.search(r'/track/([a-zA-Z0-9]+)(?:[/?]|$)', payload).group(1)
-            try:    # grab the trackid from spotify
-                response = await asyncio.to_thread(requests.get, f'https://api.spotify.com/v1/tracks/{track_id}', headers={'Authorization': f'Bearer {SPOTIFY_ACCESS_TOKEN}'})
-            except Exception as e:  # finalize the message if we fail
-                embed = discord.Embed(description="❌ I ran into an issue with the Spotify API. 😢")
-                await message.edit(content=None, embed=embed); return
-
-            response_json = response.json()
-            track = f"{response_json['artists'][0]['name']} - {response_json['name']}"
-
-        try:    # fetch song metadata
-            metadata = await self._fetch_metadata_ytdlp(track)
-        except Exception as e:
-            if message:
-                output = "❌ That content is age restricted. 😢" if 'Sign in to confirm your age' in str(e) else "❌ I ran into an issue finding that song. 😢"
-                embed = discord.Embed(description=output)
-                await message.edit(content=None, embed=embed); return
-
-        if metadata['id'] in song_db and os.path.exists(song_db[metadata['id']]['file_path']):  # save the bandwidth
-            log_cog.info(f"Song: [dark_orange]\"{metadata['title']}\"[/] already downloaded.")
-            song = song_db[metadata['id']]
-
-        elif metadata['duration'] >= config.MUSIC_MAX_DURATION: # song exceeds config.MUSIC_MAX_DURATION
-            embed = discord.Embed(description="❌ Song is too long! 🕑")
-            await message.edit(content=None, embed=embed); return
-        
-        else:  # seems good, download it
-            log_cog.info(f"QueueIndividualSong(): Downloading [dark_orange]\"{metadata['webpage_url']}\"[/]")
-            embed = discord.Embed(description=f"💾 Downloading \"{metadata['title']}\" ({metadata['webpage_url']})")
-            await message.edit(content=None, embed=embed)
-
-            try:    # download the song
-                song = await self.DownloadSong(metadata['webpage_url'], metadata, None)
-            except Exception as e:
-                if message:
-                    output = f"❌ I ran into an issue downloading {metadata['title']}. 😢"
-
-                    if "Sign in to confirm your age" in str(e):
-                        output = "❌ That content is age restricted. 😢"
-
-                    embed = discord.Embed(description=output)
-                    await message.edit(content=None, embed=embed); return
-
-        if is_priority:     # push to top of queue
-            allstates.queue.insert(0, song)
-            embed = discord.Embed(description=f"⬆️ Added {metadata['title']} to the top of the queue.")
-
-        elif allstates.shuffle:     # shuffle the song into the queue
-            allstates.queue.insert(random.randint(0, len(allstates.queue)), song)
-            embed = discord.Embed(description=f"🔀 Added {metadata['title']} to the shuffled queue.")
-
-        else:   # add song to the queue
-            allstates.queue.append(song)
-            embed = discord.Embed(description=f"✅ Added {metadata['title']} to the queue.")
-
-        await message.edit(content=None, embed=embed)   # send our final message
+                    playlist = random.sample(radio_playlists[allstates.radio_station.lower()], config.RADIO_QUEUE+1)
+                    await self.enqueue_media(voice_client, playlist, False)
 
 
     ####################################################################
@@ -921,12 +883,12 @@ class Music(commands.Cog, name="Music"):
         for item in parsed_response:
             playlist.append(item.strip())
 
-        if not playlist:
+        if not playlist:    # empty playlist
             embed = discord.Embed(description=f"❌ I ran into an issue. 😢")
             await message.edit(content=None, embed=embed);
             raise Error(f"!aiplaylist:\nCould not parse playlist[] {playlist}")
 
-        await asyncio.create_task(self.QueuePlaylist(ctx.guild.voice_client, playlist, message))
+        await asyncio.create_task(self.enqueue_media(ctx.guild.voice_client, playlist, False, message))
 
     @commands.command(name='bump')
     @requires_author_perms()
@@ -1175,10 +1137,7 @@ class Music(commands.Cog, name="Music"):
         embed = discord.Embed(description=f"🔎 Searching for {payload}")
         message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
-        if 'list=' in payload or 'spotify.com/playlist' in payload or 'spotify.com/album' in payload:
-            await asyncio.create_task(self.QueuePlaylist(ctx.guild.voice_client, payload, message))
-        else:
-            await asyncio.create_task(self.QueueIndividualSong(ctx.guild.voice_client, payload, False, message))
+        await asyncio.create_task(self.enqueue_media(ctx.guild.voice_client, [payload], False, message))
 
 
     @commands.command(name='playnext', aliases=['playbump'])
@@ -1213,7 +1172,7 @@ class Music(commands.Cog, name="Music"):
         embed = discord.Embed(description=f"🔎 Searching for {payload}")
         message = await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
-        await asyncio.create_task(self.QueueIndividualSong(ctx.guild.voice_client, payload, True, message))
+        await asyncio.create_task(self.enqueue_media(ctx.guild.voice_client, [payload], True, message))
 
     @commands.command(name='queue', aliases=['q', 'np', 'nowplaying', 'song'])
     async def trigger_queue(
@@ -1285,15 +1244,11 @@ class Music(commands.Cog, name="Music"):
             allstates.radio_fusions = None
             allstates.radio_fusions_playlist = None
 
-        if payload:
-            allstates.radio_station = payload
-            embed = discord.Embed(description=f"📻 Radio enabled, theme: **{payload}**.")
-            
-        elif allstates.radio_station == None:
-            allstates.radio_station = config.RADIO_DEFAULT_THEME
-            embed = discord.Embed(description=f"📻 Radio enabled, theme: {allstates.radio_station}.")
-        else:
-            allstates.radio_station = False
+        allstates.radio_station = payload if payload else config.RADIO_DEFAULT_THEME
+        embed = discord.Embed(description=f"📻 Radio enabled, theme: **{allstates.radio_station}**.", color=discord.Color.dark_purple())
+
+        if not payload and allstates.radio_station:
+            allstates.radio_station = None
             embed = discord.Embed(description=f"📻 Radio disabled.")
         
         await ctx.reply(embed=embed, allowed_mentions=discord.AllowedMentions.none())
@@ -1400,7 +1355,7 @@ class Music(commands.Cog, name="Music"):
 
         ctx.guild.voice_client.stop()   # actually skip the song
         if allstates.repeat:
-            await self.PlayNextSong(ctx.guild.voice_client)
+            await self._play_next_song(ctx.guild.voice_client)
 
 
 ####################################################################
