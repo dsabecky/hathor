@@ -1252,7 +1252,7 @@ class Music(commands.Cog, name="Music"):
 
         allstates = self.bot.settings[ctx.guild.id]
         allstates.repeat = not allstates.repeat # change value to current opposite (True -> False)
-        await ctx.reply(embed=_build_embed('Music', f'🔁 Repeat mode {allstates.repeat and 'enabled' or 'disabled'}.', 'g'), allowed_mentions=discord.AllowedMentions.none())
+        await ctx.reply(content=None, embed=_build_embed('Music', f'🔁 Repeat mode {allstates.repeat and "enabled" or "disabled"}.', 'g'), allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='resume')
     @requires_author_perms()
@@ -1285,7 +1285,7 @@ class Music(commands.Cog, name="Music"):
         allstates = self.bot.settings[ctx.guild.id]
         random.shuffle(allstates.queue)     # actually shuffles the queue
         allstates.shuffle = not allstates.shuffle   # update the shuffle variable
-        await ctx.reply(content=None, embed=_build_embed('Music', f'🔀 Shuffle mode {allstates.shuffle and 'enabled' or 'disabled'}.', 'g'), allowed_mentions=discord.AllowedMentions.none())
+        await ctx.reply(content=None, embed=_build_embed('Music', f'🔀 Shuffle mode {allstates.shuffle and "enabled" or "disabled"}.', 'g'), allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='skip')
     @requires_author_perms()
