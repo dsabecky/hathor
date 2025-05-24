@@ -380,7 +380,8 @@ class Music(commands.Cog, name="Music"):
     
     async def _download_media(
         self,
-        url: str
+        url: str,
+        known_info: str | None = None
     ) -> dict[str, Any]:
         """
         Helper function that downloads media from a given url.
@@ -406,7 +407,11 @@ class Music(commands.Cog, name="Music"):
         if info and info.get('entries'):    # remove nest if nested
             info = info["entries"][0]
 
-        if info.get('artists'): # soundcloud provides the artists tag in metadata
+        if known_info:
+            log_cog.info(f"_download_media: Using known metadata: [dark_orange]{known_info}[/]")
+            song_artist, song_title = known_info.split(" - ", 1)
+
+        elif info.get('artists'): # soundcloud provides the artists tag in metadata
             log_cog.info(f"_download_media: 'artists' tag found for [dark_orange]{info['title']} {info['webpage_url']}[/]")
             song_artist = ", ".join(info['artists'])
             song_title = info['title']
@@ -452,6 +457,7 @@ class Music(commands.Cog, name="Music"):
         voice_client: discord.VoiceClient,
         payload: list[str],
         is_priority: bool,
+        is_manual: bool = False,
         message: discord.Message | None = None
     ) -> None:
         """
@@ -486,7 +492,7 @@ class Music(commands.Cog, name="Music"):
             else:    # download media
                 try:
                     log_cog.info(f"enqueue_media: Downloading [dark_orange]\"{metadata['webpage_url']}\"[/] ([dark_orange]{i}[/]/[dark_orange]{len(payload)}[/])")
-                    song = await self._download_media(metadata['webpage_url'])
+                    song = await self._download_media(metadata['webpage_url'], item if is_manual else False)
                 except Exception:
                     continue
 
@@ -728,13 +734,8 @@ class Music(commands.Cog, name="Music"):
 
         song = allstates.queue.pop(0)   # pop the next queued song
         allstates.currently_playing = {
-            "title":       song['title'],
-            "duration":    song['duration'],
-            "file_path":   song['file_path'],
-            "thumbnail":   song['thumbnail'],
-            "song_artist": song['song_artist'],
-            "song_title":  song['song_title']
-        }
+            "title": song['title'], "song_artist": song['song_artist'], "song_title": song['song_title'],
+            "duration": song['duration'], "file_path": song['file_path'], "thumbnail": song['thumbnail'] }
 
         allstates.start_time = time.time()
         volume = allstates.volume / 100
@@ -749,7 +750,12 @@ class Music(commands.Cog, name="Music"):
 
         voice_client.play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(allstates.currently_playing['file_path']), volume=volume), after=song_cleanup)    # actually play the song, cleanup after=
 
-        song_history[str(voice_client.guild.id)].append({ "timestamp": time.time(), "title": song['title'] })
+        history_text = { "timestamp": time.time(), "title": song['title'] }
+        if song.get('song_artist') and song.get('song_title'):
+            history_text['title'] = f"{song['song_artist']} - {song['song_title']}"
+
+        song_history[str(voice_client.guild.id)].append(history_text) # add to history
+        song_history[str(voice_client.guild.id)] = song_history[str(voice_client.guild.id)][-20:] # limit history to 20
         SaveHistory()
         
     async def _play_radio_intro(
@@ -815,13 +821,23 @@ class Music(commands.Cog, name="Music"):
                     continue
 
                 elif allstates.radio_fusions and allstates.radio_fusions_playlist and len(allstates.queue) < config.RADIO_QUEUE:     # fuse radio checkpoint🔞
-                    playlist = random.sample(allstates.radio_fusions_playlist, config.RADIO_QUEUE+1)
-                    await self.enqueue_media(voice_client, playlist, False)
+                    pruned_playlist = [ song for song in allstates.radio_fusions_playlist if song not in song_history[str(guild.id)] ]
+                    if len(pruned_playlist) < config.RADIO_QUEUE+1:
+                        log_cog.info(f"loop_radio_monitor() -> {guild.name}: Not enough songs in the fusions playlist to fill the queue.")
+                        continue
+
+                    playlist = random.sample(pruned_playlist, config.RADIO_QUEUE+1)
+                    await self.enqueue_media(voice_client, playlist, False, True)
                     continue
 
                 elif (allstates.radio_station and allstates.radio_station.lower() in radio_playlists) and len(allstates.queue) < config.RADIO_QUEUE:  # radio station checkpoint 🔞
-                    playlist = random.sample(radio_playlists[allstates.radio_station.lower()], config.RADIO_QUEUE+1)
-                    await self.enqueue_media(voice_client, playlist, False)
+                    pruned_playlist = [ song for song in radio_playlists[allstates.radio_station.lower()] if song not in song_history[str(guild.id)] ]
+                    if len(pruned_playlist) < config.RADIO_QUEUE+1:
+                        log_cog.info(f"loop_radio_monitor() -> {guild.name}: Not enough songs in the radio station playlist to fill the queue.")
+                        continue
+
+                    playlist = random.sample(pruned_playlist, config.RADIO_QUEUE+1)
+                    await self.enqueue_media(voice_client, playlist, False, True)
                     continue
 
                 elif allstates.radio_station and allstates.radio_station.lower() not in radio_playlists:   # previously ungenerated radio station
@@ -832,7 +848,7 @@ class Music(commands.Cog, name="Music"):
                         continue
 
                     playlist = random.sample(radio_playlists[allstates.radio_station.lower()], config.RADIO_QUEUE+1)
-                    await self.enqueue_media(voice_client, playlist, False)
+                    await self.enqueue_media(voice_client, playlist, False, True)     
 
 
     ####################################################################
@@ -884,7 +900,7 @@ class Music(commands.Cog, name="Music"):
             await message.edit(content=None, embed=_build_embed('err', '❌ I ran into an issue parsing your playlist. 😢', 'r'))
             raise Error(f"!aiplaylist:\nCould not parse playlist[]: {playlist}")
 
-        await asyncio.create_task(self.enqueue_media(ctx.guild.voice_client, playlist, False, message))
+        await asyncio.create_task(self.enqueue_media(ctx.guild.voice_client, playlist, False, True, message))
 
     @commands.command(name='bump')
     @requires_author_perms()
@@ -1115,7 +1131,7 @@ class Music(commands.Cog, name="Music"):
             await self.bot._join_voice(ctx)        
 
         message = await ctx.reply(content=None, embed=_build_embed('Music', f'🔎 Searching for {payload}', 'p'), allowed_mentions=discord.AllowedMentions.none())
-        await asyncio.create_task(self.enqueue_media(ctx.guild.voice_client, [payload], False, message))
+        await asyncio.create_task(self.enqueue_media(ctx.guild.voice_client, [payload], False, False, message))
 
 
     @commands.command(name='playnext', aliases=['playbump'])
@@ -1149,7 +1165,7 @@ class Music(commands.Cog, name="Music"):
 
         message = await ctx.reply(content=None, embed=_build_embed('Music', f'🔎 Searching for {payload}', 'p'), allowed_mentions=discord.AllowedMentions.none())
 
-        await asyncio.create_task(self.enqueue_media(ctx.guild.voice_client, [payload], True, message))
+        await asyncio.create_task(self.enqueue_media(ctx.guild.voice_client, [payload], True, False, message))
 
     @commands.command(name='queue', aliases=['q', 'np', 'nowplaying', 'song'])
     async def trigger_queue(
