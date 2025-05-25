@@ -761,12 +761,9 @@ class Music(commands.Cog, name="Music"):
 
         voice_client.play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(allstates.currently_playing['file_path']), volume=volume), after=song_cleanup)    # actually play the song
 
-        history_text = { "timestamp": time.time(), "title": song['title'] }
-        if song.get('song_artist') and song.get('song_title'):
-            history_text['title'] = f"{song['song_artist']} - {song['song_title']}"
-
+        history_text = f"{song['song_artist']} - {song['song_title']}" if song.get('song_artist') and song.get('song_title') else song['title']
         song_history[str(voice_client.guild.id)].append(history_text) # add to history
-        song_history[str(voice_client.guild.id)] = song_history[str(voice_client.guild.id)][-20:] # limit history to 20
+        song_history[str(voice_client.guild.id)] = song_history[str(voice_client.guild.id)][-100:] # trim history to 100
         SaveHistory()
         
     async def _play_radio_intro(
@@ -832,7 +829,8 @@ class Music(commands.Cog, name="Music"):
                     continue
 
                 elif allstates.radio_fusions and allstates.radio_fusions_playlist and len(allstates.queue) < config.RADIO_QUEUE:     # fuse radio checkpoint🔞
-                    pruned_playlist = [ song for song in allstates.radio_fusions_playlist if song not in song_history[str(guild.id)] ]
+                    pruned_playlist = [ song for song in allstates.radio_fusions_playlist if song not in song_history[str(guild.id)][-20:] ]  # prune against history
+                    pruned_playlist = [ song for song in pruned_playlist if song not in [q.get('song_artist') + " - " + q.get('song_title') for q in allstates.queue] ]  # prune against queue
                     if len(pruned_playlist) < config.RADIO_QUEUE+1:
                         log_cog.info(f"loop_radio_monitor() -> {guild.name}: Not enough songs in the fusions playlist to fill the queue.")
                         continue
@@ -842,7 +840,8 @@ class Music(commands.Cog, name="Music"):
                     continue
 
                 elif (allstates.radio_station and allstates.radio_station.lower() in radio_playlists) and len(allstates.queue) < config.RADIO_QUEUE:  # radio station checkpoint 🔞
-                    pruned_playlist = [ song for song in radio_playlists[allstates.radio_station.lower()] if song not in song_history[str(guild.id)] ]
+                    pruned_playlist = [ song for song in radio_playlists[allstates.radio_station.lower()] if song not in song_history[str(guild.id)][-20:] ]  # prune against history
+                    pruned_playlist = [ song for song in pruned_playlist if song not in [q.get('song_artist') + " - " + q.get('song_title') for q in allstates.queue] ]  # prune against queue
                     if len(pruned_playlist) < config.RADIO_QUEUE+1:
                         log_cog.info(f"loop_radio_monitor() -> {guild.name}: Not enough songs in the radio station playlist to fill the queue.")
                         continue
