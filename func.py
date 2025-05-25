@@ -16,6 +16,7 @@ import random   # error flavor text randomizer
 
 # hathor internals
 import config
+from logs import log_sys
 
 ####################################################################
 # Global Variables
@@ -255,7 +256,7 @@ async def _set_profile_status(
         LAST_STATUS = None
         await bot.change_presence(status=discord.Status.online, activity=None)
 
-    print("updated status")
+    log_sys.info(f"📝 Profile status updated.")
 
 ###############################################################
 # Quotable References
