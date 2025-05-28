@@ -263,31 +263,7 @@ class Music(commands.Cog, name="Music"):
 
     ####################################################################
     # Internal: Helper Functions
-    ####################################################################
-
-    async def _add_media_to_queue(
-        self,
-        voice_client: discord.VoiceClient,
-        song: dict[str, Any],
-        is_priority: bool
-    ) -> str:
-        """
-        Helper function for adding media to the queue.
-        """
-
-        allstates = self.bot.settings[voice_client.guild.id]
-
-        if is_priority:     # push to top of queue
-            allstates.queue.insert(0, song)
-            return "⬆️", "the top of the queue"
-
-        elif allstates.shuffle:     # shuffle the song into the queue
-            allstates.queue.insert(random.randint(0, len(allstates.queue)), song)
-            return "🔀", "the shuffled queue"
-
-        else:   # add song to the queue
-            allstates.queue.append(song)
-            return "✅", "the queue"
+    ####################################################################        
 
     def _build_now_playing_embed(
         self,
@@ -475,6 +451,8 @@ class Music(commands.Cog, name="Music"):
         Handler function for enqueueing media.
         """
 
+        allstates = self.bot.settings[voice_client.guild.id]
+
         if 'https://' in payload[0]:    # send urls to link parser
             try:
                 payload = await self.parse_media(payload)
@@ -508,8 +486,19 @@ class Music(commands.Cog, name="Music"):
                     continue
 
             log_cog.info(f"enqueue_media: Adding [dark_orange]\"{song['song_artist']} - {song['song_title']}\"[/] to queue")
-            queue_icon, queue_string = await self._add_media_to_queue(voice_client, song, is_priority)
             lines.append(f"{i}. {song['song_artist']} - {song['song_title']}")
+
+        if is_priority:     # push to top of queue
+            allstates.queue.insert(0, song)
+            queue_icon, queue_string = "⬆️", "the top of the queue"
+
+        elif allstates.shuffle:     # shuffle the song into the queue
+            allstates.queue.insert(random.randint(0, len(allstates.queue)), song)
+            queue_icon, queue_string = "🔀", "the shuffled queue"
+
+        else:   # add song to the queue
+            allstates.queue.append(song)
+            queue_icon, queue_string = "✅", "the queue"
 
         if message:
             if len(lines) > 10:
