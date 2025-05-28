@@ -265,16 +265,12 @@ class Music(commands.Cog, name="Music"):
     # Internal: Helper Functions
     ####################################################################        
 
-    def _build_now_playing_embed(
-        self,
-        guild_id: int,
-        voice_client: discord.VoiceClient
-    ) -> tuple[str, str, str]:
+    def _build_now_playing_embed(self, voice_client: discord.VoiceClient) -> tuple[str, str, str]:
         """
         Helper function that returns the currently playing song.
         """
 
-        allstates = self.bot.settings[guild_id]
+        allstates = self.bot.settings[voice_client.guild.id]
         currently_playing = allstates.currently_playing
 
         if not voice_client or not currently_playing or not voice_client.is_playing():
@@ -289,27 +285,17 @@ class Music(commands.Cog, name="Music"):
         filled = int(min(max(elapsed / total, 0.0), 1.0) * 10)
         empty = 10 - filled
         status_emoji = "⏸️" if voice_client.is_paused() else "▶️"
-        progress_bar = (
-            f"{status_emoji} "
-            f"{'▬' * filled}🔘{'▬' * empty} "
-            f"[{f'{int(elapsed)//60:02d}:{int(elapsed)%60:02d}'}"
-            f" / {f'{int(total)//60:02d}:{int(total)%60:02d}'}]"
-        )
+        progress_bar = (f"{status_emoji} {'▬' * filled}🔘{'▬' * empty} [{f'{int(elapsed)//60:02d}:{int(elapsed)%60:02d}'} / {f'{int(total)//60:02d}:{int(total)%60:02d}'}]")
 
-        thumb = currently_playing.get("thumbnail")    # get thumbnail
-
+        thumb = currently_playing.get("thumbnail") # get thumbnail
         return song_title, progress_bar, thumb
     
-    def _build_queue_embed(
-        self,
-        guild_id: int,
-        voice_client: discord.VoiceClient
-    ) -> tuple[str, str, str]:
+    def _build_queue_embed(self, voice_client: discord.VoiceClient) -> tuple[str, str, str]:
         """
         Helper function that returns the current queue.
         """
 
-        allstates = self.bot.settings[guild_id]
+        allstates = self.bot.settings[voice_client.guild.id]
         queue = allstates.queue 
 
         if not queue:
@@ -330,31 +316,23 @@ class Music(commands.Cog, name="Music"):
 
         return "\n".join(lines)
     
-    def _build_radio_embed(
-        self,
-        guild_id: int,
-        voice_client: discord.VoiceClient
-    ) -> str:
+    def _build_radio_embed(self, voice_client: discord.VoiceClient) -> str:
         """
         Helper function that returns the current radio stations.
         """
 
-        allstates = self.bot.settings[guild_id]
+        allstates = self.bot.settings[voice_client.guild.id]
 
         if not allstates.radio_fusions:
             return f"{allstates.radio_station or 'off'}"
         return '\n'.join(allstates.radio_fusions)
     
-    def _build_settings_embed(
-        self,
-        guild_id: int,
-        voice_client: discord.VoiceClient
-    ) -> str:
+    def _build_settings_embed(self, voice_client: discord.VoiceClient) -> str:
         """
         Helper function that returns the current settings.
         """
 
-        allstates = self.bot.settings[guild_id]
+        allstates = self.bot.settings[voice_client.guild.id]
 
         # music settings
         volume = allstates.volume
@@ -362,9 +340,7 @@ class Music(commands.Cog, name="Music"):
         shuffle_status = "on" if allstates.shuffle else "off"        
         intro = "on" if allstates.radio_intro else "off"
 
-        return (   # build radio settings text
-            f"```🔊 {volume}%  🔁 {repeat_status}  🔀 {shuffle_status}  📢 {intro}```"
-        )
+        return f"```🔊 {volume}%  🔁 {repeat_status}  🔀 {shuffle_status}  📢 {intro}```"
     
     async def _download_media(
         self,
@@ -1164,10 +1140,7 @@ class Music(commands.Cog, name="Music"):
         await asyncio.create_task(self.enqueue_media(ctx.guild.voice_client, [payload], True, False, message))
 
     @commands.command(name='queue', aliases=['q', 'np', 'nowplaying', 'song'])
-    async def trigger_queue(
-        self,
-        ctx: commands.Context
-    ) -> None:
+    async def trigger_queue(self, ctx: commands.Context) -> None:
         """
         Displays the song queue.
 
@@ -1178,10 +1151,10 @@ class Music(commands.Cog, name="Music"):
         allstates = self.bot.settings[ctx.guild.id]
         voice_client = ctx.guild.voice_client
 
-        song_title, progress_bar, thumb = self._build_now_playing_embed(ctx.guild.id, voice_client)
-        queue = self._build_queue_embed(ctx.guild.id, voice_client)
-        radio = self._build_radio_embed(ctx.guild.id, voice_client)
-        settings = self._build_settings_embed(ctx.guild.id, voice_client)
+        song_title, progress_bar, thumb = self._build_now_playing_embed(voice_client)
+        queue = self._build_queue_embed(voice_client)
+        radio = self._build_radio_embed(voice_client)
+        settings = self._build_settings_embed(voice_client)
 
         embed = _build_embed('Song Queue', '', 'p', [
             ('Now Playing', song_title + (f"\n{progress_bar}" if progress_bar else ""), False),
