@@ -386,9 +386,8 @@ class Music(commands.Cog, name="Music"):
             "quiet": True,
         }
 
-        loop = asyncio.get_running_loop()
         try:
-            info = await loop.run_in_executor(None, yt_dlp.YoutubeDL(opts).extract_info, url)
+            info = await asyncio.to_thread(yt_dlp.YoutubeDL(opts).extract_info, url)
         except Exception as e:
             raise Error(f"_download_media() -> yt_dlp.YoutubeDL():\n{e}")
         
@@ -530,10 +529,9 @@ class Music(commands.Cog, name="Music"):
             "no_warnings": True
         }
 
-        loop = asyncio.get_running_loop()   # hooks the loop
         try:    # grabs song metadata
             log_cog.info(f"Fetching metadata for: [dark_orange]{query}[/]")
-            info = await loop.run_in_executor(None, yt_dlp.YoutubeDL(opts).extract_info, ytdlp_query)
+            info = await asyncio.to_thread(yt_dlp.YoutubeDL(opts).extract_info, ytdlp_query)
         except Exception as e:
             raise Error(f"_fetch_metadata_ytdlp() -> yt_dlp.YoutubeDL():\n{e}")
 
@@ -629,9 +627,8 @@ class Music(commands.Cog, name="Music"):
         if '/sets/' in payload:
             opts = { "skip_download": True, "quiet": True, "no_warnings": True }
 
-            loop = asyncio.get_running_loop()
             try:
-                response = await loop.run_in_executor(None, yt_dlp.YoutubeDL(opts).extract_info, payload)
+                response = await asyncio.to_thread(yt_dlp.YoutubeDL(opts).extract_info, payload)
             except Exception as e:
                 raise Error(f"_parse_soundcloud_link() -> yt_dlp.YoutubeDL():\n{e}")
 
