@@ -1021,8 +1021,8 @@ class Music(commands.Cog, name="Music"):
         if allstates.radio_station and allstates.radio_station.lower() not in payload_list: # mixin radio with the payload
             payload_list.append(allstates.radio_station.lower())
 
-        if allstates.radio_fusions and len(payload_list + allstates.radio_fusions) > 5: # max fusions threshold
-            raise FancyError('❌ You can only fuse up to 5 radio stations at a time. 😢')
+        if allstates.radio_fusions and len(payload_list + allstates.radio_fusions) > config.MUSIC_MAX_FUSION: # max fusions threshold
+            raise FancyError(f'❌ You can only fuse up to {config.MUSIC_MAX_FUSION} radio stations at a time. 😢')
         
         message = await ctx.reply(content=None, embed=_build_embed('Music', '🧠 Fusing radio stations...', 'p'), allowed_mentions=discord.AllowedMentions.none())
 

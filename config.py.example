@@ -31,6 +31,7 @@ GPTIMAGE_QUALITY = 'medium'
 ####################################################################
 BILLBOARD_HOT_100 = 'https://api.spotify.com/v1/playlists/37i9dQZF1DXcBWIGoYBM5M'  # billboard hot 100 playlist link (spotify)
 MUSIC_MAX_PLAYLIST = 20  # maximum playlist length
+MUSIC_MAX_FUSION = 5  # maximum fusion stations
 MUSIC_MAX_DURATION = 1800  # maximum song length
 RADIO_QUEUE = 4  # how few songs in queue until we queue more (RADIO_QUEUE + 1)
 RADIO_DEFAULT_THEME = "anything, im not picky"  # default radio theme ### TODO: i dont like this and it should be changed
