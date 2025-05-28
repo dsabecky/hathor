@@ -694,7 +694,7 @@ class Music(commands.Cog, name="Music"):
                 raise Error("_parse_youtube_link():\n No playlist ID found.")
             
             try:
-                response = await asyncio.to_thread(requests.get, f'https://www.googleapis.com/youtube/v3/playlistItems?key={config.YOUTUBE_API_KEY}&part=snippet&maxResults=20&playlistId={playlist_id}')
+                response = await asyncio.to_thread(requests.get, f'https://www.googleapis.com/youtube/v3/playlistItems?key={config.YOUTUBE_API_KEY}&part=snippet&maxResults={config.MUSIC_MAX_PLAYLIST}&playlistId={playlist_id}')
                 response_json = response.json()
             except Exception as e:
                 raise Error(f"_parse_youtube_link() -> YouTube.requests.get():\n{e}")
