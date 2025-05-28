@@ -1158,9 +1158,6 @@ class Music(commands.Cog, name="Music"):
 
         Syntax:
             !playnext [ <search query> | <link> ]
-
-        Aliases:
-            !playbump
         """
 
         if not payload:    # no data provided
@@ -1187,9 +1184,6 @@ class Music(commands.Cog, name="Music"):
 
         Syntax:
             !queue
-
-        Aliases:
-            [ !q | !np | !nowplaying | !song ]
         """
 
         allstates = self.bot.settings[ctx.guild.id]
@@ -1225,9 +1219,6 @@ class Music(commands.Cog, name="Music"):
         Syntax:
             !radio
             !radio <theme>
-
-        Aliases:
-            !dj
         """
 
         allstates = self.bot.settings[ctx.guild.id]
@@ -1276,9 +1267,6 @@ class Music(commands.Cog, name="Music"):
 
         Syntax:
             !repeat
-
-        Aliases:
-            !loop
         """
 
         allstates = self.bot.settings[ctx.guild.id]
