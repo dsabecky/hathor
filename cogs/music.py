@@ -998,11 +998,14 @@ class Music(commands.Cog, name="Music"):
         
         if not payload: # no fusion provided
             raise FancyError(ERROR_CODES['syntax'])
+        
+        payload_list = [ s.lower().strip() for s in payload.split("|") ]    # convert the payload into a list
+
+        if len(payload_list) == 0: # verify someone sent something more than just a pipe
+            raise FancyError(ERROR_CODES['syntax'])
 
         if not ctx.guild.voice_client: # we're not in voice, lets change that
             await self.bot._join_voice(ctx)
-
-        payload_list = [ s.lower().strip() for s in payload.split("|") ]    # convert the payload into a list
 
         if allstates.radio_station and allstates.radio_station.lower() not in payload_list: # mixin radio with the payload
             payload_list.append(allstates.radio_station.lower())
