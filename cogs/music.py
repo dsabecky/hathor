@@ -460,20 +460,20 @@ class Music(commands.Cog, name="Music"):
                 except Exception:
                     continue
 
+            if is_priority:     # push to top of queue
+                allstates.queue.insert(0, song)
+                queue_icon, queue_string = "⬆️", "the top of the queue"
+
+            elif allstates.shuffle:     # shuffle the song into the queue
+                allstates.queue.insert(random.randint(0, len(allstates.queue)), song)
+                queue_icon, queue_string = "🔀", "the shuffled queue"
+
+            else:   # add song to the queue
+                allstates.queue.append(song)
+                queue_icon, queue_string = "✅", "the queue"
+
             log_cog.info(f"enqueue_media: Adding [dark_orange]\"{song['song_artist']} - {song['song_title']}\"[/] to queue")
             lines.append(f"{i}. {song['song_artist']} - {song['song_title']}")
-
-        if is_priority:     # push to top of queue
-            allstates.queue.insert(0, song)
-            queue_icon, queue_string = "⬆️", "the top of the queue"
-
-        elif allstates.shuffle:     # shuffle the song into the queue
-            allstates.queue.insert(random.randint(0, len(allstates.queue)), song)
-            queue_icon, queue_string = "🔀", "the shuffled queue"
-
-        else:   # add song to the queue
-            allstates.queue.append(song)
-            queue_icon, queue_string = "✅", "the queue"
 
         if message:
             if len(lines) > 10:
@@ -485,10 +485,7 @@ class Music(commands.Cog, name="Music"):
             embed_list = "\n".join(shown)
             await message.edit(content=None, embed=_build_embed('Music', f"{queue_icon} Your media has been added to {queue_string}!", 'g', [('Added:', embed_list, False)]))
     
-    async def _fetch_metadata_ytdlp(
-        self,
-        query: str
-    ) -> dict[str, Any] | None:
+    async def _fetch_metadata_ytdlp(self, query: str) -> dict[str, Any] | None:
 
         """
         Wrapper for Youtube-DLP.
@@ -516,10 +513,7 @@ class Music(commands.Cog, name="Music"):
         
         return info
     
-    def _generate_fusion_playlist(
-        self,
-        guild_id: int
-    ) -> None:
+    def _generate_fusion_playlist(self, guild_id: int) -> None:
         """
         Generates a fusion playlist.
         """
@@ -533,11 +527,22 @@ class Music(commands.Cog, name="Music"):
 
         log_cog.info(f"Generated fusion playlist for [dark_orange]{len(allstates.radio_fusions)}[/] stations.")
         allstates.radio_fusions_playlist = temp_playlist
+
+    async def _generate_hot_100(self) -> None:
+        """
+        Generates / Updates the Billboard Hot 100 radio station.
+        """
+
+        try:
+            log_cog.info(f"Generating Billboard Hot 100 radio station…")
+            playlist = await self._parse_spotify_link(config.BILLBOARD_HOT_100)
+        except Exception as e:
+            raise Error(f"_generate_hot_100() -> _parse_spotify_link():\n{e}")
         
-    async def _generate_radio_station(
-        self,
-        station: str
-    ) -> None:
+        radio_playlists['hot 100'] = playlist; SaveRadio()
+        log_cog.info(f"Billboard Hot 100 radio station updated.")
+        
+    async def _generate_radio_station(self, station: str) -> None:
         """
         Generates a radio station playlist.
         """
@@ -568,10 +573,7 @@ class Music(commands.Cog, name="Music"):
         SaveRadio()
         log_cog.info(f"Radio playlist for [dark_orange]{station}[/] generated.")
 
-    async def parse_media(
-        self,
-        payload: list[str]
-    ) -> list[dict[str, Any]]:
+    async def parse_media(self, payload: list[str]) -> list[dict[str, Any]]:
         """
         Parses media from a list of strings.
         """
@@ -592,10 +594,7 @@ class Music(commands.Cog, name="Music"):
             log_cog.info(f"parse_media -> return: [dark_orange]{payload[0]}[/]")
             return [payload[0]]
         
-    async def _parse_soundcloud_link(
-        self,
-        payload: str
-    ) -> list[str]:
+    async def _parse_soundcloud_link(self, payload: str) -> list[str]:
         """
         Helper function that parses soundcloud links.
         """
@@ -620,10 +619,7 @@ class Music(commands.Cog, name="Music"):
         else:
             return [payload]
 
-    async def _parse_spotify_link(
-        self,
-        payload: str
-    ) -> list[str]:
+    async def _parse_spotify_link(self, payload: str) -> list[str]:
         """
         Helper function that parses spotify links.
         """
@@ -646,20 +642,26 @@ class Music(commands.Cog, name="Music"):
         
         response_json = response.json()     # convert response to json
 
-        if base == 'playlists' or base == 'albums':
+        if base == 'playlists':
+            lines: list[str] = [
+                f"{item['track']['artists'][0]['name']} - {item['track']['name']}"
+                for item in response_json['tracks']['items']
+                if item.get('track') and item['track'].get('artists')
+            ]
+            return lines
+
+        elif base == 'albums':
             lines: list[str] = [
                 f"{item['artists'][0]['name']} - {item['name']}"
                 for item in response_json['tracks']['items']
+                if item.get('artists')
             ]
             return lines
-        
+
         else:
             return [f"{response_json['artists'][0]['name']} - {response_json['name']}"]
 
-    async def _parse_youtube_link(
-        self,
-        payload: str
-    ) -> list[str]:
+    async def _parse_youtube_link(self, payload: str) -> list[str]:
         """
         Helper function that parses youtube links.
         """
@@ -688,10 +690,7 @@ class Music(commands.Cog, name="Music"):
             
             return [f"https://youtube.com/watch?v={url}"]
         
-    async def _play_next_song(
-        self,
-        voice_client: discord.VoiceClient
-    ) -> None:
+    async def _play_next_song(self, voice_client: discord.VoiceClient) -> None:
         """
         Helper function that plays the next song in the queue.
         """
@@ -881,7 +880,7 @@ class Music(commands.Cog, name="Music"):
     async def trigger_bump(
         self,
         ctx: commands.Context,
-        song_number: int = commands.parameter(default=None, description="Song number in queue.")
+        song_number: int = None
     ) -> None:
         """
         Move the requested song to the top of the queue.
@@ -905,10 +904,7 @@ class Music(commands.Cog, name="Music"):
     @commands.command(name='clear')
     @requires_author_perms()
     @requires_queue()
-    async def trigger_clear(
-        self,
-        ctx: commands.Context
-    ) -> None:
+    async def trigger_clear(self, ctx: commands.Context) -> None:
         """
         Clears the current playlist.
 
@@ -950,7 +946,6 @@ class Music(commands.Cog, name="Music"):
         allstates.radio_fusions.remove(payload.lower())     # remove the station from the fusion list
         self._generate_fusion_playlist(ctx.guild.id)        # generate the fusion playlist
         await self._radio_monitor()                         # kick-start the radio monitor
-
         await ctx.reply(content=None, embed=_build_embed('Music', f'📻 Radio fusions updated, themes: {", ".join(f"**{s}**" for s in allstates.radio_fusions)}.', 'g'))
 
     @commands.command(name='fuse')
@@ -976,12 +971,15 @@ class Music(commands.Cog, name="Music"):
             raise FancyError(ERROR_CODES['syntax'])
         
         payload_list = [ s.lower().strip() for s in payload.split("|") ]    # convert the payload into a list
-
         if len(payload_list) == 0: # verify someone sent something more than just a pipe
             raise FancyError(ERROR_CODES['syntax'])
 
         if not ctx.guild.voice_client: # we're not in voice, lets change that
             await self.bot._join_voice(ctx)
+
+        payload_list = [ 'hot 100' if item.lower() == 'hot100' else item.lower() for item in payload_list ] # hotfix "hot100" to "hot 100"
+        if 'hot 100' in payload_list: # generate the hot 100 station
+            await self._generate_hot_100()
 
         if allstates.radio_station and allstates.radio_station.lower() not in payload_list: # mixin radio with the payload
             payload_list.append(allstates.radio_station.lower())
@@ -1006,51 +1004,11 @@ class Music(commands.Cog, name="Music"):
 
         self._generate_fusion_playlist(ctx.guild.id)    # generate the fusion playlist
         await message.edit(content=None, embed=_build_embed('Music', f'⚛️ Radio fusions enabled, themes: {", ".join(f"**{s}**" for s in allstates.radio_fusions)}.', 'g'))
-        await self._radio_monitor()                     # kick-start the radio monitor
-        
-        
-    ### TODO: Add hot100 radio toggle
-    ### !hot100 ########################################################
-    # @commands.command(name='hot100')
-    # async def hot100_radio(self, ctx):
-    #     """
-    #     Toggles Billboard "Hot 100" radio.
-
-    #     Syntax:
-    #         !hot100
-    #     """
-
-    #     global radio_station
-    #     guild_id = ctx.guild.id
-    #     current_year = datetime.datetime.now().year
-
-    #     # are you even allowed to use this command?
-    #     if not await CheckPermissions(self.bot, guild_id, ctx.author.id, ctx.author.roles):
-    #         await FancyErrors("AUTHOR_PERMS", ctx.channel); return
-        
-    #     # author isn't in a voice channel
-    #     if not ctx.author.voice:
-    #         await FancyErrors("AUTHOR_NO_VOICE", ctx.channel); return
-        
-    #     # we're not in voice, lets change that
-    #     if not ctx.guild.voice_client:
-    #         await JoinVoice(self.bot, ctx)
-
-    #     if radio_station[guild_id] == False:
-    #         radio_station[guild_id] = f"Billboard Hot💯 ({current_year})"
-    #         info_embed = discord.Embed(description=f"📻 Radio enabled, theme: **Billboard Hot💯 ({current_year})**")
-    #     else:
-    #         radio_station[guild_id] = False
-    #         info_embed = discord.Embed(description=f"📻 Radio disabled.")
-
-    #     message = await ctx.reply(embed=info_embed, allowed_mentions=discord.AllowedMentions.none())
+        await self._radio_monitor() # kick-start the radio monitor
 
     @commands.command(name='intro')
     @requires_author_perms()
-    async def trigger_intro(
-        self,
-        ctx: commands.Context
-    ) -> None:
+    async def trigger_intro(self, ctx: commands.Context) -> None:
         """
         Toggles song intros for the radio station.
 
@@ -1068,10 +1026,7 @@ class Music(commands.Cog, name="Music"):
     @requires_author_voice()
     @requires_bot_playing()
     @requires_bot_voice()
-    async def trigger_pause(
-        self,
-        ctx: commands.Context
-    ) -> None:
+    async def trigger_pause(self, ctx: commands.Context) -> None:
         """
         Pauses the song playing.
 
@@ -1129,14 +1084,13 @@ class Music(commands.Cog, name="Music"):
             raise FancyError(ERROR_CODES['syntax'])
         
         map = ['list=', 'spotify.com/playlist', 'spotify.com/album', 'soundcloud.com/sets']
-        if any(m in payload for m in map):     # playlists not supported with playnext
+        if any(m in payload for m in map): # playlists not supported with playnext
             raise FancyError(ERROR_CODES['shuffle_no_playlist'])
         
         if not ctx.guild.voice_client: # we're not in voice, lets change that
             await self.bot._join_voice(ctx)
 
         message = await ctx.reply(content=None, embed=_build_embed('Music', f'🔎 Searching for {payload}', 'p'), allowed_mentions=discord.AllowedMentions.none())
-
         await asyncio.create_task(self.enqueue_media(ctx.guild.voice_client, [payload], True, False, message))
 
     @commands.command(name='queue', aliases=['q', 'np', 'nowplaying', 'song'])
@@ -1192,6 +1146,10 @@ class Music(commands.Cog, name="Music"):
             allstates.radio_station, allstates.radio_fusions, allstates.radio_fusions_playlist = None, [], []
             await ctx.reply(content=None, embed=_build_embed('Music', '📻 Radio disabled.', 'g'), allowed_mentions=discord.AllowedMentions.none()); return
         
+        if payload == 'hot100' or payload == 'hot 100':
+            payload = 'hot 100'
+            await self._generate_hot_100()
+
         allstates.radio_fusions, allstates.radio_fusions_playlist = [], []
         allstates.radio_station = payload if payload else config.RADIO_DEFAULT_THEME
         await ctx.reply(content=None, embed=_build_embed('Music', f'📻 Radio enabled, theme: **{allstates.radio_station}**.', 'g'), allowed_mentions=discord.AllowedMentions.none())

@@ -29,7 +29,7 @@ GPTIMAGE_QUALITY = 'medium'
 ####################################################################
 #  Music Settings
 ####################################################################
-BILLBOARD_HOT_100 = 'https://api.spotify.com/v1/playlists/37i9dQZF1DXcBWIGoYBM5M'  # billboard hot 100 playlist link (spotify)
+BILLBOARD_HOT_100 = 'https://open.spotify.com/playlist/6UeSakyzhiEt4NB3UAd6NQ'  # billboard hot 100 playlist link (spotify)
 MUSIC_MAX_PLAYLIST = 20  # maximum playlist length
 MUSIC_MAX_FUSION = 5  # maximum fusion stations
 MUSIC_MAX_DURATION = 1800  # maximum song length
