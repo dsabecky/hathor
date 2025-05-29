@@ -267,9 +267,6 @@ class Music(commands.Cog, name="Music"):
         if not voice_client or not currently_playing or not voice_client.is_playing():
             return "No song playing.", "", None
 
-        # build now playing text
-        song_title = f"{currently_playing['song_artist']} - {currently_playing['song_title']}" if currently_playing.get('song_artist') else currently_playing["title"].replace("*", r"\*")
-
         # calculate progress bar
         elapsed = (allstates.pause_time - allstates.start_time) if voice_client.is_paused() else (time.time() - allstates.start_time)
         total = currently_playing["duration"]
@@ -279,7 +276,7 @@ class Music(commands.Cog, name="Music"):
         progress_bar = (f"{status_emoji} {'▬' * filled}🔘{'▬' * empty} [{f'{int(elapsed)//60:02d}:{int(elapsed)%60:02d}'} / {f'{int(total)//60:02d}:{int(total)%60:02d}'}]")
 
         thumb = currently_playing.get("thumbnail") # get thumbnail
-        return song_title, progress_bar, thumb
+        return self.get_song_title(currently_playing), progress_bar, thumb
     
     def _build_queue_embed(self, voice_client: discord.VoiceClient) -> tuple[str, str, str]:
         """
@@ -287,21 +284,12 @@ class Music(commands.Cog, name="Music"):
         """
 
         allstates = self.bot.settings[voice_client.guild.id]
-        queue = allstates.queue 
+        queue = allstates.queue
+        lines = [ f"**{i+1}.** {self.get_song_title(item)}" for i, item in enumerate(queue[:10]) ]
 
         if not queue:
             return ["No queue."]
-
-        lines = [
-            f"**{i+1}.** "
-            + (
-                f"{item['song_artist']} - {item['song_title']}"
-                if item.get('song_artist')
-                else item['title'].replace('*', r'\*')
-            )
-            for i, item in enumerate(queue[:10])
-        ]
-
+        
         if len(queue) > 10:
             lines.append(f"…and {len(queue) - 10} more")
 
@@ -313,10 +301,7 @@ class Music(commands.Cog, name="Music"):
         """
 
         allstates = self.bot.settings[voice_client.guild.id]
-
-        if not allstates.radio_fusions:
-            return f"{allstates.radio_station or 'off'}"
-        return '\n'.join(allstates.radio_fusions)
+        return '\n'.join(allstates.radio_fusions) if allstates.radio_fusions else f"{allstates.radio_station or 'off'}"
     
     def _build_settings_embed(self, voice_client: discord.VoiceClient) -> str:
         """
@@ -324,14 +309,12 @@ class Music(commands.Cog, name="Music"):
         """
 
         allstates = self.bot.settings[voice_client.guild.id]
-
-        # music settings
-        volume = allstates.volume
-        repeat_status = "on" if allstates.repeat else "off"
-        shuffle_status = "on" if allstates.shuffle else "off"        
-        intro = "on" if allstates.radio_intro else "off"
-
-        return f"```🔊 {volume}%  🔁 {repeat_status}  🔀 {shuffle_status}  📢 {intro}```"
+        return (
+            f"🔊 {allstates.volume}%\n"
+            f"🔁 {'on' if allstates.repeat else 'off'}\n"
+            f"🔀 {'on' if allstates.shuffle else 'off'}\n"
+            f"📢 {'on' if allstates.radio_intro else 'off'}"
+        )
     
     async def _download_media(
         self,
@@ -477,7 +460,6 @@ class Music(commands.Cog, name="Music"):
             await message.edit(content=None, embed=_build_embed('Music', f"{queue_icon} Your media has been added to {queue_string}!", 'g', [('Added:', embed_list, False)]))
     
     async def _fetch_metadata_ytdlp(self, query: str) -> dict[str, Any] | None:
-
         """
         Wrapper for Youtube-DLP.
 
@@ -503,6 +485,13 @@ class Music(commands.Cog, name="Music"):
             return info['entries'][0]
         
         return info
+    
+    def get_song_title(self, song: dict[str, Any]) -> str:
+        """
+        Helper function that returns the proper artist - title, or title if song_* is missing.
+        """
+
+        return f"{song['song_artist']} - {song['song_title']}" if song.get('song_artist') and song.get('song_title') else song['title']
     
     def _generate_fusion_playlist(self, guild_id: int) -> None:
         """
@@ -713,7 +702,7 @@ class Music(commands.Cog, name="Music"):
 
         voice_client.play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(allstates.currently_playing['file_path']), volume=volume), after=song_cleanup)    # actually play the song
 
-        history_text = f"{song['song_artist']} - {song['song_title']}" if song.get('song_artist') and song.get('song_title') else song['title']
+        history_text = self.get_song_title(song)
         song_history[str(voice_client.guild.id)].append(history_text) # add to history
         song_history[str(voice_client.guild.id)] = song_history[str(voice_client.guild.id)][-100:] # trim history to 100
         SaveHistory()
@@ -889,7 +878,7 @@ class Music(commands.Cog, name="Music"):
 
         bumped = allstates.queue.pop(song_number - 1)
         allstates.queue.insert(0, bumped)
-        await ctx.reply(content=None, embed=_build_embed('Music', f'🔝 Bumped {bumped["title"]} to the top of the queue.', 'g'))
+        await ctx.reply(content=None, embed=_build_embed('Music', f'🔝 Bumped {self.get_song_title(bumped)} to the top of the queue.', 'g'))
 
     @commands.command(name='clear')
     @requires_author_perms()
@@ -1147,7 +1136,7 @@ class Music(commands.Cog, name="Music"):
 
         allstates = self.bot.settings[ctx.guild.id]
         song = allstates.queue.pop(args - 1)
-        await ctx.reply(content=None, embed=_build_embed('Music', f'🗑️ Removed **{song["title"]}** from queue.', 'g'))
+        await ctx.reply(content=None, embed=_build_embed('Music', f'🗑️ Removed **{self.get_song_title(song)}** from queue.', 'g'))
 
     @commands.command(name='repeat', aliases=['loop'])
     @requires_author_perms()
@@ -1210,7 +1199,7 @@ class Music(commands.Cog, name="Music"):
         """
 
         allstates = self.bot.settings[ctx.guild.id]
-        await ctx.reply(content=None, embed=_build_embed('Music', f'⏭️ Skipping {allstates.currently_playing["title"]}', 'g'), allowed_mentions=discord.AllowedMentions.none())
+        await ctx.reply(content=None, embed=_build_embed('Music', f'⏭️ Skipping {self.get_song_title(allstates.currently_playing)}', 'g'), allowed_mentions=discord.AllowedMentions.none())
 
         ctx.guild.voice_client.stop()   # actually skip the song
         if allstates.repeat:
