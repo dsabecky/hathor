@@ -726,8 +726,8 @@ class Music(commands.Cog, name="Music"):
         if is_special:  # special intro
             try:
                 text = await chatgpt._invoke_chatgpt(
-                    'Return only the information requested with no additional words or context. Do not wrap in quotes.',
-                    f'Give me a short radio dj intro for "{artist} - {title}". Intro should include info about the song. Limit of 2 sentences.'
+                    'Return only the information requested with no additional words or context. Do not wrap in quotes. You can include website names, but.',
+                    f'A short radio dj intro for "{artist} - {title}". Intro should include info about the song. Limit of 2 sentences.'
                 )
             except Exception:
                 pass
