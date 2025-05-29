@@ -173,9 +173,6 @@ class Music(commands.Cog, name="Music"):
 
     @tasks.loop(seconds=2)
     async def loop_voice_monitor(self) -> None:
-        """
-        Monitors voice activity for idle, broken playing, etc.
-        """
 
         active_count = sum(1 for guild in self.bot.guilds if self.bot.settings[guild.id].currently_playing and guild.voice_client)
         if active_count == 0:
@@ -223,9 +220,6 @@ class Music(commands.Cog, name="Music"):
 
     @tasks.loop(seconds=5)
     async def loop_radio_monitor(self) -> None:
-        """
-        Monitors radio stations for new songs.
-        """
 
         await self._radio_monitor()
 
@@ -235,9 +229,6 @@ class Music(commands.Cog, name="Music"):
 
     @tasks.loop(seconds=config.SPOTIFY_KEY_REFRESH)
     async def loop_spotify_key_creation(self) -> None:
-        """
-        Creates a new Spotify API Access Token.
-        """
 
         global SPOTIFY_ACCESS_TOKEN      # write access for global
 
