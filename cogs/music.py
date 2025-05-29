@@ -386,7 +386,7 @@ class Music(commands.Cog, name="Music"):
 
         else:
             try:
-                log_cog.info(f"_download_media: no tags found for [dark_orange]{info['title']} {info['webpage_url']}[/]. Asking ChatGPT...")
+                log_cog.info(f"_download_media: no tags found for [dark_orange]{info['title']} {info['webpage_url']}[/]. Asking ChatGPT…")
                 response = await chatgpt._invoke_chatgpt(
                     "Respond with only the asked answer, in 'Artist - Song Title' format, or 'None' if you do not know.",
                     f"What is the name of this track: {info['title']}? The webpage is: {info['webpage_url']}.")
@@ -478,7 +478,7 @@ class Music(commands.Cog, name="Music"):
         if message:
             if len(lines) > 10:
                 shown = lines[:10]
-                shown.append(f"... and {len(lines) - 10} more.")
+                shown.append(f"… and {len(lines) - 10} more.")
             else:
                 shown = lines
 
@@ -844,18 +844,17 @@ class Music(commands.Cog, name="Music"):
             !smartplaylist
         """
 
-        chatgpt = self.bot.get_cog("ChatGPT")
-
-        if not args or len(args) < 3:
-            raise Error(ERROR_CODES['syntax'])
-
+        if len(args) < 3:
+            raise Error(ERROR_CODES['message_short'])
+        
         if not ctx.guild.voice_client: # we're not in voice, lets change that
             await self.bot._join_voice(ctx)
-        
-        message = await ctx.reply(embed=_build_embed('Music', '🧠 Generating your AI playlist...', 'p'), allowed_mentions=discord.AllowedMentions.none())
+
+        chatgpt = self.bot.get_cog("ChatGPT") # pull in chatgpt
+        message = await ctx.reply(embed=_build_embed('Music', '🧠 Generating your AI playlist…', 'p'), allowed_mentions=discord.AllowedMentions.none())
 
         try:    # request our playlist
-            log_cog.info(f"!aiplaylist: Generating playlist request...")
+            log_cog.info(f"!aiplaylist: Generating playlist request…")
             response = await chatgpt._invoke_chatgpt(
                 "Respond with only the asked answer, in 'Artist- Song Title' format. Always provide a reponse.",
                 f"Generate a playlist of {config.MUSIC_MAX_PLAYLIST} songs. Playlist theme: {args}. Include similar artists and songs.")
@@ -880,7 +879,7 @@ class Music(commands.Cog, name="Music"):
     async def trigger_bump(
         self,
         ctx: commands.Context,
-        song_number: int = None
+        song_number: int
     ) -> None:
         """
         Move the requested song to the top of the queue.
@@ -891,13 +890,13 @@ class Music(commands.Cog, name="Music"):
 
         allstates = self.bot.settings[ctx.guild.id]
 
+        if song_number < 2:
+            raise FancyError(ERROR_CODES['syntax'])
+
         if len(allstates.queue) < 2:    # is there even enough songs to justify?
             raise FancyError(ERROR_CODES['bump_short'])
 
-        elif not song_number or not song_number.isdigit() or int(song_number) < 2:
-            raise FancyError(ERROR_CODES['syntax'])
-
-        bumped = allstates.queue.pop(int(song_number) - 1)
+        bumped = allstates.queue.pop(song_number - 1)
         allstates.queue.insert(0, bumped)
         await ctx.reply(content=None, embed=_build_embed('Music', f'🔝 Bumped {bumped["title"]} to the top of the queue.', 'g'))
 
@@ -923,7 +922,7 @@ class Music(commands.Cog, name="Music"):
         self,
         ctx: commands.Context,
         *,
-        payload: str = None
+        payload: str
     ) -> None:
         """
         Removes a radio station from the fusion.
@@ -933,17 +932,15 @@ class Music(commands.Cog, name="Music"):
         """
 
         allstates = self.bot.settings[ctx.guild.id]
-
-        if not payload: # no station provided
-            raise FancyError(ERROR_CODES['syntax'])
+        payload = payload.lower()
         
-        if payload.lower() not in allstates.radio_fusions: # station not fused
+        if payload not in allstates.radio_fusions: # station not fused
             raise FancyError(ERROR_CODES['radio_not_fused'])
         
         if len(allstates.radio_fusions) == 1: # deny defusion of last station
             await ctx.reply(content=None, embed=_build_embed('err', '❌ You must have at least one radio station fused.', 'r')); return
 
-        allstates.radio_fusions.remove(payload.lower())     # remove the station from the fusion list
+        allstates.radio_fusions.remove(payload)     # remove the station from the fusion list
         self._generate_fusion_playlist(ctx.guild.id)        # generate the fusion playlist
         await self._radio_monitor()                         # kick-start the radio monitor
         await ctx.reply(content=None, embed=_build_embed('Music', f'📻 Radio fusions updated, themes: {", ".join(f"**{s}**" for s in allstates.radio_fusions)}.', 'g'))
@@ -955,7 +952,7 @@ class Music(commands.Cog, name="Music"):
         self,
         ctx: commands.Context,
         *,
-        payload: str = None
+        payload: str
     ) -> None:
         """
         Fuses two or more radio stations together.
@@ -966,28 +963,26 @@ class Music(commands.Cog, name="Music"):
         """
 
         allstates = self.bot.settings[ctx.guild.id]
-        
-        if not payload: # no fusion provided
-            raise FancyError(ERROR_CODES['syntax'])
-        
-        payload_list = [ s.lower().strip() for s in payload.split("|") ]    # convert the payload into a list
+        payload = payload.lower()
+        payload_list = [ item.strip() for item in payload.split("|") if item.strip() ]    # convert the payload into a list
+
         if len(payload_list) == 0: # verify someone sent something more than just a pipe
             raise FancyError(ERROR_CODES['syntax'])
 
         if not ctx.guild.voice_client: # we're not in voice, lets change that
             await self.bot._join_voice(ctx)
 
-        payload_list = [ 'hot 100' if item.lower() == 'hot100' else item.lower() for item in payload_list ] # hotfix "hot100" to "hot 100"
+        payload_list = [ 'hot 100' if item == 'hot100' else item for item in payload_list ] # hotfix "hot100" to "hot 100"
         if 'hot 100' in payload_list: # generate the hot 100 station
             await self._generate_hot_100()
 
-        if allstates.radio_station and allstates.radio_station.lower() not in payload_list: # mixin radio with the payload
-            payload_list.append(allstates.radio_station.lower())
+        if allstates.radio_station and allstates.radio_station not in payload_list: # mixin radio with the payload
+            payload_list.append(allstates.radio_station)
 
         if allstates.radio_fusions and len(payload_list + allstates.radio_fusions) > config.MUSIC_MAX_FUSION: # max fusions threshold
             raise FancyError(f'❌ You can only fuse up to {config.MUSIC_MAX_FUSION} radio stations at a time. 😢')
         
-        message = await ctx.reply(content=None, embed=_build_embed('Music', '🧠 Fusing radio stations...', 'p'), allowed_mentions=discord.AllowedMentions.none())
+        message = await ctx.reply(content=None, embed=_build_embed('Music', '🧠 Fusing radio stations…', 'p'), allowed_mentions=discord.AllowedMentions.none())
 
         for station in payload_list: # add to fusion list, if not already in it
             if not station: # sanity check
@@ -1045,7 +1040,7 @@ class Music(commands.Cog, name="Music"):
         self,
         ctx: commands.Context,
         *,
-        payload: str = None
+        payload: str
     ) -> None:
         """
         Adds a song to the queue.
@@ -1054,15 +1049,11 @@ class Music(commands.Cog, name="Music"):
             !play [ <search query> | <link> ]
         """
 
-        if not payload:    # no data provided
-            raise FancyError(ERROR_CODES['syntax'])
-
         if not ctx.guild.voice_client: # we're not in voice, lets change that
             await self.bot._join_voice(ctx)        
 
         message = await ctx.reply(content=None, embed=_build_embed('Music', f'🔎 Searching for {payload}', 'p'), allowed_mentions=discord.AllowedMentions.none())
         await asyncio.create_task(self.enqueue_media(ctx.guild.voice_client, [payload], False, False, message))
-
 
     @commands.command(name='playnext', aliases=['playbump'])
     @requires_author_perms()
@@ -1071,7 +1062,7 @@ class Music(commands.Cog, name="Music"):
         self,
         ctx: commands.Context,
         *,
-        payload: str = None
+        payload: str
     ) -> None:
         """
         Adds a song to the top of the queue (no playlists).
@@ -1079,9 +1070,6 @@ class Music(commands.Cog, name="Music"):
         Syntax:
             !playnext [ <search query> | <link> ]
         """
-
-        if not payload:    # no data provided
-            raise FancyError(ERROR_CODES['syntax'])
         
         map = ['list=', 'spotify.com/playlist', 'spotify.com/album', 'soundcloud.com/sets']
         if any(m in payload for m in map): # playlists not supported with playnext
@@ -1158,7 +1146,7 @@ class Music(commands.Cog, name="Music"):
     @commands.command(name='remove')
     @requires_author_perms()
     @requires_queue()
-    async def trigger_remove(self, ctx, args=None):
+    async def trigger_remove(self, ctx, args: int) -> None:
         """
         Removes the requested song from queue.
 
@@ -1167,21 +1155,12 @@ class Music(commands.Cog, name="Music"):
         """
 
         allstates = self.bot.settings[ctx.guild.id]
-        
-        if not args or (args and not args.isdigit()):
-            raise FancyError(ERROR_CODES['syntax'])
-
-        args = int(args)
-        if args < 1 or args > len(allstates.queue):
-            raise FancyError(ERROR_CODES['queue_range'])
-
-        else:
-            song = allstates.queue.pop((int(args) - 1))
-            await ctx.reply(content=None, embed=_build_embed('Music', f'🗑️ Removed **{song["title"]}** from queue.', 'g'))
+        song = allstates.queue.pop(args - 1)
+        await ctx.reply(content=None, embed=_build_embed('Music', f'🗑️ Removed **{song["title"]}** from queue.', 'g'))
 
     @commands.command(name='repeat', aliases=['loop'])
     @requires_author_perms()
-    async def trigger_repeat(self, ctx):
+    async def trigger_repeat(self, ctx) -> None:
         """
         Toggles song repeating.
 
@@ -1198,7 +1177,7 @@ class Music(commands.Cog, name="Music"):
     @requires_author_voice()
     @requires_bot_playing()
     @requires_bot_voice()
-    async def trigger_resume(self, ctx, *, args=None):
+    async def trigger_resume(self, ctx) -> None:
         """
         Resume song playback.
 
@@ -1213,7 +1192,7 @@ class Music(commands.Cog, name="Music"):
 
     @commands.command(name='shuffle')
     @requires_author_perms()
-    async def trigger_shuffle(self, ctx):
+    async def trigger_shuffle(self, ctx) -> None:
         """
         Toggles playlist shuffle.
 
@@ -1231,7 +1210,7 @@ class Music(commands.Cog, name="Music"):
     @requires_author_perms()
     @requires_bot_playing()
     @requires_bot_voice()
-    async def trigger_skip(self, ctx):
+    async def trigger_skip(self, ctx) -> None:
         """
         Skips the currently playing song.
 
@@ -1252,5 +1231,5 @@ class Music(commands.Cog, name="Music"):
 ####################################################################
 
 async def setup(bot):
-    log_cog.info("Loading [dark_orange]Music[/] cog...")
+    log_cog.info("Loading [dark_orange]Music[/] cog…")
     await bot.add_cog(Music(bot))

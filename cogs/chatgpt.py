@@ -201,7 +201,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         self,
         ctx: commands.Context,
         *,
-        prompt: str | None = None
+        prompt: str
     ) -> None:
         """
         Generates a ChatGPT prompt.
@@ -209,9 +209,6 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         Syntax:
             !chatgpt <prompt>
         """
-
-        if not prompt: # did you even ask anything
-            raise FancyError(ERROR_CODES['syntax'])
         
         if len(prompt) < 3:    # what are you asking that's shorter, really
             raise FancyError(ERROR_CODES['message_short'])
@@ -245,7 +242,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         self,
         ctx: commands.Context,
         *,
-        prompt: str | None = None
+        prompt: str
     ) -> None:
         """
         Edits up to 4 attached images according to the prompt.
@@ -253,9 +250,6 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         Syntax:
             !gptedit <prompt> <image attachment{1,4}>
         """
-
-        if not prompt:  # verify we have a prompt
-            raise FancyError(ERROR_CODES['syntax'])
 
         if len(prompt) < 3:    # what are you asking that's shorter, really
             raise FancyError(ERROR_CODES['message_short'])
@@ -297,7 +291,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         self,
         ctx: commands.Context,
         *,
-        prompt: str = commands.parameter(default=None, description="Prompt request")
+        prompt: str
     ) -> None:
         """
         Uses ChatGPT to create a GPT-Image prompt, then returns the result.
@@ -305,9 +299,6 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         Syntax:
             !gptimagine <prompt>
         """
-        
-        if not prompt:     # did you even ask anything
-            raise FancyError(ERROR_CODES['syntax'])
         
         if len(prompt) < 5:    # what are you asking that's shorter, really
             raise FancyError(ERROR_CODES['message_short'])
@@ -345,7 +336,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         self,
         ctx: commands.Context,
         *,
-        prompt: str = commands.parameter(default=None, description="Prompt request")
+        prompt: str
     ) -> None:
         """
         Generates a GPT-Image image.
@@ -353,9 +344,6 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         Syntax:
             !imagine <prompt>
         """
-
-        if not prompt:   # did you even ask anything
-            raise FancyError(ERROR_CODES['syntax'])
 
         if len(prompt) < 3:    # what are you asking that's shorter, really
             raise FancyError(ERROR_CODES['message_short'])

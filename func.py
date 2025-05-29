@@ -289,14 +289,13 @@ ERROR_CODES = {
     "no_radio": "There is no active radio",
     "no_song_found": "I couldn't find that song.",
     "permissions_exist": "Permissions already exist",
-    "queue_range": "Request is out of range",
+    "range": "Request is out of range",
     "radio_exist": "Radio station already exists",
     "shuffle_no_playlist": "Playlists are not allowed in playnext, don't be greedy.",
     "song_length": "Requested song is too long!",
     "syntax": "Syntax error",
     "voice_join": "I can't join that voice channel",
     "voice_mismatch": "You must be in the same voice channel to do this",
-    "vol_range": "Invalid! Volume range is 1-100",
     "wrong_fuse": "That station is not fused"
 }
 

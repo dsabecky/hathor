@@ -36,7 +36,7 @@ class Voice(commands.Cog, name="Voice"):
     ####################################################################
     @commands.command(name="idle")
     @requires_author_perms()
-    async def idle_time(self, ctx, idle_time=None):
+    async def idle_time(self, ctx, idle_time: int = None):
         """
         Configure the time (mins) idle time before disconnecting.
 
@@ -50,18 +50,10 @@ class Voice(commands.Cog, name="Voice"):
             await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
             return
 
-        if not idle_time.isdigit():
-            raise FancyError(ERROR_CODES['syntax'])
-        
-        idle_time = int(idle_time)
-
-        if 1 <= idle_time <= 30:
-            allstates.voice_idle = idle_time * 60
-            allstates._save_settings()
-            output = discord.Embed(title="Idle Time", description=f"Idle time is now {int(allstates.voice_idle / 60)} minutes.")
-            await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
-        else:
-            raise FancyError(ERROR_CODES['queue_range'])
+        allstates.voice_idle = idle_time * 60
+        allstates._save_settings()
+        output = discord.Embed(title="Idle Time", description=f"Idle time is now {int(allstates.voice_idle / 60)} minutes.")
+        await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='join')
     @requires_author_voice()
@@ -92,7 +84,7 @@ class Voice(commands.Cog, name="Voice"):
 
     @commands.command(name='volume', aliases=['vol'])
     @requires_author_perms()
-    async def song_volume(self, ctx, args=None):
+    async def song_volume(self, ctx, args: int = None):
         """
         Sets the bot volume for current server.
 
@@ -104,24 +96,16 @@ class Voice(commands.Cog, name="Voice"):
         voice = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
 
         if not args:
-            await ctx.channel.send(f'Current volume is: {allstates.volume}%.'); return
-        
-        if not args.isdigit():
-            raise FancyError(ERROR_CODES['syntax'])
+            await ctx.channel.send(f'Current volume is: {allstates.volume}%.')
+            return
 
-        args = int(args)
+        allstates.volume = args
+        allstates._save_settings()
 
-        if 0 <= args <= 100:
-            allstates.volume = args
-            allstates._save_settings()
+        if voice:
+            voice.source.volume = allstates.volume / 100
 
-            if voice:
-                voice.source.volume = allstates.volume / 100
-
-            await ctx.channel.send(f'Server volume changed to: {allstates.volume}%.')
-
-        else:
-            raise FancyError(ERROR_CODES['vol_range'])
+        await ctx.channel.send(f'Server volume changed to: {allstates.volume}%.')
 
 
 ####################################################################

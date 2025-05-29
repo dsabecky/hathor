@@ -112,12 +112,20 @@ class Hathor(commands.Bot):
         if isinstance(error, commands.CommandNotFound): # ignore command not found errors
             return
         
-        if isinstance(error, FancyError):   # send error to channel
-            log_sys.warning(f"[red]{escape(error.code)}[/]")
-            await ctx.send(embed=discord.Embed(title=random.choice(ERROR_FLAVOR), description=error, color=discord.Color.red())); return
+        elif isinstance(error, commands.BadArgument): # incorrect syntax
+            await ctx.reply(embed=discord.Embed(title=random.choice(ERROR_FLAVOR), description=ERROR_CODES['syntax'], color=discord.Color.red()))
+
+        elif isinstance(error, commands.CommandInvokeError) and isinstance(error.original, IndexError): # out of range errors
+            await ctx.reply(embed=discord.Embed(title=random.choice(ERROR_FLAVOR), description=ERROR_CODES['range'], color=discord.Color.red()))
+
+        elif isinstance(error, commands.MissingRequiredArgument): # missing arguments
+            await ctx.reply(embed=discord.Embed(title=random.choice(ERROR_FLAVOR), description=ERROR_CODES['syntax'], color=discord.Color.red()))
         
-        if isinstance(error, Error):   # log error to console
-            log_sys.error(f"[red]{escape(error.code)}[/]"); return
+        elif isinstance(error, FancyError):   # send error to channel
+            await ctx.reply(embed=discord.Embed(title=random.choice(ERROR_FLAVOR), description=error, color=discord.Color.red()))
+        
+        elif isinstance(error, Error):   # log error to console
+            log_sys.error(f"[red]{escape(error.code)}[/]")
         
         else:   # dump unknown errors
             raise error
