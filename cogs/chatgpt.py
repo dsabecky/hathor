@@ -50,6 +50,9 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         Handles Grok's responses to messages.
         """
 
+        if not message.guild: # ignore DMs
+            return
+
         if not message.content.lower().startswith("@grok") and not message.content.startswith(self.bot.user.mention):   # no @grok
             return
 
