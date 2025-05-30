@@ -11,9 +11,10 @@ from discord.ext.commands import Greedy, Context
 from typing import Literal  # type hints
 
 # hathor internals
-from func import requires_owner_perms, requires_author_perms
-from func import ERROR_CODES, FancyError, build_embed
-from logs import log_cog
+from func import ERROR_CODES, FancyError # error handling
+from func import build_embed # functions
+from func import requires_owner_perms, requires_author_perms # permission checks
+from logs import log_cog # logging
 
 ####################################################################
 # Classes
