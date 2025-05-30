@@ -32,7 +32,7 @@ from openai import AsyncOpenAI   # cleaner than manually calling openai.OpenAI()
 import config
 from func import Error, ERROR_CODES, FancyError # error handling
 from func import RadioPlaylists, SongDB, SongHistory # class loading
-from func import _get_random_radio_intro, _build_embed, _set_profile_status
+from func import _get_random_radio_intro, build_embed, _set_profile_status
 from func import requires_author_perms, requires_author_voice, requires_bot_voice, requires_queue, requires_bot_playing # permission checks
 from logs import log_cog # logging
 
@@ -187,15 +187,16 @@ class Music(commands.Cog, name="Music"):
     # Internal: Helper Functions
     ####################################################################        
 
-    def _build_now_playing_embed(self, voice_client: discord.VoiceClient) -> tuple[str, str, str]:
+    def build_now_playing_embed(self, guild_id: int) -> tuple[str, str, str]:
         """
         Helper function that returns the currently playing song.
         """
 
-        allstates = self.bot.settings[voice_client.guild.id]
+        allstates = self.bot.settings[guild_id]
         currently_playing = allstates.currently_playing
+        voice_client = self.bot.get_guild(guild_id).voice_client
 
-        if not voice_client or not currently_playing or not voice_client.is_playing():
+        if not currently_playing or not voice_client or not voice_client.is_playing():
             return "No song playing.", "", None
 
         # calculate progress bar
@@ -209,12 +210,12 @@ class Music(commands.Cog, name="Music"):
         thumb = currently_playing.get("thumbnail") # get thumbnail
         return self.get_song_title(currently_playing), progress_bar, thumb
     
-    def _build_queue_embed(self, voice_client: discord.VoiceClient) -> tuple[str, str, str]:
+    def build_queue_embed(self, guild_id: int) -> tuple[str, str, str]:
         """
         Helper function that returns the current queue.
         """
 
-        allstates = self.bot.settings[voice_client.guild.id]
+        allstates = self.bot.settings[guild_id]
         queue = allstates.queue
         lines = [ f"**{i+1}.** {self.get_song_title(item)}" for i, item in enumerate(queue[:10]) ]
 
@@ -226,20 +227,20 @@ class Music(commands.Cog, name="Music"):
 
         return "\n".join(lines)
     
-    def _build_radio_embed(self, voice_client: discord.VoiceClient) -> str:
+    def build_radio_embed(self, guild_id: int) -> str:
         """
         Helper function that returns the current radio stations.
         """
 
-        allstates = self.bot.settings[voice_client.guild.id]
+        allstates = self.bot.settings[guild_id]
         return '\n'.join(allstates.radio_fusions) if allstates.radio_fusions else f"{allstates.radio_station or 'off'}"
     
-    def _build_settings_embed(self, voice_client: discord.VoiceClient) -> str:
+    def build_settings_embed(self, guild_id: int) -> str:
         """
         Helper function that returns the current settings.
         """
 
-        allstates = self.bot.settings[voice_client.guild.id]
+        allstates = self.bot.settings[guild_id]
         return (
             f"🔊 {allstates.volume}%\n"
             f"🔁 {'on' if allstates.repeat else 'off'}\n"
@@ -336,12 +337,12 @@ class Music(commands.Cog, name="Music"):
                 payload = await self.parse_media(payload)
             except Exception:
                 if message:
-                    await message.edit(content=None, embed=_build_embed('err', '❌ I ran into an issue parsing your request. 😢', 'r')); return
+                    await message.edit(content=None, embed=build_embed('err', '❌ I ran into an issue parsing your request. 😢', 'r')); return
 
         lines: list[str] = []   # stage empty list
         for i, item in enumerate(payload, start=1):
             if message:
-                await message.edit(content=None, embed=_build_embed('Music', f'🧠 Preparing your media ({i}/{len(payload)})', 'p'))
+                await message.edit(content=None, embed=build_embed('Music', f'🧠 Preparing your media ({i}/{len(payload)})', 'p'))
 
             try:    # fetch metadata
                 metadata = await self._fetch_metadata_ytdlp(item)
@@ -386,7 +387,7 @@ class Music(commands.Cog, name="Music"):
                 shown = lines
 
             embed_list = "\n".join(shown)
-            await message.edit(content=None, embed=_build_embed('Music', f"{queue_icon} Your media has been added to {queue_string}!", 'g', [('Added:', embed_list, False)]))
+            await message.edit(content=None, embed=build_embed('Music', f"{queue_icon} Your media has been added to {queue_string}!", 'g', [('Added:', embed_list, False)]))
     
     async def _fetch_metadata_ytdlp(self, query: str) -> dict[str, Any] | None:
         """
@@ -755,7 +756,7 @@ class Music(commands.Cog, name="Music"):
             await self.bot._join_voice(ctx)
 
         chatgpt = self.bot.get_cog("ChatGPT") # pull in chatgpt
-        message = await ctx.reply(embed=_build_embed('Music', '🧠 Generating your AI playlist…', 'p'), allowed_mentions=discord.AllowedMentions.none())
+        message = await ctx.reply(embed=build_embed('Music', '🧠 Generating your AI playlist…', 'p'), allowed_mentions=discord.AllowedMentions.none())
 
         try:    # request our playlist
             log_cog.info(f"!aiplaylist: Generating playlist request…")
@@ -763,7 +764,7 @@ class Music(commands.Cog, name="Music"):
                 "Respond with only the asked answer, in 'Artist- Song Title' format. Always provide a reponse.",
                 f"Generate a playlist of {config.MUSIC_MAX_PLAYLIST} songs. Playlist theme: {args}. Include similar artists and songs.")
         except Exception as e:  # well this is embarrasing
-            await message.edit(content=None, embed=_build_embed('err', '❌ I ran into an issue generating your playlist. 😢', 'r')); return
+            await message.edit(content=None, embed=build_embed('err', '❌ I ran into an issue generating your playlist. 😢', 'r')); return
 
         parsed_response = response.split('\n')  # filter out the goop
         playlist = []   # build the playlist and send it to the queue
@@ -771,7 +772,7 @@ class Music(commands.Cog, name="Music"):
             playlist.append(item.strip())
 
         if not playlist:    # empty playlist
-            await message.edit(content=None, embed=_build_embed('err', '❌ I ran into an issue parsing your playlist. 😢', 'r'))
+            await message.edit(content=None, embed=build_embed('err', '❌ I ran into an issue parsing your playlist. 😢', 'r'))
             raise Error(f"!aiplaylist:\nCould not parse playlist[]: {playlist}")
 
         await asyncio.create_task(self.enqueue_media(ctx.guild.voice_client, playlist, False, True, message))
@@ -802,7 +803,7 @@ class Music(commands.Cog, name="Music"):
 
         bumped = allstates.queue.pop(song_number - 1)
         allstates.queue.insert(0, bumped)
-        await ctx.reply(content=None, embed=_build_embed('Music', f'🔝 Bumped {self.get_song_title(bumped)} to the top of the queue.', 'g'))
+        await ctx.reply(content=None, embed=build_embed('Music', f'🔝 Bumped {self.get_song_title(bumped)} to the top of the queue.', 'g'))
 
     @commands.command(name='clear')
     @requires_author_perms()
@@ -817,7 +818,7 @@ class Music(commands.Cog, name="Music"):
 
         allstates = self.bot.settings[ctx.guild.id]
         allstates.queue = []
-        await ctx.reply(content=None, embed=_build_embed('Music', f'🗑️ Removed {len(allstates.queue)} songs from queue.', 'g'))
+        await ctx.reply(content=None, embed=build_embed('Music', f'🗑️ Removed {len(allstates.queue)} songs from queue.', 'g'))
 
     @commands.command(name='defuse')
     @requires_author_perms()
@@ -842,12 +843,12 @@ class Music(commands.Cog, name="Music"):
             raise FancyError(ERROR_CODES['radio_not_fused'])
         
         if len(allstates.radio_fusions) == 1: # deny defusion of last station
-            await ctx.reply(content=None, embed=_build_embed('err', '❌ You must have at least one radio station fused.', 'r')); return
+            await ctx.reply(content=None, embed=build_embed('err', '❌ You must have at least one radio station fused.', 'r')); return
 
         allstates.radio_fusions.remove(payload)     # remove the station from the fusion list
         self._generate_fusion_playlist(ctx.guild.id)        # generate the fusion playlist
         await self._radio_monitor()                         # kick-start the radio monitor
-        await ctx.reply(content=None, embed=_build_embed('Music', f'📻 Radio fusions updated, themes: {", ".join(f"**{s}**" for s in allstates.radio_fusions)}.', 'g'))
+        await ctx.reply(content=None, embed=build_embed('Music', f'📻 Radio fusions updated, themes: {", ".join(f"**{s}**" for s in allstates.radio_fusions)}.', 'g'))
 
     @commands.command(name='fuse')
     @requires_author_perms()
@@ -886,7 +887,7 @@ class Music(commands.Cog, name="Music"):
         if allstates.radio_fusions and len(payload_list + allstates.radio_fusions) > config.MUSIC_MAX_FUSION: # max fusions threshold
             raise FancyError(f'❌ You can only fuse up to {config.MUSIC_MAX_FUSION} radio stations at a time. 😢')
         
-        message = await ctx.reply(content=None, embed=_build_embed('Music', '🧠 Fusing radio stations…', 'p'), allowed_mentions=discord.AllowedMentions.none())
+        message = await ctx.reply(content=None, embed=build_embed('Music', '🧠 Fusing radio stations…', 'p'), allowed_mentions=discord.AllowedMentions.none())
 
         for station in payload_list: # add to fusion list, if not already in it
             if not station: # sanity check
@@ -897,12 +898,12 @@ class Music(commands.Cog, name="Music"):
                     try:
                         await self._generate_radio_station(station)
                     except Exception as e:
-                        await message.edit(content=None, embed=_build_embed('err', '❌ I ran into an issue. 😢', 'r')); return
+                        await message.edit(content=None, embed=build_embed('err', '❌ I ran into an issue. 😢', 'r')); return
                     
             allstates.radio_fusions.append(station) # add to fusion list
 
         self._generate_fusion_playlist(ctx.guild.id)    # generate the fusion playlist
-        await message.edit(content=None, embed=_build_embed('Music', f'⚛️ Radio fusions enabled, themes: {", ".join(f"**{s}**" for s in allstates.radio_fusions)}.', 'g'))
+        await message.edit(content=None, embed=build_embed('Music', f'⚛️ Radio fusions enabled, themes: {", ".join(f"**{s}**" for s in allstates.radio_fusions)}.', 'g'))
         await self._radio_monitor() # kick-start the radio monitor
 
     @commands.command(name='intro')
@@ -918,7 +919,7 @@ class Music(commands.Cog, name="Music"):
         allstates = self.bot.settings[ctx.guild.id]
         allstates.radio_intro = not allstates.radio_intro
         allstates.save()
-        await ctx.reply(content=None, embed=_build_embed('Music', f'📢 Radio intros {allstates.radio_intro and "enabled" or "disabled"}.', 'g'))
+        await ctx.reply(content=None, embed=build_embed('Music', f'📢 Radio intros {allstates.radio_intro and "enabled" or "disabled"}.', 'g'))
 
     @commands.command(name='pause')
     @requires_author_perms()
@@ -936,7 +937,7 @@ class Music(commands.Cog, name="Music"):
         allstates = self.bot.settings[ctx.guild.id]
         allstates.pause_time = time.time()  # record when we paused
         ctx.guild.voice_client.pause()      # actually pause
-        await ctx.reply(content=None, embed=_build_embed('Music', '⏸️ Playback paused.', 'g'))
+        await ctx.reply(content=None, embed=build_embed('Music', '⏸️ Playback paused.', 'g'))
 
     @commands.command(name='play')
     @requires_author_voice()
@@ -956,7 +957,7 @@ class Music(commands.Cog, name="Music"):
         if not ctx.guild.voice_client: # we're not in voice, lets change that
             await self.bot._join_voice(ctx)        
 
-        message = await ctx.reply(content=None, embed=_build_embed('Music', f'🔎 Searching for {payload}', 'p'), allowed_mentions=discord.AllowedMentions.none())
+        message = await ctx.reply(content=None, embed=build_embed('Music', f'🔎 Searching for {payload}', 'p'), allowed_mentions=discord.AllowedMentions.none())
         await asyncio.create_task(self.enqueue_media(ctx.guild.voice_client, [payload], False, False, message))
 
     @commands.command(name='playnext', aliases=['playbump'])
@@ -982,7 +983,7 @@ class Music(commands.Cog, name="Music"):
         if not ctx.guild.voice_client: # we're not in voice, lets change that
             await self.bot._join_voice(ctx)
 
-        message = await ctx.reply(content=None, embed=_build_embed('Music', f'🔎 Searching for {payload}', 'p'), allowed_mentions=discord.AllowedMentions.none())
+        message = await ctx.reply(content=None, embed=build_embed('Music', f'🔎 Searching for {payload}', 'p'), allowed_mentions=discord.AllowedMentions.none())
         await asyncio.create_task(self.enqueue_media(ctx.guild.voice_client, [payload], True, False, message))
 
     @commands.command(name='queue', aliases=['q', 'np', 'nowplaying', 'song'])
@@ -995,14 +996,14 @@ class Music(commands.Cog, name="Music"):
         """
 
         allstates = self.bot.settings[ctx.guild.id]
-        voice_client = ctx.guild.voice_client
+        guild_id = ctx.guild.id
 
-        song_title, progress_bar, thumb = self._build_now_playing_embed(voice_client)
-        queue = self._build_queue_embed(voice_client)
-        radio = self._build_radio_embed(voice_client)
-        settings = self._build_settings_embed(voice_client)
+        song_title, progress_bar, thumb = self.build_now_playing_embed(guild_id)
+        queue = self.build_queue_embed(guild_id)
+        radio = self.build_radio_embed(guild_id)
+        settings = self.build_settings_embed(guild_id)
 
-        embed = _build_embed('Song Queue', '', 'p', [
+        embed = build_embed('Song Queue', '', 'p', [
             ('Now Playing', song_title + (f"\n{progress_bar}" if progress_bar else ""), False),
             ('Up Next', queue, False),
             (f"{'Radio Stations' if allstates.radio_fusions else 'Radio Station'}", radio, False),
@@ -1036,7 +1037,7 @@ class Music(commands.Cog, name="Music"):
 
         if not payload and (allstates.radio_station or allstates.radio_fusions):
             allstates.radio_station, allstates.radio_fusions, allstates.radio_fusions_playlist = None, [], []
-            await ctx.reply(content=None, embed=_build_embed('Music', '📻 Radio disabled.', 'g'), allowed_mentions=discord.AllowedMentions.none()); return
+            await ctx.reply(content=None, embed=build_embed('Music', '📻 Radio disabled.', 'g'), allowed_mentions=discord.AllowedMentions.none()); return
         
         if payload == 'hot100' or payload == 'hot 100':
             payload = 'hot 100'
@@ -1044,7 +1045,7 @@ class Music(commands.Cog, name="Music"):
 
         allstates.radio_fusions, allstates.radio_fusions_playlist = [], []
         allstates.radio_station = payload if payload else config.RADIO_DEFAULT_THEME
-        await ctx.reply(content=None, embed=_build_embed('Music', f'📻 Radio enabled, theme: **{allstates.radio_station}**.', 'g'), allowed_mentions=discord.AllowedMentions.none())
+        await ctx.reply(content=None, embed=build_embed('Music', f'📻 Radio enabled, theme: **{allstates.radio_station}**.', 'g'), allowed_mentions=discord.AllowedMentions.none())
         await self._radio_monitor() 
 
     @commands.command(name='remove')
@@ -1060,7 +1061,7 @@ class Music(commands.Cog, name="Music"):
 
         allstates = self.bot.settings[ctx.guild.id]
         song = allstates.queue.pop(args - 1)
-        await ctx.reply(content=None, embed=_build_embed('Music', f'🗑️ Removed **{self.get_song_title(song)}** from queue.', 'g'))
+        await ctx.reply(content=None, embed=build_embed('Music', f'🗑️ Removed **{self.get_song_title(song)}** from queue.', 'g'))
 
     @commands.command(name='repeat', aliases=['loop'])
     @requires_author_perms()
@@ -1074,7 +1075,7 @@ class Music(commands.Cog, name="Music"):
 
         allstates = self.bot.settings[ctx.guild.id]
         allstates.repeat = not allstates.repeat # change value to current opposite (True -> False)
-        await ctx.reply(content=None, embed=_build_embed('Music', f'🔁 Repeat mode {allstates.repeat and "enabled" or "disabled"}.', 'g'), allowed_mentions=discord.AllowedMentions.none())
+        await ctx.reply(content=None, embed=build_embed('Music', f'🔁 Repeat mode {allstates.repeat and "enabled" or "disabled"}.', 'g'), allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='resume')
     @requires_author_perms()
@@ -1092,7 +1093,7 @@ class Music(commands.Cog, name="Music"):
         allstates = self.bot.settings[ctx.guild.id]
         allstates.start_time += (allstates.pause_time - allstates.start_time)   # update the start_time
         ctx.guild.voice_client.resume()     # actually resume playing
-        await ctx.reply(content=None, embed=_build_embed('Music', '🤘 Playback resumed.', 'g'), allowed_mentions=discord.AllowedMentions.none())
+        await ctx.reply(content=None, embed=build_embed('Music', '🤘 Playback resumed.', 'g'), allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='shuffle')
     @requires_author_perms()
@@ -1108,7 +1109,7 @@ class Music(commands.Cog, name="Music"):
         random.shuffle(allstates.queue)     # actually shuffles the queue
         allstates.shuffle = not allstates.shuffle   # update the shuffle variable
         allstates.save()
-        await ctx.reply(content=None, embed=_build_embed('Music', f'🔀 Shuffle mode {allstates.shuffle and "enabled" or "disabled"}.', 'g'), allowed_mentions=discord.AllowedMentions.none())
+        await ctx.reply(content=None, embed=build_embed('Music', f'🔀 Shuffle mode {allstates.shuffle and "enabled" or "disabled"}.', 'g'), allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='skip')
     @requires_author_perms()
@@ -1123,7 +1124,7 @@ class Music(commands.Cog, name="Music"):
         """
 
         allstates = self.bot.settings[ctx.guild.id]
-        await ctx.reply(content=None, embed=_build_embed('Music', f'⏭️ Skipping {self.get_song_title(allstates.currently_playing)}', 'g'), allowed_mentions=discord.AllowedMentions.none())
+        await ctx.reply(content=None, embed=build_embed('Music', f'⏭️ Skipping {self.get_song_title(allstates.currently_playing)}', 'g'), allowed_mentions=discord.AllowedMentions.none())
 
         ctx.guild.voice_client.stop()   # actually skip the song
         if allstates.repeat:

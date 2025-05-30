@@ -17,7 +17,7 @@ from openai import AsyncOpenAI  # cleaner than manually calling openai.OpenAI()
 # hathor internals
 import config                                   # bot config
 from func import Error, ERROR_CODES, FancyError # custom error class
-from func import _build_embed                   # custom embeds
+from func import build_embed                   # custom embeds
 from logs import log_cog                        # logging
 
 
@@ -213,7 +213,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         if len(prompt) < 3:    # what are you asking that's shorter, really
             raise FancyError(ERROR_CODES['message_short'])
         
-        message = await ctx.reply(embed=_build_embed('ChatGPT', 'Sending request to ChatGPT…', 'p', [('Prompt:', prompt, False)]), allowed_mentions=discord.AllowedMentions.none())
+        message = await ctx.reply(embed=build_embed('ChatGPT', 'Sending request to ChatGPT…', 'p', [('Prompt:', prompt, False)]), allowed_mentions=discord.AllowedMentions.none())
 
         img = [    # check if there are images
             a.url for a in ctx.message.attachments
@@ -229,11 +229,11 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
                     prompt, att=img
                 )
         except Error as e:
-            await message.edit(content=None, embed=_build_embed('err', 'I ran into an issue. 😢', 'r', [('Prompt:', prompt, False), ('Error:', str(e), False)])); return
+            await message.edit(content=None, embed=build_embed('err', 'I ran into an issue. 😢', 'r', [('Prompt:', prompt, False), ('Error:', str(e), False)])); return
         try:
-            await message.edit(content=None, embed=_build_embed('ChatGPT', 'txt', 'g', [('Prompt:', prompt, False), ('Response:', response, False)]))
+            await message.edit(content=None, embed=build_embed('ChatGPT', 'txt', 'g', [('Prompt:', prompt, False), ('Response:', response, False)]))
         except:
-            await message.edit(content=None, embed=_build_embed('ChatGPT', 'txt', 'g', [('Prompt:', prompt, False), ('Response:', 'Response below (over embed limit).', False)]))
+            await message.edit(content=None, embed=build_embed('ChatGPT', 'txt', 'g', [('Prompt:', prompt, False), ('Response:', 'Response below (over embed limit).', False)]))
             await message.reply(f"{response[:1900]}", mention_author=False)
             
 
@@ -269,13 +269,13 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             buffers.append(bio)
 
         # send the prompt
-        message = await ctx.reply(embed=_build_embed('Image Edit', 'Generating edited image…', 'p', [('Prompt:', prompt, False)]), allowed_mentions=discord.AllowedMentions.none())
+        message = await ctx.reply(embed=build_embed('Image Edit', 'Generating edited image…', 'p', [('Prompt:', prompt, False)]), allowed_mentions=discord.AllowedMentions.none())
 
         try:    # generate the edited image
             async with message.channel.typing():
                 response = await self._invoke_gptimage_edit(prompt, buffers)
         except Exception as e:
-            await message.edit(embed=_build_embed('err', 'I ran into an issue. 😢', 'r', [('Prompt:', prompt, False), ('Error:', str(e), False)])); return
+            await message.edit(embed=build_embed('err', 'I ran into an issue. 😢', 'r', [('Prompt:', prompt, False), ('Error:', str(e), False)])); return
 
         try:    # delete old message
             await message.delete()
@@ -283,7 +283,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
             pass
 
         # send the edited image
-        embed = _build_embed('Image Edit', 'img', 'g', [('Prompt:', prompt, False)]); embed.set_image(url="attachment://edited.png")
+        embed = build_embed('Image Edit', 'img', 'g', [('Prompt:', prompt, False)]); embed.set_image(url="attachment://edited.png")
         await ctx.reply(content=None, embed=embed, files=[discord.File(response, filename="edited.png")])
 
     @commands.command(name='gptimagine')
@@ -303,7 +303,7 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         if len(prompt) < 5:    # what are you asking that's shorter, really
             raise FancyError(ERROR_CODES['message_short'])
 
-        message = await ctx.reply(embed=_build_embed('ChatGPT + Image Generation', 'Generating request…', 'p', [('Prompt:', prompt, False)]), allowed_mentions=discord.AllowedMentions.none())
+        message = await ctx.reply(embed=build_embed('ChatGPT + Image Generation', 'Generating request…', 'p', [('Prompt:', prompt, False)]), allowed_mentions=discord.AllowedMentions.none())
 
         try:
             async with message.channel.typing():
@@ -313,22 +313,22 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
                     f"Write an AI image generation prompt for the following: {prompt}"
                 )
         except Exception as e:
-            await message.edit(content=None, embed=_build_embed('err', 'I ran into an issue. 😢', 'r', [('Prompt:', prompt, False), ('Error:', str(e), False)])); return
+            await message.edit(content=None, embed=build_embed('err', 'I ran into an issue. 😢', 'r', [('Prompt:', prompt, False), ('Error:', str(e), False)])); return
         
-        await message.edit(content=None, embed=_build_embed('ChatGPT + Image Generation', 'txt', 'p', [('Prompt:', prompt, False), ('Response:', response, False)]))
+        await message.edit(content=None, embed=build_embed('ChatGPT + Image Generation', 'txt', 'p', [('Prompt:', prompt, False), ('Response:', response, False)]))
 
         try:
             async with message.channel.typing():
                 image_response = await self._invoke_gptimage(response)
         except Exception as e:
-            await message.edit(content=None, embed=_build_embed('err', 'I ran into an issue. 😢', 'r', [('Prompt:', prompt, False), ('Error:', str(e), False)])); return
+            await message.edit(content=None, embed=build_embed('err', 'I ran into an issue. 😢', 'r', [('Prompt:', prompt, False), ('Error:', str(e), False)])); return
 
         try:    # delete old message
             await message.delete()
         except:
             pass
 
-        embed = _build_embed('ChatGPT + Image Generation', 'imgtxt', 'g', [('Prompt:', prompt, False), ('Response:', response, False)]); embed.set_image(url="attachment://generated.png")
+        embed = build_embed('ChatGPT + Image Generation', 'imgtxt', 'g', [('Prompt:', prompt, False), ('Response:', response, False)]); embed.set_image(url="attachment://generated.png")
         await ctx.reply(content=None,embed=embed, files=[discord.File(image_response, filename="generated.png")])
 
     @commands.command(name="imagine")
@@ -348,20 +348,20 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
         if len(prompt) < 3:    # what are you asking that's shorter, really
             raise FancyError(ERROR_CODES['message_short'])
 
-        message = await ctx.reply(embed=_build_embed('Image Generation', 'Generating image request…', 'p', [('Prompt:', prompt, False)]), allowed_mentions=discord.AllowedMentions.none())
+        message = await ctx.reply(embed=build_embed('Image Generation', 'Generating image request…', 'p', [('Prompt:', prompt, False)]), allowed_mentions=discord.AllowedMentions.none())
 
         try:
             async with message.channel.typing():
                 response = await self._invoke_gptimage(prompt)
         except Exception as e:
-            await message.edit(embed=_build_embed('err', 'I ran into an issue. 😢', 'r', [('Prompt:', prompt, False), ('Error:', str(e), False)])); return
+            await message.edit(embed=build_embed('err', 'I ran into an issue. 😢', 'r', [('Prompt:', prompt, False), ('Error:', str(e), False)])); return
         
         try:    # delete old message
             await message.delete()
         except:
             pass
 
-        embed = _build_embed('Image Generation', 'img', 'g', [('Prompt:', prompt, False)]); embed.set_image(url="attachment://generated.png")
+        embed = build_embed('Image Generation', 'img', 'g', [('Prompt:', prompt, False)]); embed.set_image(url="attachment://generated.png")
         await ctx.reply(content=None, embed=embed, files=[discord.File(response, filename="generated.png")])
 
 

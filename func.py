@@ -298,7 +298,7 @@ async def _check_permissions(
     else:
         return False
     
-def _build_embed(
+def build_embed(
     title: str,
     description: str,
     color: str = "p",

@@ -20,7 +20,7 @@ from rich.markup import escape
 
 # hathor internals
 import config
-from func import Error, ERROR_CODES, ERROR_FLAVOR, FancyError, Settings
+from func import Error, ERROR_CODES, ERROR_FLAVOR, FancyError, Settings, build_embed
 from logs import log_sys, log_msg
 
 
@@ -28,7 +28,7 @@ from logs import log_sys, log_msg
 # Configuration Validation
 ####################################################################
 
-def _validate_config() -> None:
+def validate_config() -> None:
     """
     Ensure all config variables are defined.
     """
@@ -192,8 +192,8 @@ async def main():
 ####################################################################
 
 if __name__ == "__main__":
-    log_sys.info("Validating configurations from config.py...")
-    _validate_config()
+    log_sys.info("Validating configurations from [dark_orange]config.py[/]…")
+    validate_config()
 
-    log_sys.info("Validation complete. Starting up")
+    log_sys.info("Validation [green]complete[/]. Starting up…")
     asyncio.run(main())
