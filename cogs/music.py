@@ -637,7 +637,7 @@ class Music(commands.Cog, name="Music"):
             await self._play_radio_intro(voice_client, song['song_artist'], song['song_title'], intro_volume)
 
         def song_cleanup(error: Exception | None = None):  # song file cleanup
-            if lastfm and config.LASTFM_SERVER == voice_client.guild.id and allstates.currently_playing['song_artist'] and allstates.currently_playing['song_title']:
+            if lastfm and config.LASTFM_SERVER == voice_client.guild.id and allstates.currently_playing['song_artist'] and allstates.currently_playing['song_title'] and allstates.start_time + allstates.currently_playing['duration'] <= time.time():
                 asyncio.run_coroutine_threadsafe(asyncio.to_thread(lastfm.scrobble, artist=allstates.currently_playing['song_artist'], title=allstates.currently_playing['song_title'], timestamp=allstates.start_time), self.loop)
 
             if allstates.repeat: # don't cleanup if we're on repeat
