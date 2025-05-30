@@ -167,14 +167,10 @@ class Music(commands.Cog, name="Music"):
 
         global SPOTIFY_ACCESS_TOKEN      # write access for global
 
-        def blocking_call():
-            return requests.post(
-                "https://accounts.spotify.com/api/token", headers={"Content-Type": "application/x-www-form-urlencoded"},
-                data={ "grant_type": "client_credentials", "client_id": config.SPOTIFY_CLIENT_ID, "client_secret": config.SPOTIFY_CLIENT_SECRET }
-            )
-
         try:
-            response = await asyncio.to_thread(blocking_call)
+            response = await asyncio.to_thread(requests.post, "https://accounts.spotify.com/api/token",
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                data={ "grant_type": "client_credentials", "client_id": config.SPOTIFY_CLIENT_ID, "client_secret": config.SPOTIFY_CLIENT_SECRET })
         except Exception as e:
             raise Error(f"loop_spotify_key_creation() -> Spotify.requests.post():\n{e}")
 
