@@ -10,6 +10,7 @@ from discord.ext.commands import Context
 # system level stuff
 import asyncio             # prevents thread locking
 from pathlib import Path   # cog discovery
+import logging
 
 # data analysis
 import inspect  # inspect config variables
@@ -24,6 +25,13 @@ from func import Error, ERROR_CODES, FancyError # error handling
 from func import Settings # class loading
 from func import build_embed # functions
 from logs import log_sys, log_msg # logging
+
+
+####################################################################
+# Mute regular INFO logging
+####################################################################
+
+logging.getLogger("requests").setLevel(logging.WARNING) 
 
 
 ####################################################################
