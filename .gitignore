@@ -11,3 +11,4 @@ db/*
 *.pyd
 *.pyw
 *.pyz
+.DS_Store
