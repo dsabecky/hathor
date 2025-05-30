@@ -32,7 +32,7 @@ from openai import AsyncOpenAI   # cleaner than manually calling openai.OpenAI()
 # hathor internals
 import config
 from func import Error, ERROR_CODES, FancyError # error handling
-from func import SongDB # song database
+from func import RadioPlaylists, SongDB, SongHistory # class loading
 from func import _get_random_radio_intro, _build_embed, _set_profile_status
 from func import requires_author_perms, requires_author_voice, requires_bot_voice, requires_queue, requires_bot_playing # permission checks
 from logs import log_cog # logging
@@ -46,62 +46,13 @@ client = AsyncOpenAI(api_key=config.OPENAI_API_KEY)
 
 
 ####################################################################
-# JSON -> global loading
-####################################################################
-
-def LoadHistory() -> dict[str, list[dict[str, Any]]]:
-    """
-    Loads the song history from the JSON file.
-    """
-
-    try:
-        with open('song_history.json', 'r', encoding='utf-8') as file:
-            return json.load(file)
-    except FileNotFoundError:
-        with open('song_history.json', 'w', encoding='utf-8') as file:
-            default = {}
-            json.dump(default, file, indent=4)
-            return default
-        
-def SaveHistory() -> None:
-    """
-    Saves the song history to the JSON file.
-    """
-
-    with open('song_history.json', 'w', encoding='utf-8') as file:
-        json.dump(song_history, file, ensure_ascii=False, indent=4)
-
-def LoadRadio() -> dict[str, list[str]]:
-    """
-    Loads the radio playlists from the JSON file.
-    """
-
-    try:
-        with open('radio_playlists.json', 'r', encoding='utf-8') as file:
-            return json.load(file)
-    except FileNotFoundError:
-        with open('radio_playlists.json', 'w', encoding='utf-8') as file:
-            default = {}
-            json.dump(default, file, indent=4)
-            return default
-        
-def SaveRadio() -> None:
-    """
-    Saves the radio playlists to the JSON file.
-    """
-
-    with open('radio_playlists.json', 'w', encoding='utf-8') as file:
-        json.dump(radio_playlists, file, ensure_ascii=False, indent=4)
-
-
-####################################################################
 # Global variables
 ####################################################################
 
 SPOTIFY_ACCESS_TOKEN = ''
-song_history = LoadHistory()
+song_history = SongHistory()
 song_db = SongDB()
-radio_playlists = LoadRadio()
+radio_playlists = RadioPlaylists()
 
 
 ####################################################################
@@ -122,27 +73,12 @@ class Music(commands.Cog, name="Music"):
     @commands.Cog.listener()
     async def on_ready(self) -> None:
 
-        for guild in self.bot.guilds:
-
-            guild_str = str(guild.id)               # json is stupid and forces the key to be a string
-
-            if not guild_str in song_history:       # init song history (if required)
-                song_history[guild_str] = []
-
-        SaveHistory() # save our song history
-
         self.loop_voice_monitor.start()             # monitors voice activity for idle, broken playing, etc
         self.loop_radio_monitor.start()             # monitors radio queue generation
         self.loop_spotify_key_creation.start()      # generate a spotify key
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild) -> None:
-
-        guild_str = str(guild.id)               # json is stupid and forces the key to be a string
-
-        if not guild_str in song_history:       # build and save song history (if required)
-            song_history[guild_str] = []
-            SaveHistory()
 
         if not os.path.exists(f"{config.SONGDB_PATH}/{guild.id}"):
             os.makedirs(f"{config.SONGDB_PATH}/{guild.id}", exist_ok=True, parents=True)
@@ -383,9 +319,7 @@ class Music(commands.Cog, name="Music"):
             "song_title":  song_title
         }
 
-        song_db[result['id']] = result  # add to database
-        song_db.save()  # save the database
-
+        song_db.add(result['id'], result)
         return result
     
     async def enqueue_media(
@@ -419,9 +353,9 @@ class Music(commands.Cog, name="Music"):
             except Exception:
                 continue
 
-            if metadata['id'] in song_db and os.path.exists(song_db[metadata['id']]['file_path']):  # save the bandwidth
+            if song_db.get(metadata['id']) and os.path.exists(song_db.get(metadata['id'])['file_path']):  # save the bandwidth
                 log_cog.info(f"enqueue_media: [dark_orange]\"{metadata['title']}\"[/] already downloaded. ([dark_orange]{i}[/]/[dark_orange]{len(payload)}[/])")
-                song = song_db[metadata['id']]
+                song = song_db.get(metadata['id'])
 
             elif metadata['duration'] >= config.MUSIC_MAX_DURATION: # song exceeds max duration
                 log_cog.info(f"enqueue_media: ([dark_orange]{i}[/]/[dark_orange]{len(payload)}[/]) [dark_orange]\"{metadata['title']}\"[/] exceeds max duration.")
@@ -519,7 +453,7 @@ class Music(commands.Cog, name="Music"):
         except Exception as e:
             raise Error(f"_generate_hot_100() -> _parse_spotify_link():\n{e}")
         
-        radio_playlists['hot 100'] = playlist; SaveRadio()
+        radio_playlists.add('hot 100', playlist)
         log_cog.info(f"Billboard Hot 100 radio station updated.")
         
     async def _generate_radio_station(self, station: str) -> None:
@@ -545,12 +479,9 @@ class Music(commands.Cog, name="Music"):
             raise Error("_generate_radio_station() -> _invoke_chatgpt():\nChatGPT is responding empty strings.")
         
         parsed_response = response.split('\n')
-        radio_playlists[station.lower()] = []
+        parsed_response = [item.strip() for item in parsed_response]
+        radio_playlists.add(station.lower(), parsed_response)
 
-        for item in parsed_response:
-            radio_playlists[station.lower()].append(item.strip())
-
-        SaveRadio()
         log_cog.info(f"Radio playlist for [dark_orange]{station}[/] generated.")
 
     async def parse_media(self, payload: list[str]) -> list[dict[str, Any]]:
@@ -703,9 +634,7 @@ class Music(commands.Cog, name="Music"):
         voice_client.play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(allstates.currently_playing['file_path']), volume=volume), after=song_cleanup)    # actually play the song
 
         history_text = self.get_song_title(song)
-        song_history[str(voice_client.guild.id)].append(history_text) # add to history
-        song_history[str(voice_client.guild.id)] = song_history[str(voice_client.guild.id)][-100:] # trim history to 100
-        SaveHistory()
+        song_history.add(str(voice_client.guild.id), history_text)
         
     async def _play_radio_intro(
         self,
@@ -780,8 +709,8 @@ class Music(commands.Cog, name="Music"):
                     await self.enqueue_media(voice_client, playlist, False, True)
                     continue
 
-                elif (allstates.radio_station and allstates.radio_station.lower() in radio_playlists) and len(allstates.queue) < config.RADIO_QUEUE:  # radio station checkpoint 🔞
-                    pruned_playlist = [ song for song in radio_playlists[allstates.radio_station.lower()] if song not in song_history[str(guild.id)][-20:] ]  # prune against history
+                elif (allstates.radio_station and radio_playlists.get(allstates.radio_station.lower())) and len(allstates.queue) < config.RADIO_QUEUE:  # radio station checkpoint 🔞
+                    pruned_playlist = [ song for song in radio_playlists.get(allstates.radio_station.lower()) if song not in song_history[str(guild.id)][-20:] ]  # prune against history
                     pruned_playlist = [ song for song in pruned_playlist if song not in [q.get('song_artist') + " - " + q.get('song_title') for q in allstates.queue] ]  # prune against queue
                     if len(pruned_playlist) < config.RADIO_QUEUE+1:
                         log_cog.info(f"loop_radio_monitor() -> {guild.name}: Not enough songs in the radio station playlist to fill the queue.")
@@ -791,14 +720,14 @@ class Music(commands.Cog, name="Music"):
                     await self.enqueue_media(voice_client, playlist, False, True)
                     continue
 
-                elif allstates.radio_station and allstates.radio_station.lower() not in radio_playlists:   # previously ungenerated radio station
+                elif allstates.radio_station and not radio_playlists.get(allstates.radio_station.lower()):   # previously ungenerated radio station
                     try:
                         await self._generate_radio_station(allstates.radio_station)
                     except Exception as e:
                         log_cog.error(f"loop_radio_monitor() -> _generate_radio_station():\n{escape(e)}")
                         continue
 
-                    playlist = random.sample(radio_playlists[allstates.radio_station.lower()], config.RADIO_QUEUE+1)
+                    playlist = random.sample(radio_playlists.get(allstates.radio_station.lower()), config.RADIO_QUEUE+1)
                     await self.enqueue_media(voice_client, playlist, False, True)     
 
 
@@ -968,7 +897,7 @@ class Music(commands.Cog, name="Music"):
             if not station: # sanity check
                 continue
 
-            if station not in radio_playlists: # not already generated
+            if not radio_playlists.get(station.lower()): # not already generated
                 async with ctx.channel.typing():
                     try:
                         await self._generate_radio_station(station)
@@ -993,7 +922,7 @@ class Music(commands.Cog, name="Music"):
 
         allstates = self.bot.settings[ctx.guild.id]
         allstates.radio_intro = not allstates.radio_intro
-        allstates._save_settings()
+        allstates.save()
         await ctx.reply(content=None, embed=_build_embed('Music', f'📢 Radio intros {allstates.radio_intro and "enabled" or "disabled"}.', 'g'))
 
     @commands.command(name='pause')
@@ -1183,7 +1112,7 @@ class Music(commands.Cog, name="Music"):
         allstates = self.bot.settings[ctx.guild.id]
         random.shuffle(allstates.queue)     # actually shuffles the queue
         allstates.shuffle = not allstates.shuffle   # update the shuffle variable
-        allstates._save_settings()
+        allstates.save()
         await ctx.reply(content=None, embed=_build_embed('Music', f'🔀 Shuffle mode {allstates.shuffle and "enabled" or "disabled"}.', 'g'), allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='skip')

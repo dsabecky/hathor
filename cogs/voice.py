@@ -51,7 +51,7 @@ class Voice(commands.Cog, name="Voice"):
             return
 
         allstates.voice_idle = idle_time * 60
-        allstates._save_settings()
+        allstates.save()
         output = discord.Embed(title="Idle Time", description=f"Idle time is now {int(allstates.voice_idle / 60)} minutes.")
         await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
 
@@ -100,7 +100,7 @@ class Voice(commands.Cog, name="Voice"):
             return
 
         allstates.volume = args
-        allstates._save_settings()
+        allstates.save()
 
         if voice:
             voice.source.volume = allstates.volume / 100

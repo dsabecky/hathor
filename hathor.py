@@ -41,9 +41,6 @@ def _validate_config() -> None:
                 missing.append(name)
     if missing:
         raise Error(f"Missing config values: {', '.join(missing)}")
-    
-log_sys.info("Validating configurations from config.py...")
-_validate_config()
 
 
 ####################################################################
@@ -132,7 +129,7 @@ class Hathor(commands.Bot):
         
     async def on_guild_join(self, guild: discord.Guild):
         allstates = self.settings.setdefault(guild.id, Settings(guild.id))
-        allstates._save_settings()
+        allstates.save()
         
 
     async def on_message(self, message: discord.Message) -> None:
@@ -195,4 +192,8 @@ async def main():
 ####################################################################
 
 if __name__ == "__main__":
+    log_sys.info("Validating configurations from config.py...")
+    _validate_config()
+
+    log_sys.info("Validation complete. Starting up")
     asyncio.run(main())
