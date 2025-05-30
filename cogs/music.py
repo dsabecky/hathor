@@ -32,7 +32,7 @@ from openai import AsyncOpenAI   # cleaner than manually calling openai.OpenAI()
 import config
 from func import Error, ERROR_CODES, FancyError # error handling
 from func import RadioPlaylists, SongDB, SongHistory # class loading
-from func import _get_random_radio_intro, build_embed, _set_profile_status
+from func import _get_random_radio_intro, build_embed, _set_profile_status # functions
 from func import requires_author_perms, requires_author_voice, requires_bot_voice, requires_queue, requires_bot_playing # permission checks
 from logs import log_cog # logging
 
@@ -42,6 +42,17 @@ from logs import log_cog # logging
 ####################################################################
 
 client = AsyncOpenAI(api_key=config.OPENAI_API_KEY)
+
+
+####################################################################
+# Last.fm Client
+####################################################################
+
+lastfm = None
+if config.LASTFM_API_KEY and config.LASTFM_API_SECRET and config.LASTFM_SESSION_KEY:
+    import pylast
+    lastfm = pylast.LastFMNetwork(api_key=config.LASTFM_API_KEY, api_secret=config.LASTFM_API_SECRET, session_key=config.LASTFM_SESSION_KEY)
+    log_cog.info("🎸 LastFM client initialized.")
 
 
 ####################################################################
@@ -63,6 +74,7 @@ class Music(commands.Cog, name="Music"):
     def __init__(self, bot):
         self.bot = bot
         self.radio_lock = asyncio.Lock()    # prevents looping in radio monitor
+        self.loop = None
 
 
     ####################################################################
@@ -75,6 +87,7 @@ class Music(commands.Cog, name="Music"):
         self.loop_voice_monitor.start()             # monitors voice activity for idle, broken playing, etc
         self.loop_radio_monitor.start()             # monitors radio queue generation
         self.loop_spotify_key_creation.start()      # generate a spotify key
+        self.loop = asyncio.get_running_loop()      # get the main event loop for asyncio tasks
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild) -> None:
@@ -624,9 +637,14 @@ class Music(commands.Cog, name="Music"):
             await self._play_radio_intro(voice_client, song['song_artist'], song['song_title'], intro_volume)
 
         def song_cleanup(error: Exception | None = None):  # song file cleanup
-            if allstates.repeat:    # don't cleanup if we're on repeat
+            if lastfm and config.LASTFM_SERVER == voice_client.guild.id and allstates.currently_playing['song_artist'] and allstates.currently_playing['song_title']:
+                asyncio.run_coroutine_threadsafe(asyncio.to_thread(lastfm.scrobble, artist=allstates.currently_playing['song_artist'], title=allstates.currently_playing['song_title'], timestamp=allstates.start_time), self.loop)
+
+            if allstates.repeat: # don't cleanup if we're on repeat
                 allstates.queue.insert(0, song)
 
+        if lastfm and config.LASTFM_SERVER == voice_client.guild.id and allstates.currently_playing['song_artist'] and allstates.currently_playing['song_title']:
+            await asyncio.to_thread(lastfm.update_now_playing, artist=allstates.currently_playing['song_artist'], title=allstates.currently_playing['song_title'])
         voice_client.play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(allstates.currently_playing['file_path']), volume=volume), after=song_cleanup)    # actually play the song
 
         history_text = self.get_song_title(song)

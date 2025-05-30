@@ -20,8 +20,10 @@ from rich.markup import escape
 
 # hathor internals
 import config
-from func import Error, ERROR_CODES, ERROR_FLAVOR, FancyError, Settings, build_embed
-from logs import log_sys, log_msg
+from func import Error, ERROR_CODES, FancyError # error handling
+from func import Settings # class loading
+from func import build_embed # functions
+from logs import log_sys, log_msg # logging
 
 
 ####################################################################
@@ -36,7 +38,7 @@ def validate_config() -> None:
     missing = []
     pattern = re.compile(r"^[A-Z][A-Z0-9_]+$")
     for name, val in inspect.getmembers(config):
-        if pattern.match(name):
+        if pattern.match(name) and not name.startswith("LASTFM_"):
             if not val and val != 0:
                 missing.append(name)
     if missing:

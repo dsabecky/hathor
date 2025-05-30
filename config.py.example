@@ -3,9 +3,17 @@
 ####################################################################
 DISCORD_BOT_TOKEN = ''  # https://discord.com/developers
 OPENAI_API_KEY = ''  # https://platform.openai.com/api-keys
-YOUTUBE_API_KEY = ''  # https://console.cloud.google.com/apis/credentials
 SPOTIFY_CLIENT_ID = ''  # https://developer.spotify.com/dashboard/
 SPOTIFY_CLIENT_SECRET = ''  # https://developer.spotify.com/dashboard/
+YOUTUBE_API_KEY = ''  # https://console.cloud.google.com/apis/credentials
+
+
+####################################################################
+#  Last.fm Settings [OPTIONAL]
+####################################################################
+LASTFM_API_KEY = ''  # https://www.last.fm/api/accounts
+LASTFM_API_SECRET = ''  # https://www.last.fm/api/accounts
+LASTFM_SESSION_KEY = '' # run lastfm_session_gen.py to generate a session key
 
 
 ####################################################################
