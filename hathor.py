@@ -108,24 +108,28 @@ class Hathor(commands.Bot):
     async def on_command_error(self, ctx: commands.Context, error: Exception):
         if isinstance(error, commands.CommandNotFound): # ignore command not found errors
             return
-        
+
         elif isinstance(error, commands.BadArgument): # incorrect syntax
-            await ctx.reply(embed=discord.Embed(title=random.choice(ERROR_FLAVOR), description=ERROR_CODES['syntax'], color=discord.Color.red()))
+            error_text = ERROR_CODES['syntax']
 
         elif isinstance(error, commands.CommandInvokeError) and isinstance(error.original, IndexError): # out of range errors
-            await ctx.reply(embed=discord.Embed(title=random.choice(ERROR_FLAVOR), description=ERROR_CODES['range'], color=discord.Color.red()))
+            error_text = ERROR_CODES['range']
 
         elif isinstance(error, commands.MissingRequiredArgument): # missing arguments
-            await ctx.reply(embed=discord.Embed(title=random.choice(ERROR_FLAVOR), description=ERROR_CODES['syntax'], color=discord.Color.red()))
-        
-        elif isinstance(error, FancyError):   # send error to channel
-            await ctx.reply(embed=discord.Embed(title=random.choice(ERROR_FLAVOR), description=error, color=discord.Color.red()))
-        
-        elif isinstance(error, Error):   # log error to console
+            error_text = ERROR_CODES['syntax']
+
+        elif isinstance(error, FancyError): # send parsed errors to channel
+            error_text = str(error)
+
+        elif isinstance(error, Error): # log errors to console
             log_sys.error(f"[red]{escape(error.code)}[/]")
-        
-        else:   # dump unknown errors
             raise error
+
+        else: # dump unknown errors
+            log_sys.error(f"Unhandled error: {error}")
+            raise error
+
+        await ctx.reply(embed=build_embed('err', error_text, 'r'))
         
     async def on_guild_join(self, guild: discord.Guild):
         allstates = self.settings.setdefault(guild.id, Settings(guild.id))
