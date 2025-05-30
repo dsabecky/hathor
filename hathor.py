@@ -32,6 +32,8 @@ from logs import log_sys, log_msg # logging
 ####################################################################
 
 logging.getLogger("requests").setLevel(logging.WARNING) 
+logging.getLogger("discord.voice_client").setLevel(logging.WARNING)
+logging.getLogger("discord.player").setLevel(logging.WARNING)
 
 
 ####################################################################
