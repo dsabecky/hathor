@@ -370,5 +370,5 @@ class ChatGPT(commands.Cog, name="ChatGPT"):
 ####################################################################
 
 async def setup(bot):
-    log_cog.info("Loading [dark_orange]ChatGPT[/] cog...")
+    log_cog.info("Loading [dark_orange]ChatGPT[/] cog…")
     await bot.add_cog(ChatGPT(bot))

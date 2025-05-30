@@ -208,5 +208,5 @@ class Core(commands.Cog, name="Core"):
 ####################################################################
 
 async def setup(bot: commands.Bot):
-    log_cog.info("Loading [dark_orange]Core[/] cog...")
+    log_cog.info("Loading [dark_orange]Core[/] cog…")
     await bot.add_cog(Core(bot))

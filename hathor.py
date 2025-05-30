@@ -185,7 +185,7 @@ async def main():
     try:
         await bot.start_bot()
     except asyncio.CancelledError:
-        log_sys.info("Shutting down...")
+        log_sys.info("Shutting down…")
     except Exception as e:
         raise e
     finally:
