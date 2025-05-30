@@ -66,6 +66,51 @@ class FancyError(commands.CommandError):
         super().__init__(msg)
         self.code = msg
 
+class RadioPlaylists:
+    def __init__(self, path: str = "radio_playlists.json"):
+        self.path = Path(path)
+        self._db: dict[str, list[str]] = {}
+        self.load()
+
+    def load(self) -> None:
+        try:
+            with self.path.open("r", encoding="utf-8") as f:
+                self._db = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            self._db = {}
+            self.save()
+
+    def save(self) -> None:
+        with self.path.open("w", encoding="utf-8") as f:
+            json.dump(self._db, f, ensure_ascii=False, indent=4)
+
+    def add(self, playlist_name: str, songs: list[str]) -> None:
+        self._db[playlist_name] = songs
+        self.save()
+
+    def remove(self, playlist_name: str) -> bool:
+        if playlist_name in self._db:
+            del self._db[playlist_name]
+            self.save()
+            return True
+        return False
+
+    def __getitem__(self, playlist_name: str) -> list[str]:
+        return self._db[playlist_name]
+
+    def __setitem__(self, playlist_name: str, value: list[str]) -> None:
+        self._db[playlist_name] = value
+        self.save()
+
+    def __contains__(self, playlist_name: str) -> bool:
+        return playlist_name in self._db
+
+    def get(self, playlist_name: str, default=None) -> list[str]:
+        return self._db.get(playlist_name, default)
+
+    def all(self) -> dict[str, list[str]]:
+        return self._db
+
 class Settings:
     def __init__(self, guild_id: int):
         self.guild_id = guild_id
@@ -90,10 +135,9 @@ class Settings:
         self.last_active = None
         self.intro_playing = False
 
-        # load saved overrides
-        self._load_settings()
+        self.load()
 
-    def _load_settings(self) -> None:
+    def load(self) -> None:
         try:
             data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
         except (FileNotFoundError, json.JSONDecodeError):
@@ -105,7 +149,7 @@ class Settings:
             if hasattr(self, key):
                 setattr(self, key, val)
 
-    def _save_settings(self) -> None:
+    def save(self) -> None:
         try:
             data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
         except (FileNotFoundError, json.JSONDecodeError):
@@ -139,12 +183,25 @@ class SongDB:
                 self._db = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             self._db = {}
-            self.save()  # create the file if missing or invalid
+            self.save()
 
     def save(self):
         with self.path.open("w", encoding="utf-8") as f:
             json.dump(self._db, f, ensure_ascii=False, indent=4)
 
+    def add(self, song_id: str, song_data: dict[str, Any]) -> None:
+        song_id = str(song_id)
+        self._db[song_id] = song_data
+        self.save()
+
+    def remove(self, song_id: str) -> bool:
+        song_id = str(song_id)
+        if song_id in self._db:
+            del self._db[song_id]
+            self.save()
+            return True
+        return False
+    
     def __getitem__(self, song_id: str) -> dict[str, Any]:
         return self._db[song_id]
 
@@ -159,6 +216,53 @@ class SongDB:
 
     def all(self):
         return self._db.values()
+    
+class SongHistory:
+    def __init__(self, path: str = "song_history.json"):
+        self.path = Path(path)
+        self._db: dict[str, list[str]] = {}
+        self.load()
+
+    def load(self) -> None:
+        try:
+            with self.path.open("r", encoding="utf-8") as f:
+                self._db = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            self._db = {}
+            self.save()
+
+    def save(self) -> None:
+        with self.path.open("w", encoding="utf-8") as f:
+            json.dump(self._db, f, ensure_ascii=False, indent=4)
+
+    def add(self, guild_id: str, song: str) -> None:
+        self._db.setdefault(guild_id, []).append(song)
+        self._db[guild_id] = self._db[guild_id][-100:]
+        self.save()
+
+    def remove(self, guild_id: str, index: int) -> str | None:
+        songs = self._db.get(guild_id, [])
+        if 0 <= index < len(songs):
+            removed = songs.pop(index)
+            self.save()
+            return removed
+        return None
+
+    def get_history(self, guild_id: str) -> list[str]:
+        return self._db.get(guild_id, [])
+
+    def __getitem__(self, guild_id: str) -> list[str]:
+        return self.get_history(guild_id)
+
+    def __setitem__(self, guild_id: str, value: list[str]) -> None:
+        self._db[guild_id] = value
+        self.save()
+
+    def __contains__(self, guild_id: str) -> bool:
+        return guild_id in self._db
+
+    def all(self) -> dict[str, list[str]]:
+        return self._db
 
 
 ###############################################################
@@ -194,7 +298,7 @@ async def _check_permissions(
     else:
         return False
     
-def _build_embed(
+def build_embed(
     title: str,
     description: str,
     color: str = "p",

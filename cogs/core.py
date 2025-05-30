@@ -12,7 +12,7 @@ from typing import Literal  # type hints
 
 # hathor internals
 from func import requires_owner_perms, requires_author_perms
-from func import ERROR_CODES, FancyError
+from func import ERROR_CODES, FancyError, build_embed
 from logs import log_cog
 
 ####################################################################
@@ -67,7 +67,7 @@ class Core(commands.Cog, name="Core"):
 
         lines = [f"{g.name} (ID: {g.id})" for g in self.bot.guilds]
 
-        embed = discord.Embed(title="🤖 Bot is in the following guilds:", description="\n".join(lines) or "None", color=discord.Color.purple())
+        embed = build_embed('🤖 Bot is in the following guilds:', '\n'.join(lines) or "None", 'p')
         embed.set_footer(text=f"Total guilds: {len(lines)}")
         await ctx.send(embed=embed)
 
@@ -141,10 +141,7 @@ class Core(commands.Cog, name="Core"):
                 for id in allstates.perms["channel_id"]
             )
 
-            embed = discord.Embed(    # build embed
-                title=f"Permissions for {ctx.guild.name}",
-                description="The following channels are enabled for bot commands, and the following users and roles are permitted for elevated permissions."
-            )
+            embed = build_embed(f"Permissions for {ctx.guild.name}", "The following channels are enabled for bot commands, and the following users and roles are permitted for elevated permissions.", 'p')
             embed.add_field(name="Users:", value=users, inline=False)
             embed.add_field(name="Roles:", value=roles, inline=False)
             embed.add_field(name="Channels:", value=channels, inline=False)
@@ -211,5 +208,5 @@ class Core(commands.Cog, name="Core"):
 ####################################################################
 
 async def setup(bot: commands.Bot):
-    log_cog.info("Loading [dark_orange]Core[/] cog...")
+    log_cog.info("Loading [dark_orange]Core[/] cog…")
     await bot.add_cog(Core(bot))

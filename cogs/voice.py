@@ -7,7 +7,7 @@ import discord
 from discord.ext import commands
 
 # hathor internals
-from func import ERROR_CODES, FancyError
+from func import build_embed
 from func import requires_author_perms, requires_author_voice, requires_bot_voice
 from logs import log_cog
 
@@ -46,13 +46,13 @@ class Voice(commands.Cog, name="Voice"):
         allstates = self.bot.settings[ctx.guild.id]
 
         if not idle_time:
-            output = discord.Embed(title="Idle Time", description=f"I will currently idle for {int(allstates.voice_idle / 60)} minutes.")
+            output = build_embed('Idle Time', f"🕒 I will currently idle for {int(allstates.voice_idle / 60)} minutes.", 'p')
             await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
             return
 
         allstates.voice_idle = idle_time * 60
-        allstates._save_settings()
-        output = discord.Embed(title="Idle Time", description=f"Idle time is now {int(allstates.voice_idle / 60)} minutes.")
+        allstates.save()
+        output = build_embed('Idle Time', f"🕒 Idle time is now {int(allstates.voice_idle / 60)} minutes.", 'g')
         await ctx.reply(embed=output, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name='join')
@@ -78,8 +78,7 @@ class Voice(commands.Cog, name="Voice"):
             !leave
         """
 
-        embed = discord.Embed(description=f"👋 Leaving {ctx.guild.voice_client.channel.name}")
-        await ctx.send(embed=embed)
+        await ctx.reply(embed=build_embed('Voice', f"👋 Leaving {ctx.guild.voice_client.channel.name}", 'g'), allowed_mentions=discord.AllowedMentions.none())
         await ctx.guild.voice_client.disconnect()
 
     @commands.command(name='volume', aliases=['vol'])
@@ -96,16 +95,16 @@ class Voice(commands.Cog, name="Voice"):
         voice = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
 
         if not args:
-            await ctx.channel.send(f'Current volume is: {allstates.volume}%.')
+            await ctx.reply(embed=build_embed('Volume', f'🔊 Currently set to: {allstates.volume}%.', 'p'), allowed_mentions=discord.AllowedMentions.none())
             return
 
         allstates.volume = args
-        allstates._save_settings()
+        allstates.save()
 
         if voice:
             voice.source.volume = allstates.volume / 100
 
-        await ctx.channel.send(f'Server volume changed to: {allstates.volume}%.')
+        await ctx.reply(embed=build_embed('Volume', f'🔊 Server volume changed to: {allstates.volume}%.', 'g'), allowed_mentions=discord.AllowedMentions.none())
 
 
 ####################################################################
@@ -113,5 +112,5 @@ class Voice(commands.Cog, name="Voice"):
 ####################################################################
 
 async def setup(bot):
-    log_cog.info("Loading [dark_orange]Voice[/] cog...")
+    log_cog.info("Loading [dark_orange]Voice[/] cog…")
     await bot.add_cog(Voice(bot))

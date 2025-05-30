@@ -20,7 +20,7 @@ from rich.markup import escape
 
 # hathor internals
 import config
-from func import Error, ERROR_CODES, ERROR_FLAVOR, FancyError, Settings
+from func import Error, ERROR_CODES, ERROR_FLAVOR, FancyError, Settings, build_embed
 from logs import log_sys, log_msg
 
 
@@ -28,7 +28,7 @@ from logs import log_sys, log_msg
 # Configuration Validation
 ####################################################################
 
-def _validate_config() -> None:
+def validate_config() -> None:
     """
     Ensure all config variables are defined.
     """
@@ -41,9 +41,6 @@ def _validate_config() -> None:
                 missing.append(name)
     if missing:
         raise Error(f"Missing config values: {', '.join(missing)}")
-    
-log_sys.info("Validating configurations from config.py...")
-_validate_config()
 
 
 ####################################################################
@@ -111,28 +108,32 @@ class Hathor(commands.Bot):
     async def on_command_error(self, ctx: commands.Context, error: Exception):
         if isinstance(error, commands.CommandNotFound): # ignore command not found errors
             return
-        
+
         elif isinstance(error, commands.BadArgument): # incorrect syntax
-            await ctx.reply(embed=discord.Embed(title=random.choice(ERROR_FLAVOR), description=ERROR_CODES['syntax'], color=discord.Color.red()))
+            error_text = ERROR_CODES['syntax']
 
         elif isinstance(error, commands.CommandInvokeError) and isinstance(error.original, IndexError): # out of range errors
-            await ctx.reply(embed=discord.Embed(title=random.choice(ERROR_FLAVOR), description=ERROR_CODES['range'], color=discord.Color.red()))
+            error_text = ERROR_CODES['range']
 
         elif isinstance(error, commands.MissingRequiredArgument): # missing arguments
-            await ctx.reply(embed=discord.Embed(title=random.choice(ERROR_FLAVOR), description=ERROR_CODES['syntax'], color=discord.Color.red()))
-        
-        elif isinstance(error, FancyError):   # send error to channel
-            await ctx.reply(embed=discord.Embed(title=random.choice(ERROR_FLAVOR), description=error, color=discord.Color.red()))
-        
-        elif isinstance(error, Error):   # log error to console
+            error_text = ERROR_CODES['syntax']
+
+        elif isinstance(error, FancyError): # send parsed errors to channel
+            error_text = str(error)
+
+        elif isinstance(error, Error): # log errors to console
             log_sys.error(f"[red]{escape(error.code)}[/]")
-        
-        else:   # dump unknown errors
             raise error
+
+        else: # dump unknown errors
+            log_sys.error(f"Unhandled error: {error}")
+            raise error
+
+        await ctx.reply(embed=build_embed('err', error_text, 'r'))
         
     async def on_guild_join(self, guild: discord.Guild):
         allstates = self.settings.setdefault(guild.id, Settings(guild.id))
-        allstates._save_settings()
+        allstates.save()
         
 
     async def on_message(self, message: discord.Message) -> None:
@@ -184,7 +185,7 @@ async def main():
     try:
         await bot.start_bot()
     except asyncio.CancelledError:
-        log_sys.info("Shutting down...")
+        log_sys.info("Shutting down…")
     except Exception as e:
         raise e
     finally:
@@ -195,4 +196,8 @@ async def main():
 ####################################################################
 
 if __name__ == "__main__":
+    log_sys.info("Validating configurations from [dark_orange]config.py[/]…")
+    validate_config()
+
+    log_sys.info("Validation [green]complete[/]. Starting up…")
     asyncio.run(main())
