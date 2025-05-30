@@ -12,7 +12,6 @@ import yt_dlp           # youtube library
 
 # system level stuff
 import asyncio      # prevents thread locking
-import json         # logging (song history, settings, etc)
 import os           # system access
 import requests     # grabbing raw data from url
 
