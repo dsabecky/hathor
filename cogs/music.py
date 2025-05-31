@@ -255,10 +255,10 @@ class Music(commands.Cog, name="Music"):
 
         allstates = self.bot.settings[guild_id]
         return (
-            f"🔊 {allstates.volume}%\n"
-            f"🔁 {'on' if allstates.repeat else 'off'}\n"
-            f"🔀 {'on' if allstates.shuffle else 'off'}\n"
-            f"📢 {'on' if allstates.radio_intro else 'off'}"
+            f"```🔊 {allstates.volume}% "
+            f"🔁 {'on' if allstates.repeat else 'off'} "
+            f"🔀 {'on' if allstates.shuffle else 'off'} "
+            f"📢 {'on' if allstates.radio_intro else 'off'}```"
         )
     
     async def _download_media(
