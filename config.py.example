@@ -14,6 +14,7 @@ YOUTUBE_API_KEY = ''  # https://console.cloud.google.com/apis/credentials
 LASTFM_API_KEY = ''  # https://www.last.fm/api/accounts
 LASTFM_API_SECRET = ''  # https://www.last.fm/api/accounts
 LASTFM_SESSION_KEY = '' # run lastfm_session_gen.py to generate a session key
+LASTFM_SERVER = 0 # server id the bot should update last.fm scrobbles for
 
 
 ####################################################################
@@ -42,5 +43,5 @@ MUSIC_MAX_PLAYLIST = 20  # maximum playlist length
 MUSIC_MAX_FUSION = 5  # maximum fusion stations
 MUSIC_MAX_DURATION = 1800  # maximum song length
 RADIO_QUEUE = 4  # how few songs in queue until we queue more (RADIO_QUEUE + 1)
-RADIO_DEFAULT_THEME = "anything, im not picky"  # default radio theme ### TODO: i dont like this and it should be changed
+RADIO_DEFAULT_THEME = "hot 100"  # default radio theme ### TODO: i dont like this and it should be changed
 SPOTIFY_KEY_REFRESH = 1800  # how often to refresh spotify keys (in seconds)
