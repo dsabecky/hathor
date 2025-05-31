@@ -31,11 +31,12 @@ from logs import log_sys, log_msg # logging
 # Mute regular INFO logging
 ####################################################################
 
-logging.getLogger("discord.voice_client").setLevel(logging.WARNING)
-logging.getLogger("discord.player").setLevel(logging.WARNING)
-logging.getLogger("pylast").setLevel(logging.WARNING)
-logging.getLogger("requests").setLevel(logging.WARNING) 
-logging.getLogger("urllib3").setLevel(logging.WARNING)
+log_names = [ "discord.player", "discord.voice_client", "pylast", "requests", "urllib3" ]
+
+for logger_name in log_names:
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(logging.WARNING)
+    logger.propagate = True
 
 
 ####################################################################
