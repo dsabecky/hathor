@@ -29,7 +29,7 @@ import random       # pseudorandom selection (for shuffle, fusion playlist compi
 from openai import AsyncOpenAI   # cleaner than manually calling openai.OpenAI()
 
 # hathor internals
-import config
+import data.config as config
 from func import Error, ERROR_CODES, FancyError # error handling
 from func import RadioPlaylists, SongDB, SongHistory # class loading
 from func import _get_random_radio_intro, build_embed, _set_profile_status # functions

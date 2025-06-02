@@ -15,7 +15,7 @@ import re               # regex
 from openai import AsyncOpenAI  # cleaner than manually calling openai.OpenAI()
 
 # hathor internals
-import config # bot config
+import data.config as config # bot config
 from func import Error, ERROR_CODES, FancyError # error handling
 from func import build_embed # functions
 from logs import log_cog # logging

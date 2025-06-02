@@ -15,14 +15,14 @@ from pathlib import Path          # pathlib
 import random   # error flavor text randomizer
 
 # hathor internals
-import config
+import data.config as config
 from logs import log_sys
 
 ####################################################################
 # Global Variables
 ####################################################################
 
-SETTINGS_FILE = Path(__file__).parent / "settings.json"
+SETTINGS_FILE = Path(__file__).parent / "data/settings.json"
 LAST_STATUS = None
 
 
@@ -67,7 +67,7 @@ class FancyError(commands.CommandError):
         self.code = msg
 
 class RadioPlaylists:
-    def __init__(self, path: str = "radio_playlists.json"):
+    def __init__(self, path: str = "data/radio_playlists.json"):
         self.path = Path(path)
         self._db: dict[str, list[str]] = {}
         self.load()
@@ -172,7 +172,7 @@ class Settings:
         )
 
 class SongDB:
-    def __init__(self, path: str = "song_db.json"):
+    def __init__(self, path: str = "data/song_db.json"):
         self.path = Path(path)
         self._db: dict[str, dict[str, Any]] = {}
         self.load()
@@ -218,7 +218,7 @@ class SongDB:
         return self._db.values()
     
 class SongHistory:
-    def __init__(self, path: str = "song_history.json"):
+    def __init__(self, path: str = "data/song_history.json"):
         self.path = Path(path)
         self._db: dict[str, list[str]] = {}
         self.load()

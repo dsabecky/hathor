@@ -20,7 +20,7 @@ import random   # random error flavor
 from rich.markup import escape
 
 # hathor internals
-import config
+import data.config as config
 from func import Error, ERROR_CODES, FancyError # error handling
 from func import Settings # class loading
 from func import build_embed # functions

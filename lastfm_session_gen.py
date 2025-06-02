@@ -1,7 +1,7 @@
 import sys
 import hashlib
 import requests
-from config import LASTFM_API_KEY, LASTFM_API_SECRET
+from data.config import LASTFM_API_KEY, LASTFM_API_SECRET
 
 if not LASTFM_API_KEY or not LASTFM_API_SECRET:
     print("Error: LASTFM_API_KEY and LASTFM_API_SECRET must be set in config.py")
