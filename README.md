@@ -1,81 +1,106 @@
-# Hathor
+# 🎵 Hathor
 
-[![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=fff)](#) [![Discord](https://img.shields.io/badge/Discord-Bot-blue.svg)](#) [![ChatGPT](https://img.shields.io/badge/ChatGPT-74aa9c?logo=openai&logoColor=white)](#)   [![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](#LICENSE)
+[![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=fff)](#)  
+[![Discord](https://img.shields.io/badge/Discord-Bot-blue.svg)](#)  
+[![ChatGPT](https://img.shields.io/badge/ChatGPT-74aa9c?logo=openai&logoColor=white)](#)  
+[![Docker](https://img.shields.io/badge/Docker-Hathor--Bot-blue?logo=docker&logoColor=white)](https://hub.docker.com/r/nothaldu/hathor)  
+[![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](#LICENSE)
 
-**Hathor** is a free, fully-featured Discord music+AI bot built on `discord.py`, `gTTS`, `OpenAI`, and `yt-dlp`. It offers:
+> A free, fully-featured Discord music+AI bot built on `discord.py`, `gTTS`, `OpenAI`, and `yt-dlp`.
 
-- Music playback from Soundcloud, Spotify, and YouTube
-- Smart playlists via ChatGPT  
-- Endless “radio” with fusion of multiple themes  
-- In-voice DJ intros powered by gTTS or ChatGPT  
-- Full queue management (shuffle, repeat, bump, remove)  
-- ChatGPT chat & image generation/editing
-- Optional Last.FM scrobbling
+**Hathor** offers:
+- 🎶 Music playback from SoundCloud, Spotify & YouTube  
+- 🤖 Smart playlists powered by ChatGPT  
+- 🔀 Endless “fusion radio” blending multiple themes  
+- 🎤 In-voice DJ intros via gTTS or ChatGPT  
+- 📑 Full queue management (shuffle, repeat, bump, remove)  
+- 💬 ChatGPT chat, image generation & editing  
+- 🔗 Optional Last.FM scrobbling  
 
-## Installation
+---
 
-### Environment Setup
+## 🚀 Installation
+
+### 1. From Source
+
 ```bash
 git clone https://github.com/dsabecky/hathor.git
-```
-```bash
+cd hathor
 pip install discord.py gtts openai pylast pynacl rich yt_dlp
 ```
 
-### Package Updates
-Be sure to update the modules periodically (YoutubeDL patches frequently)
+### 2. From DockerHub
+
+```bash
+docker pull nothaldu/hathor:latest
+docker run -d \
+  --name hathor \
+  --restart unless-stopped \
+  -v /full/path/to/data:/app/data \
+  -v /full/path/to/db:/app/db \
+  nothaldu/hathor:latest
+```
+
+- `/app/data` → your folder with `config.py` and JSON  
+- `/app/db`   → your folder for cached music or other persistent files  
+
+---
+
+## ⚙️ Configuration
+
+1. Copy the example config into your data folder:
+
    ```bash
-   pip install -U discord.py gtts openai pylast pynacl rich yt_dlp
+   cp data/config.py.example data/config.py
    ```
 
-### Configuration
+2. Edit **data/config.py**:
 
-Copy ```config.py.example``` to ```config.py```
-   ```bash
-   cp config.py.example config.py
-   ```
-
-Fill out your essential settings (links to aquire api keys included in config)
    ```python
-   DISCORD_BOT_TOKEN      # your discord bot token
-   OPENAI_API_KEY         # your openai api key
-   SPOTIFY_CLIENT_ID      # your spotify api client key
-   SPOTIFY_CLIENT_SECRET  # your spotify client secret key
-   YOUTUBE_API_KEY        # your google api key
+   DISCORD_BOT_TOKEN      # Your Discord bot token
+   OPENAI_API_KEY         # Your OpenAI API key
+   SPOTIFY_CLIENT_ID      # Your Spotify client ID
+   SPOTIFY_CLIENT_SECRET  # Your Spotify client secret
+   YOUTUBE_API_KEY        # Your Google API key
 
-   BOT_ADMIN              # your userID for your personal discord account (don't use quotes)
+   BOT_ADMIN              # Your Discord user ID (no quotes)
    ```
 
-### (Optional) Last.FM Scrobbling
+### 🔗 (Optional) Last.FM Scrobbling
 
-Set the following in ```config.py```
-   ```python
-   LASTFM_API_KEY    # your lastfm api key
-   LASTFM_API_SECRET # your lastfm api secret
-   LASTFM_SERVER     # serverID you want to send scrobbles for
-   ```
+In **data/config.py** add:
 
-Run ```lastfm_session_gen.py``` with no arguments, and follow the directions
-   ```bash
-   python3 lastfm_session_gen.py
-   ```
+```python
+LASTFM_API_KEY    # Your Last.FM API key
+LASTFM_API_SECRET # Your Last.FM API secret
+LASTFM_SERVER     # The server ID to scrobble for
+```
 
-Run ```lastfm_session_gen.py``` with your temporary TOKEN
-   ```bash
-   python3 lastfm_session_gen.py TOKEN_GOES_HERE
-   ```
+Then generate your session key:
 
-Set your SESSION KEY in ```config.py```
-   ```python
-   LASTFM_SESSION_KEY
-   ```
+```bash
+python3 lastfm_session_gen.py
+# Follow prompts, then:
+python3 lastfm_session_gen.py TOKEN_FROM_PREVIOUS_STEP
+# Copy SESSION_KEY back into data/config.py
+```
 
-## Running
+---
+
+## ▶️ Running
+
+### Locally
 
 ```bash
 python3 hathor.py
 ```
-## Commands
+
+### Via Docker (already shown above)
+
+---
+
+## 💬 Commands
+
 **Music**  
 ```
 - !play <query|url>  
@@ -116,8 +141,17 @@ python3 hathor.py
 - !botsync
 ```
 
-## Acknowledgements
-- discord.py (https://github.com/Rapptz/discord.py)  
-- OpenAI Python (https://github.com/openai/openai-python)  
-- yt-dlp (https://github.com/yt-dlp/yt-dlp)  
-- gTTS (https://github.com/pndurette/gTTS)
+---
+
+## 🙏 Acknowledgements
+
+- [discord.py](https://github.com/Rapptz/discord.py)  
+- [OpenAI Python](https://github.com/openai/openai-python)  
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp)  
+- [gTTS](https://github.com/pndurette/gTTS)  
+
+---
+
+## 📄 License
+
+Distributed under the MIT License. See `LICENSE` for more details.
