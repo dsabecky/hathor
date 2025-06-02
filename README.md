@@ -1,9 +1,9 @@
 # 🎵 Hathor
 
-[![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=fff)](#)  
-[![Discord](https://img.shields.io/badge/Discord-Bot-blue.svg)](#)  
-[![ChatGPT](https://img.shields.io/badge/ChatGPT-74aa9c?logo=openai&logoColor=white)](#)  
-[![Docker](https://img.shields.io/badge/Docker-Hathor--Bot-blue?logo=docker&logoColor=white)](https://hub.docker.com/r/nothaldu/hathor)  
+[![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=fff)](#)
+[![Discord](https://img.shields.io/badge/Discord-Bot-blue.svg)](#)
+[![ChatGPT](https://img.shields.io/badge/ChatGPT-74aa9c?logo=openai&logoColor=white)](#)
+[![Docker](https://img.shields.io/badge/Docker-Hathor--Bot-blue?logo=docker&logoColor=white)](https://hub.docker.com/r/nothaldu/hathor)
 [![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](#LICENSE)
 
 > A free, fully-featured Discord music+AI bot built on `discord.py`, `gTTS`, `OpenAI`, and `yt-dlp`.
