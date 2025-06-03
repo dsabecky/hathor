@@ -1,6 +1,7 @@
 # ignore hathor specific files
 data/*
 db/*
+plugins/*
 
 # ignore python files
 pycache/
