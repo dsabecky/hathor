@@ -50,7 +50,7 @@ docker run -d \
 
 ## ⚙️ Configuration
 
-1. Copy the example config into your data folder:
+1. (**From Source only**) Copy the example config into your data folder:
 
    ```bash
    cp data/config.py.example data/config.py
@@ -91,7 +91,7 @@ python3 lastfm_session_gen.py TOKEN_FROM_PREVIOUS_STEP
 
 ## ▶️ Running
 
-### Locally
+### From Source
 
 ```bash
 python3 hathor.py
