@@ -1,0 +1,8 @@
+discord.py
+docker
+gtts
+openai
+pylast
+pynacl
+rich
+yt_dlp
