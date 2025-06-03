@@ -38,11 +38,13 @@ docker run -d \
   --restart unless-stopped \
   -v /full/path/to/data:/app/data \
   -v /full/path/to/db:/app/db \
+  -v /full/path/to/plugins:/app/plugins \
   nothaldu/hathor:latest
 ```
 
-- `/app/data` → your folder with `config.py` and JSON  
-- `/app/db`   → your folder for cached music or other persistent files  
+- `/app/data`    → your folder with `config.py` and JSON
+- `/app/db`      → your folder for cached music or other persistent files
+- `/app/plugins` → (optional) your folder with custom plugins
 
 ---
 

@@ -80,6 +80,12 @@ class Hathor(commands.Bot):
             if p.stem != "__init__" # ignore __init__.py
         ]
 
+        self.plugins = [   # dynamic plugin discovery
+            f"plugins.{p.stem}"
+            for p in (Path(__file__).parent / "plugins").glob("*.py")
+            if p.stem != "__init__" # ignore __init__.py
+        ]
+
         self.settings: dict[int, Settings] = {}
 
         self._patch_context()   # load patcher for embed logging
