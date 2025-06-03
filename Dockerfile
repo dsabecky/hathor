@@ -10,8 +10,7 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # set file permissions and install dependencies
 COPY --chown=hathor:hathor . .
-RUN pip install --upgrade pip \
-    && pip install --no-cache-dir discord.py gtts openai pylast pynacl rich yt_dlp
+RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
 # set our user
 USER hathor

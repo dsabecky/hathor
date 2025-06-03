@@ -26,7 +26,7 @@
 ```bash
 git clone https://github.com/dsabecky/hathor.git
 cd hathor
-pip install discord.py gtts openai pylast pynacl rich yt_dlp
+pip install -r requirements.txt
 ```
 
 ### 2. From DockerHub
