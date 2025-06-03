@@ -1,5 +1,6 @@
 # ignore hathor specific files
-data/*
+data/*.json
+data/config.py
 db/*
 
 # ignore python files
