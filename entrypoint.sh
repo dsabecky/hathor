@@ -11,4 +11,7 @@ if [ ! -f "/app/data/config.py" ]; then
   exit 1
 fi
 
+# check for updates
+pip install --no-cache-dir -U  -r requirements.txt
+
 exec "$@"
