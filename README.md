@@ -53,7 +53,8 @@ docker run -d \
 1. (**From Source only**) Copy the example config into your data folder:
 
    ```bash
-   cp data/config.py.example data/config.py
+   mkdir data
+   cp config.py.example data/config.py
    ```
 
 2. Edit **data/config.py**:
