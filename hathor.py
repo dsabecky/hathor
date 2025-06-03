@@ -107,6 +107,9 @@ class Hathor(commands.Bot):
         for ext in self.cog_list:
             await self.load_extension(ext)
 
+        for ext in self.plugins:
+            await self.load_extension(ext)
+
 
     ####################################################################
     # 'on_' listeners
