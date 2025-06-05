@@ -1,5 +1,4 @@
 discord.py
-docker
 gtts
 openai
 pylast
