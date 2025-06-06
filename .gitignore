@@ -2,6 +2,7 @@
 data/*.json
 data/config.py
 db/*
+plugins/*
 
 # ignore python files
 pycache/
