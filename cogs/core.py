@@ -78,22 +78,22 @@ class Core(commands.Cog, name="Core"):
         self,
         ctx: Context,
         guilds: Greedy[discord.Object],
-        spec: Literal["guild", "globalguild", "clearguild"] | None = None
+        spec: Literal["guild", "global", "clear"] | None = None
     ) -> None:
         """
         BOT OWNER. Syncronizes /slash commands.
 
         Syntax:
-            !botsync [ guild | globalguild | clearguild ]
+            !botsync [ guild | global | clear ]
         """
 
         if not guilds:
             if spec == "guild":
                 synced = await ctx.bot.tree.sync(guild=ctx.guild)
-            elif spec == "globalguild":
+            elif spec == "global":
                 ctx.bot.tree.copy_global_to(guild=ctx.guild)
                 synced = await ctx.bot.tree.sync(guild=ctx.guild)
-            elif spec == "clearguild":
+            elif spec == "clear":
                 ctx.bot.tree.clear_commands(guild=ctx.guild)
                 await ctx.bot.tree.sync(guild=ctx.guild)
                 synced = []
