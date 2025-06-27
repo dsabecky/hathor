@@ -250,5 +250,5 @@ def format_key(key):
     return ' '.join(part.capitalize() for part in parts)
 
 async def setup(bot):
-    log_cog.info("Loading [dark_orange]RaiderIO[/] cog...")
+    log_cog.info("🎮 Loading [dark_orange]RaiderIO[/] cog...")
     await bot.add_cog(RaiderIO(bot))

@@ -1161,5 +1161,5 @@ class Music(commands.Cog, name="Music"):
 ####################################################################
 
 async def setup(bot):
-    log_cog.info("Loading [dark_orange]Music[/] cog…")
+    log_cog.info("🎶 Loading [dark_orange]Music[/] cog…")
     await bot.add_cog(Music(bot))

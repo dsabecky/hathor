@@ -112,5 +112,5 @@ class Voice(commands.Cog, name="Voice"):
 ####################################################################
 
 async def setup(bot):
-    log_cog.info("Loading [dark_orange]Voice[/] cog…")
+    log_cog.info("🎤 Loading [dark_orange]Voice[/] cog…")
     await bot.add_cog(Voice(bot))
