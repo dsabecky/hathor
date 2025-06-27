@@ -1,47 +1,71 @@
 ####################################################################
-#  Tokens &API Keys
+#  Tokens & API Keys
 ####################################################################
-DISCORD_BOT_TOKEN = ''  # https://discord.com/developers
-OPENAI_API_KEY = ''  # https://platform.openai.com/api-keys
-SPOTIFY_CLIENT_ID = ''  # https://developer.spotify.com/dashboard/
-SPOTIFY_CLIENT_SECRET = ''  # https://developer.spotify.com/dashboard/
-YOUTUBE_API_KEY = ''  # https://console.cloud.google.com/apis/credentials
-
-
-####################################################################
-#  Last.fm Settings [OPTIONAL]
-####################################################################
-LASTFM_API_KEY = ''  # https://www.last.fm/api/accounts
-LASTFM_API_SECRET = ''  # https://www.last.fm/api/accounts
-LASTFM_SESSION_KEY = '' # run lastfm_session_gen.py to generate a session key
-LASTFM_SERVER = 0 # server id the bot should update last.fm scrobbles for
+DISCORD_BOT_TOKEN       = ''  # https://discord.com/developers
+OPENAI_API_KEY          = ''  # https://platform.openai.com/api-keys
+SPOTIFY_CLIENT_ID       = ''  # https://developer.spotify.com/dashboard/
+SPOTIFY_CLIENT_SECRET   = ''  # https://developer.spotify.com/dashboard/
+YOUTUBE_API_KEY         = ''  # https://console.cloud.google.com/apis/credentials
 
 
 ####################################################################
 #  Bot Settings
 ####################################################################
-BOT_PREFIX = '!'    # set your commandprefix
-BOT_ADMIN  = 0  # set the bot administrator (your personal userID)
+BOT_PREFIX  = '!'    # set your commandprefix
+BOT_ADMIN   = 0  # set the bot administrator (your personal userID)
 SONGDB_PATH = 'db'  # path to the song database
 
 
 ####################################################################
 #  OpenAI Settings
 ####################################################################
-CHATGPT_MODEL = 'o4-mini'
+CHATGPT_MODEL       = 'gpt-4.1'
 CHATGPT_TEMPERATURE = 1
-
-GPTIMAGE_MODEL = 'gpt-image-1'
-GPTIMAGE_QUALITY = 'medium'
+GPTIMAGE_MODEL      = 'gpt-image-1'
+GPTIMAGE_QUALITY    = 'medium'
 
 
 ####################################################################
 #  Music Settings
 ####################################################################
-BILLBOARD_HOT_100 = 'https://open.spotify.com/playlist/6UeSakyzhiEt4NB3UAd6NQ'  # billboard hot 100 playlist link (spotify)
-MUSIC_MAX_PLAYLIST = 20  # maximum playlist length
-MUSIC_MAX_FUSION = 5  # maximum fusion stations
-MUSIC_MAX_DURATION = 1800  # maximum song length
-RADIO_QUEUE = 4  # how few songs in queue until we queue more (RADIO_QUEUE + 1)
+BILLBOARD_HOT_100   = 'https://open.spotify.com/playlist/6UeSakyzhiEt4NB3UAd6NQ'  # billboard hot 100 playlist link (spotify)
+MUSIC_MAX_PLAYLIST  = 20  # maximum playlist length
+MUSIC_MAX_FUSION    = 5  # maximum fusion stations
+MUSIC_MAX_DURATION  = 1800  # maximum song length
+RADIO_QUEUE         = 4  # how few songs in queue until we queue more (RADIO_QUEUE + 1)
 RADIO_DEFAULT_THEME = "hot 100"  # default radio theme ### TODO: i dont like this and it should be changed
 SPOTIFY_KEY_REFRESH = 1800  # how often to refresh spotify keys (in seconds)
+
+
+####################################################################
+####################################################################
+##                                                                ##
+##             !!! BELOW SETTINGS ARE OPTIONAL !!!                ##
+##       ONLY UNCOMMENT IF YOU HAVE THE PLUGINS INSTALLED         ##
+##                                                                ##
+####################################################################
+####################################################################
+
+
+####################################################################
+#  [OPTIONAL] Last.fm Settings
+####################################################################
+#LASTFM_API_KEY     = ''  # https://www.last.fm/api/accounts
+#LASTFM_API_SECRET  = ''  # https://www.last.fm/api/accounts
+#LASTFM_SESSION_KEY = '' # run lastfm_session_gen.py to generate a session key
+#LASTFM_SERVER      = 0 # server id the bot should update last.fm scrobbles for
+
+
+####################################################################
+#  [PLUGIN] Radarr Settings
+####################################################################
+#RADARR_URL        = ''
+#RADARR_APIKEY     = ''
+#RADARR_MOVIE_ROOT = ''
+
+
+####################################################################
+#  [PLUGIN] Spotify Settings
+####################################################################
+#SPOTIFY_REDIRECT_URI = ''
+#IMAGE_FONT_PATH      = "plugins/fonts/UbuntuMono.ttf"
