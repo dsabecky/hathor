@@ -1,7 +1,12 @@
 # ignore hathor specific files
-data/*
+data/*.json
+data/config.py
 db/*
 plugins/*
+
+# ignore cache and env
+.env
+.cache
 
 # ignore python files
 pycache/

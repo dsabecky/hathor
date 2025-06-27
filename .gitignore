@@ -4,6 +4,10 @@ data/config.py
 db/*
 plugins/*
 
+# ignore cache and env
+.env
+.cache
+
 # ignore python files
 pycache/
 __pycache__/
