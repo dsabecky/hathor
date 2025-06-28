@@ -6,7 +6,7 @@ plugins/*
 
 # ignore cache and env
 .env
-.cache
+.cache*
 
 # ignore python files
 pycache/
