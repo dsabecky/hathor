@@ -69,3 +69,4 @@ SPOTIFY_KEY_REFRESH = 1800  # how often to refresh spotify keys (in seconds)
 ####################################################################
 #SPOTIFY_REDIRECT_URI = ''
 #IMAGE_FONT_PATH      = "plugins/fonts/UbuntuMono.ttf"
+#SPOTIFY_CACHE_PATH   = 'data/spotify_cache'
