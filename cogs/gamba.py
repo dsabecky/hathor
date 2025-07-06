@@ -14,6 +14,7 @@ from typing import Optional     # this is supposed to be "cleaner" for array pre
 import random
 
 # hathor internals
+from func import EIGHT_BALL_ANSWERS
 from logs import log_cog
 
 ####################################################################
@@ -24,6 +25,17 @@ class Gamba(commands.Cog, name="Gamba"):    # main class for cog
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.tree = bot.tree
+
+    @app_commands.command(
+        name="8ball",
+        description="Ask the magic 8ball a question!"
+    )
+    @app_commands.describe(question="Your yes/no question")
+    async def eight_ball(self, interaction: discord.Interaction, question: str):
+        answer = random.choice(EIGHT_BALL_ANSWERS)
+        await interaction.response.send_message(
+            f"🎱 **Question:** {question}\n**Answer:** {answer}"
+        )
 
     ### /roll ##########################################################
     @app_commands.command(name="roll", description="Your favorite number game. 🙂")

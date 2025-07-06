@@ -366,6 +366,29 @@ async def _set_profile_status(
 # Quotable References
 ###############################################################
 
+EIGHT_BALL_ANSWERS = [
+    "Bro, touch grass.",
+    "Skill issue.",
+    "L + ratio.",
+    "Ask your mom.",
+    "Try alt+F4.",
+    "Certified bruh moment.",
+    "No thoughts, head empty.",
+    "You dropped this 🧢.",
+    "Seek help.",
+    "404 answer not found.",
+    "Try again after snack.",
+    "My CPU is overheating.",
+    "Bro, I'm just an orb.",
+    "Ask again when the vibes are right.",
+    "That's a yikes from me.",
+    "Go outside.",
+    "Not even ChatGPT knows.",
+    "You good, fam?",
+    "Bro, what?",
+    "Sigma grindset required."
+]
+
 ERROR_FLAVOR = [
         "You must construct additional pylons.",
         "Not enough mana.",
