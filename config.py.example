@@ -11,8 +11,8 @@ YOUTUBE_API_KEY         = ''  # https://console.cloud.google.com/apis/credential
 ####################################################################
 #  Bot Settings
 ####################################################################
-BOT_PREFIX  = '!'    # set your commandprefix
-BOT_ADMIN   = 0  # set the bot administrator (your personal userID)
+BOT_PREFIX  = '!'   # set your commandprefix
+BOT_ADMIN   = 0     # set the bot administrator (your personal userID)
 SONGDB_PATH = 'db'  # path to the song database
 
 
@@ -28,13 +28,13 @@ GPTIMAGE_QUALITY    = 'medium'
 ####################################################################
 #  Music Settings
 ####################################################################
-BILLBOARD_HOT_100   = 'https://open.spotify.com/playlist/6UeSakyzhiEt4NB3UAd6NQ'  # billboard hot 100 playlist link (spotify)
-MUSIC_MAX_PLAYLIST  = 20  # maximum playlist length
-MUSIC_MAX_FUSION    = 5  # maximum fusion stations
-MUSIC_MAX_DURATION  = 1800  # maximum song length
-RADIO_QUEUE         = 4  # how few songs in queue until we queue more (RADIO_QUEUE + 1)
-RADIO_DEFAULT_THEME = "hot 100"  # default radio theme ### TODO: i dont like this and it should be changed
-SPOTIFY_KEY_REFRESH = 1800  # how often to refresh spotify keys (in seconds)
+BILLBOARD_HOT_100   = 'https://open.spotify.com/playlist/6UeSakyzhiEt4NB3UAd6NQ' # billboard hot 100 playlist link (spotify)
+MUSIC_MAX_PLAYLIST  = 20        # maximum playlist length
+MUSIC_MAX_FUSION    = 5         # maximum fusion stations
+MUSIC_MAX_DURATION  = 1800      # maximum song length
+RADIO_QUEUE         = 4         # how few songs in queue until we queue more (RADIO_QUEUE + 1)
+RADIO_DEFAULT_THEME = "hot 100" # default radio theme ### TODO: i dont like this and it should be changed
+SPOTIFY_KEY_REFRESH = 1800      # how often to refresh spotify keys (in seconds)
 
 
 ####################################################################
@@ -52,8 +52,22 @@ SPOTIFY_KEY_REFRESH = 1800  # how often to refresh spotify keys (in seconds)
 ####################################################################
 #LASTFM_API_KEY     = ''  # https://www.last.fm/api/accounts
 #LASTFM_API_SECRET  = ''  # https://www.last.fm/api/accounts
-#LASTFM_SESSION_KEY = '' # run lastfm_session_gen.py to generate a session key
-#LASTFM_SERVER      = 0 # server id the bot should update last.fm scrobbles for
+#LASTFM_SESSION_KEY = ''  # run lastfm_session_gen.py to generate a session key
+#LASTFM_SERVER      = 0   # server id the bot should update last.fm scrobbles for
+
+
+####################################################################
+#  [PLUGIN] Last.fm Collage Generator
+####################################################################
+#LASTFM_IMAGE_FONT_PATH = "plugins/fonts/UbuntuMono.ttf" # font for the last.fm collage generator
+
+#LASTFM_MIN_SIZE = 3
+#LASTFM_DEFAULT_SIZE = 5
+#LASTFM_MAX_SIZE = 10
+
+#LASTFM_DEFAULT_DAYS = 7
+#LASTFM_MIN_DAYS = 1
+#LASTFM_MAX_DAYS = 365
 
 
 ####################################################################
@@ -67,6 +81,6 @@ SPOTIFY_KEY_REFRESH = 1800  # how often to refresh spotify keys (in seconds)
 ####################################################################
 #  [PLUGIN] Spotify Settings
 ####################################################################
-#SPOTIFY_REDIRECT_URI = ''
-#IMAGE_FONT_PATH      = "plugins/fonts/UbuntuMono.ttf"
-#SPOTIFY_CACHE_PATH   = 'data/spotify_cache'
+#SPOTIFY_REDIRECT_URI    = ''
+#SPOTIFY_IMAGE_FONT_PATH = "plugins/fonts/UbuntuMono.ttf"
+#SPOTIFY_CACHE_PATH      = 'data/spotify_cache'
