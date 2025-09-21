@@ -347,6 +347,7 @@ class Music(commands.Cog, name="Music"):
         """
 
         allstates = self.bot.settings[voice_client.guild.id]
+        queue_icon, queue_string = "✅", "the queue"
 
         if 'https://' in payload[0]:    # send urls to link parser
             try:
