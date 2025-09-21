@@ -281,6 +281,9 @@ class Music(commands.Cog, name="Music"):
             "quiet": True,
         }
 
+        if config.YOUTUBE_COOKIES: # allows for cookies to be used
+            opts["cookiefile"] = "data/cookies.txt"
+
         try:
             info = await asyncio.to_thread(yt_dlp.YoutubeDL(opts).extract_info, url)
         except Exception as e:
@@ -417,6 +420,9 @@ class Music(commands.Cog, name="Music"):
             "quiet": True,
             "no_warnings": True
         }
+
+        if config.YOUTUBE_COOKIES: # allows for cookies to be used
+            opts["cookiefile"] = "data/cookies.txt"
 
         try:    # grabs song metadata
             log_cog.info(f"Fetching metadata for: [dark_orange]{query}[/]")

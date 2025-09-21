@@ -48,6 +48,12 @@ SPOTIFY_KEY_REFRESH = 1800      # how often to refresh spotify keys (in seconds)
 
 
 ####################################################################
+#  [OPTIONAL] Use YouTube cookies?
+####################################################################
+YOUTUBE_COOKIES = False # this looks at: data/cookies.txt
+
+
+####################################################################
 #  [OPTIONAL] Last.fm Settings
 ####################################################################
 #LASTFM_API_KEY     = ''  # https://www.last.fm/api/accounts
