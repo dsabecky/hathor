@@ -7,6 +7,9 @@ WORKDIR /app
 COPY entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
+# install ffmpeg
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg
+
 # install dependencies
 COPY . .
 RUN pip install --upgrade pip && pip install --no-cache-dir -r /app/requirements.txt
