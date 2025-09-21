@@ -1,6 +1,7 @@
 # ignore hathor specific files
 data/*.json
 data/config.py
+data/cookies.txt
 db/*
 plugins/*
 
